@@ -29,6 +29,7 @@
 export {
   countExactTokens,
   countChatTokens,
+  countFast,
   fitsInBudget,
   encodeText,
   decodeTokens,
@@ -100,7 +101,7 @@ export {
   type Provider,
 } from "./prefix-optimizer"
 
-// 8. Cost Ledger
+// 8. Cost Ledger (CostLedger class includes exportJSON() and exportCSV() methods)
 export {
   CostLedger,
   type LedgerEntry,
@@ -151,6 +152,8 @@ export {
   TokenShieldProvider,
   useSavings,
   useTokenCount,
+  useBudgetAlert,
+  useTokenEstimate,
   useComplexityAnalysis,
   useContextManager,
   useResponseCache,
@@ -160,3 +163,31 @@ export {
   useFeatureCost,
   type TokenShieldProviderProps,
 } from "./react"
+
+// Pricing Registry
+export {
+  PRICING_REGISTRY,
+  registerModel,
+  getModelPricing,
+  getModelsByProvider,
+  type ModelPricingEntry,
+} from "./pricing-registry"
+
+// Event Bus
+export {
+  shieldEvents,
+  createEventBus,
+  type TokenShieldEvents,
+} from "./event-bus"
+
+// Config Schemas
+export {
+  validateConfig,
+  TokenShieldConfigSchema,
+  GuardConfigSchema,
+  CacheConfigSchema,
+  ContextConfigSchema,
+  RouterConfigSchema,
+  BreakerConfigSchema,
+  type TokenShieldConfig,
+} from "./config-schemas"

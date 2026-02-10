@@ -31,6 +31,7 @@ import { optimizePrefix, detectProvider } from "./prefix-optimizer"
 import { CostLedger } from "./cost-ledger"
 import { MODEL_PRICING, estimateCost } from "./cost-estimator"
 import { CostCircuitBreaker, type BreakerConfig } from "./circuit-breaker"
+import { StreamTokenTracker } from "./stream-tracker"
 import type { ChatMessage } from "./token-counter"
 
 // -------------------------------------------------------
@@ -437,6 +438,182 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
       }
 
       return result
+    },
+
+    /**
+     * wrapStream runs AROUND streaming model calls (streamText).
+     * If cache hit, return a simulated stream. Otherwise, call the model,
+     * pipe chunks through a StreamTokenTracker so token usage is counted
+     * in real time, and record usage in the ledger when the stream ends
+     * (or is aborted).
+     */
+    wrapStream: async ({ doStream, params }: { doStream: () => Promise<Record<string, unknown>>; params: Record<string, unknown> }) => {
+      const meta = (params as Record<string | symbol, unknown>)[SHIELD_META] as ShieldMeta | undefined
+
+      // Cache hit: return a simulated stream without calling the model
+      if (meta?.cacheHit) {
+        const modelId = String(params.modelId ?? "")
+        if (ledger) {
+          await ledger.recordCacheHit({
+            model: modelId,
+            savedInputTokens: meta.cacheHit.inputTokens,
+            savedOutputTokens: meta.cacheHit.outputTokens,
+            feature: config.ledger?.feature,
+          })
+        }
+
+        config.onUsage?.({
+          model: modelId,
+          inputTokens: 0,
+          outputTokens: 0,
+          cost: 0,
+          saved: meta.cacheHit.inputTokens + meta.cacheHit.outputTokens,
+        })
+
+        // Create a ReadableStream that emits the cached response as a single chunk
+        const cachedText = meta.cacheHit.response
+        const simulatedStream = new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: "text-delta", textDelta: cachedText })
+            controller.close()
+          },
+        })
+
+        return {
+          stream: simulatedStream,
+          usage: Promise.resolve({ promptTokens: 0, completionTokens: 0 }),
+          finishReason: Promise.resolve("stop"),
+        }
+      }
+
+      // Call the real model's stream
+      const startTime = Date.now()
+      const result = await doStream()
+
+      const modelId = String(params.modelId ?? "")
+      const tracker = new StreamTokenTracker({ modelId })
+
+      // Set known input tokens from meta if available
+      if (meta?.originalInputTokens) {
+        tracker.setInputTokens(meta.originalInputTokens)
+      }
+
+      const originalStream = result.stream as ReadableStream
+
+      // Helper to record usage in ledger and breaker after streaming ends
+      const recordStreamUsage = (usage: { inputTokens: number; outputTokens: number }) => {
+        const latencyMs = Date.now() - startTime
+
+        // Store in cache for future requests
+        if (cache) {
+          const prompt = params.prompt as Array<{ role: string; content: Array<{ type: string; text?: string }> }>
+          const lastUserMsg = prompt?.filter((m) => m.role === "user").pop()
+          const lastUserText = lastUserMsg?.content
+            ?.filter((p) => p.type === "text")
+            .map((p) => p.text ?? "")
+            .join("") ?? ""
+          const responseText = tracker.getText()
+
+          if (lastUserText && responseText) {
+            cache.store(lastUserText, responseText, modelId, usage.inputTokens, usage.outputTokens)
+          }
+        }
+
+        // Record in ledger
+        if (ledger) {
+          const contextSavedDollars = meta?.contextSaved
+            ? (meta.contextSaved / 1_000_000) * (MODEL_PRICING[modelId]?.inputPerMillion ?? 2.5)
+            : 0
+          const routerSavedDollars = meta?.routerSaved ?? 0
+          const prefixSavedDollars = meta?.prefixSaved ?? 0
+
+          ledger.record({
+            model: modelId,
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            savings: {
+              context: contextSavedDollars,
+              router: routerSavedDollars,
+              prefix: prefixSavedDollars,
+            },
+            originalInputTokens: meta?.originalInputTokens,
+            originalModel: meta?.originalModel,
+            feature: config.ledger?.feature,
+            latencyMs,
+          })
+
+          const entry = ledger.getSummary()
+          config.onUsage?.({
+            model: modelId,
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            cost: entry.avgCostPerCall,
+            saved: entry.totalSaved,
+          })
+        }
+
+        // Complete guard request tracking
+        if (guard) {
+          const prompt = params.prompt as Array<{ role: string; content: Array<{ type: string; text?: string }> }>
+          const lastUserMsg = prompt?.filter((m) => m.role === "user").pop()
+          const lastUserText = lastUserMsg?.content
+            ?.filter((p) => p.type === "text")
+            .map((p) => p.text ?? "")
+            .join("") ?? ""
+          if (lastUserText) {
+            guard.completeRequest(lastUserText, usage.inputTokens, usage.outputTokens)
+          }
+        }
+
+        // Record spending in circuit breaker
+        if (breaker) {
+          try {
+            const costEst = estimateCost(modelId, usage.inputTokens, usage.outputTokens)
+            breaker.recordSpend(costEst.totalCost, modelId)
+          } catch {
+            // If estimate fails (unknown model), ignore
+          }
+        }
+      }
+
+      // Create a ReadableStream that reads from the original, pipes chunks
+      // through the tracker, and handles both normal completion and abort.
+      const reader = originalStream.getReader()
+      const monitoredStream = new ReadableStream({
+        async pull(controller) {
+          try {
+            const { done, value } = await reader.read()
+            if (done) {
+              // Stream completed normally
+              const usage = tracker.finish()
+              recordStreamUsage(usage)
+              controller.close()
+              return
+            }
+
+            // Track text-delta chunks for token counting
+            const c = value as Record<string, unknown>
+            if (c && c.type === "text-delta" && typeof c.textDelta === "string") {
+              tracker.addChunk(c.textDelta)
+            }
+
+            controller.enqueue(value)
+          } catch (err) {
+            // Stream errored -- still record what we have
+            const usage = tracker.abort()
+            recordStreamUsage(usage)
+            controller.error(err)
+          }
+        },
+        cancel() {
+          // Stream was aborted by the consumer (e.g., user clicked "Stop generating")
+          reader.cancel()
+          const usage = tracker.abort()
+          recordStreamUsage(usage)
+        },
+      })
+
+      return { ...result, stream: monitoredStream }
     },
   }
 

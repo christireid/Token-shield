@@ -14,6 +14,8 @@ import React, {
   useCallback,
   useRef,
   useMemo,
+  useState,
+  useEffect,
   useSyncExternalStore,
 } from "react"
 import { countExactTokens, countChatTokens, type ChatMessage } from "./token-counter"
@@ -23,6 +25,7 @@ import { ResponseCache } from "./response-cache"
 import { CostLedger } from "./cost-ledger"
 import { analyzeComplexity, routeToModel, type RoutingDecision } from "./model-router"
 import { RequestGuard, type GuardConfig, type GuardResult } from "./request-guard"
+import { CostCircuitBreaker } from "./circuit-breaker"
 
 // ---------------------
 // Session savings store
@@ -486,4 +489,135 @@ export function useModelRouter(prompt: string, options?: {
   }, [routing, savingsStore])
 
   return { routing, confirmRouting }
+}
+
+/**
+ * Fast approximate token count for keystroke-level feedback.
+ * Uses a character heuristic (~4 chars per token for English,
+ * ~1.5 chars per token for CJK characters).
+ */
+export function useTokenEstimate(text: string): { estimatedTokens: number } {
+  return useMemo(() => {
+    if (!text || text.length === 0) return { estimatedTokens: 0 }
+    // CJK detection
+    const cjkMatch = text.match(/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/g)
+    const cjkChars = cjkMatch ? cjkMatch.length : 0
+    const nonCjkChars = text.length - cjkChars
+    const estimatedTokens = Math.max(1, Math.ceil(nonCjkChars / 4 + cjkChars / 1.5))
+    return { estimatedTokens }
+  }, [text])
+}
+
+/**
+ * Subscribe to circuit breaker events for budget warnings.
+ * Polls the breaker's status every 2 seconds and returns
+ * derived budget alert values.
+ */
+export function useBudgetAlert(breaker?: CostCircuitBreaker): {
+  isOverBudget: boolean
+  currentSpend: number
+  limit: number
+  percentUsed: number
+  limitType: string | null
+} {
+  const [budgetState, setBudgetState] = useState<{
+    isOverBudget: boolean
+    currentSpend: number
+    limit: number
+    percentUsed: number
+    limitType: string | null
+  }>({
+    isOverBudget: false,
+    currentSpend: 0,
+    limit: 0,
+    percentUsed: 0,
+    limitType: null,
+  })
+
+  useEffect(() => {
+    if (!breaker) return
+
+    function poll() {
+      const status = breaker!.getStatus()
+
+      // Find the most critical tripped limit, or the highest percentUsed window
+      if (status.trippedLimits.length > 0) {
+        const worst = status.trippedLimits.reduce((a, b) =>
+          a.percentUsed >= b.percentUsed ? a : b
+        )
+        setBudgetState({
+          isOverBudget: status.tripped,
+          currentSpend: worst.currentSpend,
+          limit: worst.limit,
+          percentUsed: worst.percentUsed,
+          limitType: worst.limitType,
+        })
+      } else {
+        // No limits tripped - find highest spend ratio across windows
+        const spend = status.spend
+        const remaining = status.remaining
+
+        let highestPercent = 0
+        let highestSpend = 0
+        let highestLimit = 0
+        let highestType: string | null = null
+
+        if (remaining.session !== null) {
+          const limit = spend.session + remaining.session
+          const pct = limit > 0 ? (spend.session / limit) * 100 : 0
+          if (pct > highestPercent) {
+            highestPercent = pct
+            highestSpend = spend.session
+            highestLimit = limit
+            highestType = "session"
+          }
+        }
+        if (remaining.hour !== null) {
+          const limit = spend.lastHour + remaining.hour
+          const pct = limit > 0 ? (spend.lastHour / limit) * 100 : 0
+          if (pct > highestPercent) {
+            highestPercent = pct
+            highestSpend = spend.lastHour
+            highestLimit = limit
+            highestType = "hour"
+          }
+        }
+        if (remaining.day !== null) {
+          const limit = spend.lastDay + remaining.day
+          const pct = limit > 0 ? (spend.lastDay / limit) * 100 : 0
+          if (pct > highestPercent) {
+            highestPercent = pct
+            highestSpend = spend.lastDay
+            highestLimit = limit
+            highestType = "day"
+          }
+        }
+        if (remaining.month !== null) {
+          const limit = spend.lastMonth + remaining.month
+          const pct = limit > 0 ? (spend.lastMonth / limit) * 100 : 0
+          if (pct > highestPercent) {
+            highestPercent = pct
+            highestSpend = spend.lastMonth
+            highestLimit = limit
+            highestType = "month"
+          }
+        }
+
+        setBudgetState({
+          isOverBudget: false,
+          currentSpend: highestSpend,
+          limit: highestLimit,
+          percentUsed: highestPercent,
+          limitType: highestType,
+        })
+      }
+    }
+
+    // Poll immediately, then every 2 seconds
+    poll()
+    const interval = setInterval(poll, 2000)
+    return () => clearInterval(interval)
+  }, [breaker])
+
+  return budgetState
 }

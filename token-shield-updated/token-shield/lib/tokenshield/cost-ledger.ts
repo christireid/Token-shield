@@ -99,14 +99,6 @@ export class CostLedger {
     return () => this.listeners.delete(listener)
   }
 
-  /**
-   * Subscribe to ledger changes (for React useSyncExternalStore).
-   */
-  subscribe(listener: () => void): () => void {
-    this.listeners.add(listener)
-    return () => this.listeners.delete(listener)
-  }
-
   private notify() {
     for (const l of this.listeners) l()
   }
@@ -333,6 +325,32 @@ export class CostLedger {
       summary: this.getSummary(),
       entries: this.entries,
     }, null, 2)
+  }
+
+  /**
+   * Export all entries as CSV (for spreadsheet / finance tooling).
+   */
+  exportCSV(): string {
+    const headers = ['id','timestamp','model','inputTokens','outputTokens','cachedTokens','actualCost','costWithoutShield','totalSaved','feature','cacheHit','guard','cache','context','router','prefix']
+    const rows = this.entries.map(e => [
+      e.id,
+      new Date(e.timestamp).toISOString(),
+      e.model,
+      e.inputTokens,
+      e.outputTokens,
+      e.cachedTokens,
+      e.actualCost.toFixed(6),
+      e.costWithoutShield.toFixed(6),
+      e.totalSaved.toFixed(6),
+      e.feature ?? '',
+      e.cacheHit,
+      e.savings.guard.toFixed(6),
+      e.savings.cache.toFixed(6),
+      e.savings.context.toFixed(6),
+      e.savings.router.toFixed(6),
+      e.savings.prefix.toFixed(6),
+    ].map(v => typeof v === 'string' && v.includes(',') ? `"${v}"` : String(v)).join(','))
+    return [headers.join(','), ...rows].join('\n')
   }
 
   /**

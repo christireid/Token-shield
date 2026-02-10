@@ -1,551 +1,899 @@
-# TokenShield SDK - Technical Product Specification v2
+# TokenShield SDK — Commercial-Grade Specification v3
 
 ## Executive Summary
 
-TokenShield is a client-side React/TypeScript SDK that reduces LLM API costs by 40-80%.
-It is NOT a proxy. It is NOT an observability dashboard. It is a middleware layer that
-intercepts LLM calls BEFORE they happen and optimizes them.
+TokenShield is a **client-side React/TypeScript SDK** that reduces LLM API costs by 40-80%. It is a zero-infrastructure middleware layer that intercepts LLM calls **before** they happen and optimizes them. The primary integration point is the Vercel AI SDK `wrapLanguageModel` middleware — developers add 3 lines of code and every call is optimized automatically.
 
-The #1 distribution vector is the Vercel AI SDK `wrapLanguageModel` middleware.
-Developers add 3 lines of code. Every call through the AI SDK runs through TokenShield.
-Zero refactoring.
+**This specification replaces all previous specs and reports.** It defines the complete path to a commercial-grade npm package, including package architecture, dependency selection, module contracts, integration patterns, testing strategy, and build pipeline.
 
 ---
 
-## Why This Product Wins
+## Table of Contents
 
-### Gap 1: No client-side solution exists
+1. [Market Position](#1-market-position)
+2. [Package Architecture](#2-package-architecture)
+3. [Dependency Stack](#3-dependency-stack)
+4. [Module Specifications](#4-module-specifications)
+5. [Vercel AI SDK Middleware](#5-vercel-ai-sdk-middleware)
+6. [React Integration](#6-react-integration)
+7. [Configuration & Validation](#7-configuration--validation)
+8. [Pricing Registry](#8-pricing-registry)
+9. [Testing Strategy](#9-testing-strategy)
+10. [Build & Release Pipeline](#10-build--release-pipeline)
+11. [Implementation Roadmap](#11-implementation-roadmap)
+12. [Known Bugs & Required Fixes](#12-known-bugs--required-fixes)
 
-Every competitor (Helicone, Portkey, LangSmith, Lunary, OpenRouter) is a server-side
-proxy that requires routing ALL your API traffic through a third-party server. They:
-- Add 50-200ms latency per request
-- Require backend infrastructure changes
-- Create vendor lock-in (your traffic flows through them)
-- Only OBSERVE costs after money is already spent
+---
 
-TokenShield runs entirely in the browser/edge. Zero latency added. Zero infrastructure
-changes. It PREVENTS costs before the API call is made.
+## 1. Market Position
 
-### Gap 2: The Vercel AI SDK explicitly refuses to add cost tracking
+### The gap we fill
 
-GitHub issue #3932 (16+ upvotes) asked for cost calculation in the AI SDK.
-Vercel closed it as "wontfix". That's 21k+ stars worth of developers with no
-built-in cost management. We fill that gap with a native middleware.
+Every competitor (Helicone, Portkey, Langfuse, Braintrust, LiteLLM) is either a **server-side proxy** or an **observability platform**. They add 50-200ms latency, require backend infrastructure changes, and only **observe** costs after money is spent.
 
-### Gap 3: Provider prompt caching is free money that nobody helps you capture
+| Product | Client-side? | AI SDK Middleware? | Prevents costs? | Pricing |
+|---|---|---|---|---|
+| **TokenShield** | Yes | Yes (native) | Yes | Free + $29/mo |
+| Helicone | No (proxy) | No (provider) | No | $20/seat/mo |
+| Portkey | No (gateway) | No (provider) | Caching only | Free + paid |
+| Langfuse | No (Node OTel) | No | No | Open source + cloud |
+| Braintrust | Partial | Wrapper fn | No | Free + $249/mo |
+| LiteLLM | No (Python) | No | No | Open source |
 
-OpenAI gives a 50% discount on cached input tokens (prompts >1024 tokens with
-matching prefixes). Anthropic gives up to 90% discount. The catch: your message
-array must have a STABLE prefix for the cache to hit. Nobody builds frontend
-tooling that structures messages to maximize these cache hits. We do.
+**No competitor offers client-side middleware that actively prevents costs before the API call is made.** TokenShield runs entirely in the browser. Zero latency added. Zero infrastructure changes.
+
+### Why the Vercel AI SDK is the moat
+
+- 21k+ GitHub stars, THE standard for React AI apps
+- GitHub Issue #3932 asked for cost calculation — Vercel closed it as "wontfix"
+- `wrapLanguageModel` accepts middleware arrays — TokenShield composes with `extractReasoningMiddleware`, `defaultSettingsMiddleware`, and any other middleware
+- Portkey is migrating AWAY from a custom provider pattern toward gateway URLs — validating that the middleware pattern is more future-proof
 
 ### Market data
 
 - 85% of companies miss AI cost forecasts by 10%+ (25% miss by 50%+)
 - 84% report AI costs reducing gross margins by 6%+
 - Enterprise AI spend growing 72% YoY
-- Prompt caching alone can save 45-80% on API costs (Stanford/arxiv study)
+- Prompt caching alone saves 45-80% on API costs (Stanford/arxiv study)
 
 ---
 
-## Architecture: The Middleware Stack
+## 2. Package Architecture
 
-TokenShield is a pipeline of 6 modules that execute in order before every LLM call.
-Each module is independent and can be enabled/disabled individually.
+Three tree-shakeable npm packages following the Clerk/PostHog/Sentry SDK pattern:
 
 ```
-User sends message
-       |
-       v
-  [1. REQUEST GUARD] ---- blocks duplicates, rate limits, minimum length
-       |
-       v
-  [2. RESPONSE CACHE] --- returns cached response if similar query exists (100% savings)
-       |
-       v
-  [3. CONTEXT MANAGER] -- trims conversation history to token budget (40-60% savings)
-       |
-       v
-  [4. MODEL ROUTER] ----- routes to cheapest capable model (up to 16x savings)
-       |
-       v
-  [5. PREFIX OPTIMIZER] -- orders messages to maximize provider prompt cache hits (50% savings)
-       |
-       v
-  [6. COST LEDGER] ------- records usage from response, tracks savings
-       |
-       v
-  API call goes out (or doesn't, if guard/cache blocked it)
+@tokenshield/core          — Zero-framework, runs anywhere (browser, Node, edge, Deno)
+@tokenshield/react         — React bindings (Provider, hooks, components)
+@tokenshield/ai-sdk        — Vercel AI SDK middleware factory
+```
+
+### @tokenshield/core
+
+**Peer deps:** None
+**Runtime deps:** `gpt-tokenizer` (exact BPE), `idb-keyval` (IndexedDB), `ohash` (cache keys), `mitt` (events), `valibot` (config validation)
+
+Contains all 11 modules:
+1. token-counter
+2. cost-estimator
+3. context-manager
+4. response-cache
+5. model-router
+6. request-guard
+7. prefix-optimizer
+8. cost-ledger
+9. tool-token-counter
+10. stream-tracker
+11. circuit-breaker
+
+Plus the pricing registry and event bus.
+
+### @tokenshield/react
+
+**Peer deps:** `react >=18.0.0`, `@tokenshield/core`
+**Runtime deps:** None
+
+Contains: `TokenShieldProvider`, all hooks (`useSavings`, `useTokenCount`, `useComplexityAnalysis`, `useContextManager`, `useResponseCache`, `useRequestGuard`, `useModelRouter`, `useCostLedger`, `useFeatureCost`, `useBudgetAlert`), pre-built dashboard components.
+
+### @tokenshield/ai-sdk
+
+**Peer deps:** `ai >=4.0.0`, `@tokenshield/core`
+**Runtime deps:** None
+
+Contains: `tokenShieldMiddleware()` factory, AI SDK type adapters, streaming wrappers.
+
+### Export structure
+
+Use `package.json` `exports` map with granular entry points — no barrel files:
+
+```json
+{
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./token-counter": { "types": "./dist/token-counter.d.ts", "import": "./dist/token-counter.js" },
+    "./cost-estimator": { "types": "./dist/cost-estimator.d.ts", "import": "./dist/cost-estimator.js" },
+    "./context-manager": { "types": "./dist/context-manager.d.ts", "import": "./dist/context-manager.js" },
+    "./response-cache": { "types": "./dist/response-cache.d.ts", "import": "./dist/response-cache.js" },
+    "./model-router": { "types": "./dist/model-router.d.ts", "import": "./dist/model-router.js" },
+    "./request-guard": { "types": "./dist/request-guard.d.ts", "import": "./dist/request-guard.js" },
+    "./prefix-optimizer": { "types": "./dist/prefix-optimizer.d.ts", "import": "./dist/prefix-optimizer.js" },
+    "./cost-ledger": { "types": "./dist/cost-ledger.d.ts", "import": "./dist/cost-ledger.js" },
+    "./circuit-breaker": { "types": "./dist/circuit-breaker.d.ts", "import": "./dist/circuit-breaker.js" },
+    "./pricing": { "types": "./dist/pricing.d.ts", "import": "./dist/pricing.js" }
+  }
+}
 ```
 
 ---
 
-## Module Specifications
+## 3. Dependency Stack
 
-### Module 1: Request Guard
+Every dependency is MIT/ISC/Apache-2.0 licensed, browser-compatible, TypeScript-first, and tree-shakeable.
 
-**Purpose:** Prevent wasteful API calls from ever being made.
+### Core dependencies (estimated ~5 KB gzip total)
 
-**What it blocks (with proof):**
-- Double-clicks: User clicks "Send" twice in 100ms. Without guard: 2 API calls.
-  With guard: 1 call, second silently deduplicated.
-- Rapid retries: User rage-clicks 5 times. Without: 5 calls. With: 1 call.
-- React StrictMode: `useEffect` fires twice in dev. Without: 2 calls. With: 1 call.
-- Empty/trivial prompts: "hi" or "" rejected before any API cost.
+| Package | Purpose | License | Bundle Impact | Why chosen |
+|---|---|---|---|---|
+| `gpt-tokenizer` | Exact BPE token counting | MIT | ~2-4 KB (single encoding, tree-shaken) | 100% accuracy for OpenAI, fastest pure JS tokenizer, already in project |
+| `idb-keyval` | IndexedDB persistence | ISC | ~295 B (get/set only) | Jake Archibald's micro-library, tree-shakeable to bytes |
+| `ohash` | Deterministic cache key hashing | MIT | ~1 KB | Synchronous, handles any JS value, UnJS ecosystem (4.6M downloads/wk) |
+| `mitt` | Internal SDK event bus | MIT | ~200 B | Wildcard handler, TypeScript generics, 10.7M downloads/wk |
+| `valibot` | Config schema validation | MIT | ~1-2 KB (tree-shaken) | 90% smaller than Zod, Standard Schema support, modular |
 
-**API:**
-```ts
-interface RequestGuardConfig {
-  debounceMs: number          // min ms between calls (default: 300)
-  maxConcurrent: number       // max in-flight requests (default: 3)
-  minInputLength: number      // reject prompts shorter than this (default: 2)
-  maxInputTokens: number      // reject prompts over budget before calling API
-  deduplicateWindow: number   // ms window to dedup identical requests (default: 5000)
-}
+### Packages evaluated and rejected
 
-interface GuardResult {
-  allowed: boolean
-  reason?: 'debounced' | 'rate_limited' | 'too_short' | 'over_budget' | 'duplicate' | 'aborted'
-  requestId: string
-}
-```
+| Package | Reason for rejection |
+|---|---|
+| `tiktoken` (WASM) | Bundler config headaches in React/Next.js; gpt-tokenizer is faster and easier |
+| `@anthropic-ai/tokenizer` | Broken for Claude 3+ models, not browser-compatible, stale |
+| `crypto-js` | Deprecated, 50KB+, security concerns; ohash + Web Crypto API are better |
+| `zustand` | Overkill for SDK internals; mitt + useSyncExternalStore is lighter |
+| `dexie` | 26KB gzip; idb-keyval is sufficient for key-value ledger storage |
+| `localforage` | Stale (4 years), not tree-shakeable, localStorage fallback is a footgun |
+| `zod` | 15-17KB gzip; valibot achieves the same with ~1-2KB |
+| `eventemitter3` | 1.5KB, class-based, less tree-shakeable than mitt |
+| `@huggingface/transformers` | 48MB, overkill for tokenization only |
+| `lightweight-charts` | Apache 2.0 attribution requirement conflicts with white-label SDK |
 
-**Vercel AI SDK middleware hook:** `transformParams` -- checks guard before params
-reach the model. If blocked, throws a specific `TokenShieldBlockedError` that the
-caller can catch and handle gracefully.
+### Cross-provider tokenization strategy
 
-**Real test:** Fire 5 parallel calls without guard (5 billed). Fire 5 rapid calls
-with guard (1 billed). Savings = exact dollar difference from `usage` objects.
+There is **no viable client-side tokenizer** for Claude 3+ or Gemini models. Strategy:
+
+| Provider | Token counting approach |
+|---|---|
+| OpenAI | `gpt-tokenizer` — exact (100% accuracy) |
+| Anthropic | `gpt-tokenizer` as approximation (~90% accuracy), recommend `usage` from API response for billing |
+| Google | `gpt-tokenizer` as approximation (~85% accuracy), recommend `usage` from API response for billing |
+
+The Cost Ledger always uses REAL token counts from provider `usage` objects for billing accuracy. Client-side counts are used only for pre-call estimation and UI display.
 
 ---
 
-### Module 2: Response Cache
+## 4. Module Specifications
 
-**Purpose:** Return cached responses for identical or semantically similar queries
-without making an API call. Each cache hit = 100% cost savings for that request.
+### Module 1: Token Counter
 
-**Two cache tiers:**
-1. **Exact match** -- SHA-256 hash of `JSON.stringify(messages)`. O(1) lookup.
-   Catches: identical retries, page refreshes, component re-mounts.
-2. **Fuzzy match** -- Bigram Dice coefficient on the last user message text.
-   Catches: rephrasings ("What's the weather?" vs "Tell me the weather"),
-   typo corrections, word order changes.
+**File:** `lib/tokenshield/token-counter.ts`
 
-**Why NOT vector embeddings:**
-Embedding models (gte-small, all-MiniLM) require loading a 30-130MB ONNX model
-into the browser and add 100-500ms per query. The bigram Dice coefficient:
-- Runs in <1ms
-- Zero download overhead
-- Catches the 80% of duplicates that matter (rephrasings, typos)
-- Is deterministic and explainable (you can see WHY it matched)
+**Purpose:** Exact BPE token counting matching OpenAI's tiktoken.
 
-For the 20% of cases where semantic similarity matters (e.g., "How do I cook pasta?"
-vs "What's a good recipe for spaghetti?"), exact-match misses are fine because
-the API call is still optimized by context trimming, routing, and prefix caching.
-
-**API:**
-```ts
-interface CacheConfig {
-  maxSize: number              // max entries (default: 200)
-  ttlMs: number                // time to live (default: 3600000 = 1 hour)
-  similarityThreshold: number  // 0-1 for fuzzy match (default: 0.85)
-  persist: boolean             // IndexedDB persistence (default: true)
-  scopeByModel: boolean        // separate caches per model (default: true)
-}
-
-interface CacheLookupResult {
-  hit: boolean
-  matchType?: 'exact' | 'fuzzy'
-  similarity?: number          // 0-1 similarity score
-  entry?: { response: string, inputTokens: number, outputTokens: number, model: string }
-  savedCost?: number           // dollar amount saved if hit
-}
+**Exports:**
+```typescript
+countExactTokens(text: string): TokenCount
+countChatTokens(messages: ChatMessage[], model?: string): ChatTokenCount
+fitsInBudget(text: string, budget: number): boolean
+encodeText(text: string): number[]
+decodeTokens(tokens: number[]): string
+truncateToTokenBudget(text: string, budget: number): string
+countModelTokens(text: string, model: string): TokenCount
 ```
 
-**Vercel AI SDK middleware hook:** `wrapGenerate` -- checks cache before calling
-`doGenerate`. If hit, returns cached result with zero API call. Records savings
-in the cost ledger. For streaming: `wrapStream` returns a simulated stream from
-cached content.
+**Enhancement needed:**
+- Add `countFast(text: string): number` — use character-based heuristic (~4 chars/token) for real-time UI typing feedback where exact count is too expensive. Uses the `tokenx` algorithm (17KB, MIT) inline — no dependency needed, just the formula: `Math.ceil(text.length / charsPerToken)` with CJK detection.
 
-**Real test:** Send query A. Send query A again (exact hit, $0 cost). Send query A
-rephrased (fuzzy hit if similarity >= 0.85, $0 cost). All savings verified by
-counting actual API calls made.
+---
 
-**Persistence:** `idb-keyval` for IndexedDB. Survives page refreshes. ~1.4KB
-added to bundle. Paid tier adds export and cross-session analytics.
+### Module 2: Cost Estimator
+
+**File:** `lib/tokenshield/cost-estimator.ts`
+
+**Purpose:** Real pricing data for all major LLM providers. Calculate costs pre-call and post-call.
+
+**Exports:**
+```typescript
+estimateCost(model: string, inputTokens: number, outputTokens: number, cachedTokens?: number): CostEstimate
+compareCosts(inputTokens: number, outputTokens: number, models: string[]): CostComparison[]
+calculateSavings(originalModel: string, originalTokens: number, optimizedTokens: number, outputTokens: number): SavingsResult
+cheapestModelForBudget(budget: number, inputTokens: number, outputTokens: number): string | null
+projectMonthlyCost(costPerCall: number, callsPerDay: number): MonthlyCostProjection
+```
+
+**Enhancement needed:**
+- Extract `MODEL_PRICING` into a standalone `pricing-registry.ts` module (see Section 8)
+- Add `cachedTokens` parameter to `estimateCost` to account for provider prompt cache discounts
+- Add `estimateCostFromUsage(model: string, usage: AISDKUsage)` that accepts the AI SDK `usage` object directly
 
 ---
 
 ### Module 3: Context Manager
 
-**Purpose:** Trim conversation history to fit a token budget while preserving
-coherence. This is where the biggest savings live -- a 20-message conversation
-can waste 60-75% of tokens on history that doesn't affect the response.
+**File:** `lib/tokenshield/context-manager.ts`
 
-**The problem in numbers:**
-- 20-message conversation: ~3,000-5,000 tokens
-- System prompt + last 3-5 messages: ~800-1,500 tokens
-- Difference: 2,000-3,500 tokens WASTED on every single API call
-- At GPT-4o pricing ($2.50/M input): $0.005-0.009 wasted per call
-- At 10,000 calls/day: $50-90/day = $1,500-2,700/month wasted
+**Purpose:** Token-budget-aware conversation history trimming. The biggest savings module — a 20-message conversation wastes 60-75% of tokens on history that does not affect the response.
 
-**Strategy: Priority-based sliding window with stable prefix**
-
-```
-[ALWAYS KEEP] System prompt (pinned, never trimmed)
-[ALWAYS KEEP] Critical context messages (marked by developer)
-[SLIDING WINDOW] Last N messages (configurable, default: 6)
-[SUMMARIZE OR DROP] Everything between critical and window
+**Exports:**
+```typescript
+fitToBudget(messages: Message[], budget: ContextBudget): ContextResult
+slidingWindow(messages: Message[], windowSize: number): Message[]
+priorityFit(messages: Message[], budget: ContextBudget): ContextResult
+smartFit(messages: Message[], budget: ContextBudget): ContextResult
+createSummaryMessage(messages: Message[]): Message
 ```
 
-**The prefix optimization insight:**
-OpenAI prompt caching activates on prompts >1024 tokens and caches the LONGEST
-matching prefix across requests. If our context manager always outputs messages
-in a stable order:
-
-```
-1. System prompt (identical every time)           -- CACHED
-2. Pinned/critical messages (same order each time) -- CACHED
-3. Summary of old messages (stable-ish)            -- PARTIALLY CACHED
-4. Recent sliding window (changes each turn)       -- NOT CACHED
-```
-
-Items 1-3 form a stable prefix. OpenAI automatically caches this and charges 50%
-for those tokens. Anthropic gives up to 90% with explicit cache_control breakpoints.
-
-**No other frontend tool does this.** Everyone sends messages in random order
-or dumps the full history. We structure them for maximum provider-side cache hits.
-
-**API:**
-```ts
-interface ContextManagerConfig {
-  maxInputTokens: number       // total budget for input tokens
-  reserveForOutput: number     // tokens to reserve for the response (default: 1000)
-  keepSystemPrompt: boolean    // always include system messages (default: true)
-  keepLastN: number            // always keep last N messages (default: 6)
-  pinnedMessageIds?: string[]  // messages that must never be trimmed
-  summaryModel?: string        // model to use for summarization (default: cheapest available)
-  stablePrefix: boolean        // order messages for provider cache hits (default: true)
-}
-
-interface TrimResult {
-  messages: ChatMessage[]      // the trimmed message array
-  originalTokens: number       // tokens before trimming
-  trimmedTokens: number        // tokens after trimming
-  savedTokens: number          // difference
-  savedCost: number            // dollar amount saved
-  droppedCount: number         // messages removed
-  summarized: boolean          // whether a summary was generated
-  prefixTokens: number         // tokens in the stable prefix (eligible for provider cache)
-}
-```
-
-**Vercel AI SDK middleware hook:** `transformParams` -- rewrites `params.prompt`
-(the message array) to the trimmed version before it reaches the model.
-
-**Real test:** Send 20-message conversation raw to GPT-4o-mini (record `prompt_tokens`
-from usage). Run through context manager with 600-token budget. Send trimmed version
-(record `prompt_tokens`). Savings = difference * model price. Both calls return
-coherent responses.
+**Enhancement needed:**
+- Integrate tool token counting: before trimming, calculate `countToolTokens(tools)` and subtract from the available budget. This prevents the context manager from leaving "room" that gets eaten by hidden tool overhead.
+- Add `toolDefinitions?: ToolDefinition[]` to `ContextBudget` interface.
 
 ---
 
-### Module 4: Model Router
+### Module 4: Response Cache
 
-**Purpose:** Route each request to the cheapest model that can handle it correctly.
-Most queries don't need the most expensive model.
+**File:** `lib/tokenshield/response-cache.ts`
 
-**The pricing reality:**
-| Model              | Input $/M  | Output $/M  | Relative cost |
-|--------------------|-----------|-------------|---------------|
-| GPT-4o             | $2.50     | $10.00      | 16.7x         |
-| GPT-4o-mini        | $0.15     | $0.60       | 1x (baseline) |
-| GPT-4.1            | $2.00     | $8.00       | 13.3x         |
-| GPT-4.1-mini       | $0.40     | $1.60       | 2.7x          |
-| GPT-4.1-nano       | $0.10     | $0.40       | 0.67x         |
-| Claude Sonnet 4    | $3.00     | $15.00      | 20x           |
-| Claude Haiku 3.5   | $0.80     | $4.00       | 5.3x          |
+**Purpose:** Client-side response caching with exact (SHA-256) and fuzzy (Bigram Dice) matching. Each cache hit = 100% cost savings for that request.
 
-"What's the capital of France?" costs the same to answer correctly on GPT-4o ($2.50/M)
-and GPT-4.1-nano ($0.10/M). That's a 25x cost difference for identical output quality.
+**Enhancement needed:**
+- Replace manual SHA-256 with `ohash` for synchronous, deterministic cache key generation. Current implementation uses Web Crypto API which is async — adds unnecessary Promise overhead on hot path.
+- Add `scopeByModel: boolean` config option (default: `true`) to separate cache entries by model ID.
+- Add cache stats event emission via `mitt` for real-time dashboard updates.
+- Add `maxAge` to individual cache entries for per-query TTL override.
 
-**Complexity scoring (12 dimensions, all computed client-side in <1ms):**
+---
 
-1. Token count (longer prompts = higher complexity)
+### Module 5: Model Router
+
+**File:** `lib/tokenshield/model-router.ts`
+
+**Purpose:** Route requests to the cheapest model that can handle them correctly. 12-dimension complexity scoring, all computed client-side in <1ms.
+
+**12 complexity dimensions:**
+1. Token count (longer = higher complexity)
 2. Vocabulary diversity (unique words / total words)
-3. Average word length (longer words = more technical)
+3. Average word length (technical jargon indicator)
 4. Sentence count and structure
-5. Question type (factual lookup vs reasoning vs creative)
-6. Code presence (regex detection of code patterns)
-7. Math/logic indicators ("calculate", "prove", "if...then")
-8. Multi-step indicators ("first...then", "step 1", numbered lists)
+5. Question type (factual vs reasoning vs creative)
+6. Code presence (regex detection)
+7. Math/logic indicators
+8. Multi-step indicators
 9. Domain-specific jargon density
-10. Negation complexity ("not", "except", "unless")
-11. Comparison indicators ("vs", "compare", "difference between")
-12. Ambiguity level (pronouns without clear antecedents)
+10. Negation complexity
+11. Comparison indicators
+12. Ambiguity level
 
-Each dimension scores 0-1. Weighted sum produces a complexity score 0-1.
-Thresholds map to model tiers.
+**Enhancement needed:**
+- Add cross-provider routing: the router currently only downgrades within a single provider's model family. Add support for routing across providers (e.g., GPT-4o → Claude Haiku 3.5 for simple queries).
+- Ensure the router NEVER upgrades — it only downgrades from expensive to cheaper models. This prevents surprise cost increases.
 
-**API:**
-```ts
-interface RouterConfig {
-  tiers: ModelTier[]           // ordered cheapest to most expensive
-  complexityThreshold: number  // score above which to upgrade (default: 0.6)
-  forceModel?: string          // override for specific use cases
-  trackAccuracy: boolean       // track if cheap model was sufficient (default: true)
-}
+---
 
-interface ModelTier {
+### Module 6: Request Guard
+
+**File:** `lib/tokenshield/request-guard.ts`
+
+**Purpose:** Prevent wasteful API calls (double-clicks, rage-clicks, React StrictMode double-fires, empty prompts).
+
+**Current API:**
+```typescript
+interface GuardConfig {
+  debounceMs: number           // default: 300
+  maxRequestsPerMinute: number // default: 60
+  maxCostPerHour: number       // default: 10
   modelId: string
-  maxComplexity: number        // route here if complexity <= this value
-  inputPricePerMillion: number
-  outputPricePerMillion: number
-}
-
-interface RouteDecision {
-  selectedModel: string
-  originalModel: string
-  complexityScore: number
-  dimensions: Record<string, number>  // individual dimension scores
-  savedCostEstimate: number    // estimated savings vs original model
-  confidence: number           // 0-1 how confident we are in the routing
-  reason: string               // human-readable explanation
+  deduplicateInFlight: boolean // default: true
 }
 ```
 
-**Vercel AI SDK middleware hook:** `transformParams` -- changes `params.modelId`
-to the routed model before the call is made. The `wrapGenerate` post-hook records
-which model actually responded for accuracy tracking.
-
-**Real test:** Send "What is the capital of France?" to GPT-4o (expensive) and
-through the router (routes to GPT-4o-mini). Compare: same correct answer,
-16x cheaper. Both `usage` objects prove the token counts and model used.
-
-**Important constraint:** The router NEVER upgrades a model. If the user specifies
-GPT-4o-mini, the router can only keep it at GPT-4o-mini. It only DOWNGRADES
-from expensive models when the query doesn't need them. This prevents surprise
-cost increases.
+**Enhancement needed (spec alignment):**
+- Add `deduplicateWindow: number` (default: 5000ms) — maintain a map of recent prompt hashes with timestamps. Block any prompt whose hash matches one completed within the window. Currently only in-flight dedup exists.
+- Add `minInputLength: number` (default: 2) — reject prompts shorter than this.
+- Add `maxInputTokens: number` — reject prompts over budget before calling API. Uses `countExactTokens` for exact check.
+- Emit events via `mitt` when requests are blocked, for dashboard updates.
 
 ---
 
-### Module 5: Prefix Optimizer (NEW -- not in v1)
+### Module 7: Prefix Optimizer
 
-**Purpose:** Reorder and structure the message array to maximize OpenAI/Anthropic
-server-side prompt cache hits.
+**File:** `lib/tokenshield/prefix-optimizer.ts`
 
-**How provider caching works:**
-- OpenAI: Automatic. Caches the longest matching PREFIX of prompts >1024 tokens.
-  Cached tokens cost 50% of normal. Cache lives ~5-10 minutes.
-- Anthropic: Explicit. Developer places `cache_control` breakpoints in messages.
-  Cached tokens cost 10% of normal (90% discount). Cache lives ~5 minutes.
+**Purpose:** Reorder messages to maximize OpenAI/Anthropic server-side prompt cache hits.
 
-**What the optimizer does:**
-1. Moves system prompt to position 0 (always)
-2. Moves pinned/critical messages to positions 1-N (stable order)
-3. For Anthropic: automatically inserts `cache_control: { type: "ephemeral" }`
-   breakpoints at optimal positions
-4. Calculates the exact prefix token count eligible for caching
-5. Reports estimated cache savings based on provider's discount rate
+**How it works:**
+1. System prompt → position 0 (always)
+2. Pinned/critical messages → positions 1-N (stable order)
+3. For Anthropic → auto-insert `cache_control: { type: "ephemeral" }` breakpoints
+4. Calculate prefix token count eligible for caching
+5. Report estimated savings
 
-**API:**
-```ts
-interface PrefixOptimizerConfig {
-  provider: 'openai' | 'anthropic' | 'auto'  // auto-detect from model name
-  enableAnthropicCacheControl: boolean         // insert cache_control breakpoints
-}
-
-interface PrefixResult {
-  messages: ChatMessage[]
-  prefixTokens: number         // tokens in stable prefix
-  estimatedCacheDiscount: number  // 0.5 for OpenAI, 0.9 for Anthropic
-  estimatedSavings: number     // dollar amount if prefix is cached
-}
-```
-
-**Vercel AI SDK middleware hook:** `transformParams` -- runs after context manager,
-reorders the already-trimmed messages for optimal prefix stability.
+**Enhancement needed:**
+- Add Anthropic cache breakpoint injection as a configurable option
+- Use `detectProvider()` to automatically determine optimal prefix strategy
 
 ---
 
-### Module 6: Cost Ledger
+### Module 8: Cost Ledger
 
-**Purpose:** Track every dollar spent and every dollar saved, using REAL numbers
-from the provider's `usage` response. Not estimates.
+**File:** `lib/tokenshield/cost-ledger.ts`
 
-**Data sources:**
-- `usage.prompt_tokens` from OpenAI/Anthropic response
-- `usage.completion_tokens` from response
-- `usage.cached_tokens` from OpenAI (when prompt cache hits)
-- Model name from response (to look up real pricing)
-- Module attribution (which module saved how much)
+**Purpose:** Track every dollar spent and saved using REAL numbers from provider `usage` objects.
 
-**What it tracks per request:**
-```ts
+**Per-request tracking:**
+```typescript
 interface LedgerEntry {
   id: string
   timestamp: number
   model: string
-  inputTokens: number          // from usage.prompt_tokens
-  outputTokens: number         // from usage.completion_tokens
-  cachedTokens: number         // from usage.cached_tokens (if available)
-  actualCost: number           // real dollars spent
-  costWithoutShield: number    // what it would have cost without TokenShield
-  totalSaved: number           // difference
-
-  // Per-module attribution
+  inputTokens: number
+  outputTokens: number
+  cachedTokens: number
+  actualCost: number
+  costWithoutShield: number
+  totalSaved: number
+  feature?: string
   savings: {
-    guard: number              // $ saved by blocking duplicate/wasteful calls
-    cache: number              // $ saved by cache hits
-    context: number            // $ saved by trimming history
-    router: number             // $ saved by model downgrading
-    prefix: number             // $ saved by provider cache hits
+    guard: number
+    cache: number
+    context: number
+    router: number
+    prefix: number
   }
 }
 ```
 
-**What it tracks cumulatively:**
-```ts
-interface LedgerSummary {
-  totalSpent: number
-  totalSaved: number
-  totalCalls: number
-  callsBlocked: number         // guard blocked
-  cacheHits: number            // cache returned
-  cacheHitRate: number         // percentage
-  avgCostPerCall: number
-  avgSavingsPerCall: number
-  savingsRate: number          // totalSaved / (totalSpent + totalSaved)
-  byModule: Record<string, number>  // savings breakdown
-  byModel: Record<string, { calls: number, cost: number }>  // per-model breakdown
-}
-```
-
-**Vercel AI SDK middleware hook:** `wrapGenerate` post-hook -- reads the `usage`
-object from the result and records it. `wrapStream` post-hook -- accumulates
-usage from stream completion.
-
-**Free tier:** Session-only tracking (resets on page refresh). React hooks for
-real-time display.
-
-**Paid tier:** IndexedDB persistence, cross-session history, JSON export, webhook
-notifications when budget thresholds are crossed, per-feature attribution.
+**Enhancement needed:**
+- Wire up `mitt` event emission for real-time React hook updates (currently uses custom subscriber pattern — unify on mitt)
+- Add `byFeature` querying with proper React hook (`useFeatureCost`)
+- Add JSON export for finance teams: `ledger.exportJSON()` and `ledger.exportCSV()`
+- Add session boundary tracking (new session when page loads, track across sessions via IndexedDB)
 
 ---
 
-## Vercel AI SDK Integration (The Distribution Moat)
+### Module 9: Tool Token Counter
 
-### 3-line integration
+**File:** `lib/tokenshield/tool-token-counter.ts`
 
-```tsx
+**Purpose:** Count hidden tokens in tool definitions, image inputs, and predict output length.
+
+**Exports:**
+```typescript
+countToolTokens(tools: ToolDefinition[]): ToolTokenResult
+optimizeToolDefinitions(tools: ToolDefinition[]): { tools: ToolDefinition[]; tokensSaved: number }
+countImageTokens(width: number, height: number, detail: 'low' | 'high' | 'auto'): ImageTokenResult
+predictOutputTokens(prompt: string, model: string, taskType?: string): OutputPrediction
+```
+
+**Enhancement needed:**
+- Integrate `countToolTokens` into the context manager's budget calculation
+- Use `predictOutputTokens` in the request guard to set smart `max_tokens` per request
+- Validate `countImageTokens` against OpenAI's published tile calculation: 85 base + 170 per 512x512 tile
+
+---
+
+### Module 10: Stream Tracker
+
+**File:** `lib/tokenshield/stream-tracker.ts`
+
+**Purpose:** Real-time token counting during streaming responses, with abort survival.
+
+```typescript
+class StreamTokenTracker {
+  constructor(config: StreamTrackerConfig)
+  processChunk(chunk: string): void
+  getUsage(): StreamUsage
+  abort(): StreamUsage  // Returns accurate usage even on abort
+  onAbortUsage?: (usage: StreamUsage) => void
+}
+```
+
+**Enhancement needed:**
+- Wire into `wrapStream` in the AI SDK middleware. Currently implemented but not integrated.
+- When a stream is aborted, fire `onAbortUsage` with accurate token counts so the cost ledger still tracks the spend.
+- This fills Vercel AI SDK Issue #7628 (6+ thumbs-up, still open).
+
+---
+
+### Module 11: Circuit Breaker
+
+**File:** `lib/tokenshield/circuit-breaker.ts`
+
+**Purpose:** Hard spending limits that halt API calls when budgets are exceeded.
+
+```typescript
+interface BreakerLimits {
+  perSession?: number   // $ max per session
+  perHour?: number      // $ max per hour
+  perDay?: number       // $ max per day
+  perMonth?: number     // $ max per month
+}
+
+interface BreakerConfig {
+  limits: BreakerLimits
+  action: 'warn' | 'throttle' | 'stop'
+  persist?: boolean     // Survive page refresh via IndexedDB
+  onBreak?: (event: BreakerEvent) => void
+}
+```
+
+**Enhancement needed:**
+- Wire into middleware (currently requires manual instantiation)
+- Add IndexedDB persistence for hourly/daily/monthly tracking that survives page refresh
+- Emit events via `mitt` for dashboard alerts
+
+---
+
+## 5. Vercel AI SDK Middleware
+
+**File:** `lib/tokenshield/middleware.ts`
+
+### Target: `LanguageModelV3Middleware`
+
+```typescript
+import type { LanguageModelV3Middleware } from '@ai-sdk/provider'
+
+export function tokenShieldMiddleware(
+  config?: TokenShieldMiddlewareConfig
+): LanguageModelV3Middleware
+```
+
+### Pipeline execution order
+
+```
+User sends message
+       |
+       v
+  transformParams:
+    [0. CIRCUIT BREAKER] -- check spending limits
+    [1. REQUEST GUARD]   -- debounce, dedup, rate limit, min length
+    [2. CACHE LOOKUP]    -- check exact + fuzzy cache
+    [3. CONTEXT TRIM]    -- trim history to token budget (accounts for tool tokens)
+    [4. MODEL ROUTER]    -- route to cheapest capable model
+    [5. PREFIX OPTIMIZE] -- reorder for provider cache hits
+       |
+       v
+  wrapGenerate:
+    if cache hit → return cached result, record in ledger
+    else → call model, store in cache, record in ledger, update circuit breaker
+       |
+       v
+  wrapStream:
+    same as wrapGenerate but with StreamTokenTracker for real-time counting
+    on abort → fire onAbortUsage, still record in ledger
+```
+
+### Integration: 3 lines
+
+```typescript
 import { wrapLanguageModel, streamText } from 'ai'
-import { tokenShield } from '@tokenshield/ai-sdk'
+import { tokenShieldMiddleware } from '@tokenshield/ai-sdk'
 
 const model = wrapLanguageModel({
   model: openai('gpt-4o'),
-  middleware: tokenShield({
+  middleware: tokenShieldMiddleware({
     budget: { maxInputTokens: 2000 },
     cache: { enabled: true, persist: true },
     router: {
       tiers: [
-        { modelId: 'gpt-4o-mini', maxComplexity: 0.5, inputPrice: 0.15, outputPrice: 0.60 },
-        { modelId: 'gpt-4o', maxComplexity: 1.0, inputPrice: 2.50, outputPrice: 10.00 },
+        { modelId: 'gpt-4o-mini', maxComplexity: 0.5 },
+        { modelId: 'gpt-4o', maxComplexity: 1.0 },
       ]
     },
-    guard: { debounceMs: 300 },
+    guard: { debounceMs: 300, deduplicateWindow: 5000 },
+    breaker: { limits: { perDay: 50 }, action: 'stop' },
   }),
 })
 
-// Use exactly like before -- ALL optimizations are automatic
 const result = await streamText({ model, messages })
 ```
 
-### Technical implementation
+### Composability
 
-The middleware implements `LanguageModelV3Middleware` from `@ai-sdk/provider`:
+TokenShield stacks with other middlewares — it does not compete:
 
-```ts
-import type { LanguageModelV3Middleware } from '@ai-sdk/provider'
+```typescript
+const model = wrapLanguageModel({
+  model: openai('gpt-4o'),
+  middleware: [
+    tokenShieldMiddleware({ ... }),
+    extractReasoningMiddleware({ tagName: 'think' }),
+    defaultSettingsMiddleware({ temperature: 0.7 }),
+  ],
+})
+```
 
-export function tokenShield(config: TokenShieldConfig): LanguageModelV3Middleware {
-  return {
-    transformParams: async ({ params }) => {
-      // 1. Guard check
-      // 2. Cache lookup (if hit, short-circuit)
-      // 3. Context trimming (rewrite params.prompt)
-      // 4. Model routing (rewrite params.modelId)
-      // 5. Prefix optimization (reorder params.prompt)
-      return modifiedParams
-    },
+### Usage data extraction from AI SDK
 
-    wrapGenerate: async ({ doGenerate, params }) => {
-      // If cache hit was flagged in transformParams, return cached result
-      // Otherwise, call doGenerate() and record usage in cost ledger
-      const result = await doGenerate()
-      ledger.record(result.usage, params)
-      return result
-    },
+The middleware reads these fields from the AI SDK result:
 
-    wrapStream: async ({ doStream, params }) => {
-      // Same as wrapGenerate but for streaming
-      // Accumulate usage from stream, record in ledger on completion
-      const { stream, ...rest } = await doStream()
-      const monitoredStream = stream.pipeThrough(createUsageMonitor())
-      return { stream: monitoredStream, ...rest }
-    },
+```typescript
+result.usage.promptTokens          // total input tokens
+result.usage.completionTokens      // total output tokens
+result.response.modelId            // actual model that responded
+// Provider-specific:
+result.providerMetadata?.openai?.cachedPromptTokens
+result.providerMetadata?.anthropic?.cacheReadInputTokens
+result.providerMetadata?.anthropic?.cacheCreationInputTokens
+```
+
+---
+
+## 6. React Integration
+
+**File:** `lib/tokenshield/react.tsx`
+
+### Provider pattern (follows Clerk/PostHog/Sentry patterns)
+
+```tsx
+<TokenShieldProvider config={{ defaultModel: 'gpt-4o', budget: 4000 }}>
+  <App />
+</TokenShieldProvider>
+```
+
+**Requirements:**
+1. **Graceful degradation** — if SDK fails to initialize, children render normally. Never break the user's app.
+2. **Two initialization modes** — declarative (config prop) or imperative (pre-initialized instance):
+   ```tsx
+   // Declarative
+   <TokenShieldProvider config={{ ... }}>
+
+   // Imperative (for testing, SSR, etc.)
+   <TokenShieldProvider instance={preInitializedShield}>
+   ```
+3. **Split context** — separate stable refs (config, cache, guard instances) from volatile state (savings, ledger data) to prevent unnecessary re-renders.
+
+### Hooks
+
+```typescript
+// Real-time token counting as user types
+useTokenCount(text: string, model?: string): { tokens, cost, characters, ratio }
+
+// Fast approximate count for keystroke-level feedback
+useTokenEstimate(text: string): { estimatedTokens: number }
+
+// Cumulative session savings (reactive via useSyncExternalStore)
+useSavings(): SavingsState
+
+// Prompt complexity analysis with routing recommendation
+useComplexityAnalysis(prompt: string, model?: string): RoutingDecision | null
+
+// Context trimming within token budget
+useContextManager(messages: Message[], budget: ContextBudget): ContextResult & { savings }
+
+// Cache-wrapped API calls
+useResponseCache(): { cachedFetch, stats }
+
+// Request guard check
+useRequestGuard(): { checkRequest, startRequest, completeRequest, stats }
+
+// Model routing
+useModelRouter(prompt: string, options?): { routing, confirmRouting }
+
+// Cost ledger (full or per-feature)
+useCostLedger(featureName?: string): LedgerSummary
+
+// Per-feature cost shorthand
+useFeatureCost(featureName: string): FeatureCostData
+
+// Budget alerts (reacts to circuit breaker events)
+useBudgetAlert(): { isOverBudget, currentSpend, limit, percentUsed }
+```
+
+### Internal state management
+
+Use `useSyncExternalStore` with a lightweight external store pattern (already in place). The savings store and ledger emit change notifications; React hooks subscribe via `useSyncExternalStore`. This is the same pattern React 18+ uses internally and avoids adding any state management library.
+
+For SDK internal events (budget exceeded, cache hit, model routed, etc.), use `mitt` as the event bus. Hooks subscribe in `useEffect` and unsubscribe on cleanup.
+
+---
+
+## 7. Configuration & Validation
+
+Use `valibot` for runtime config validation. All config schemas are defined once and used for both runtime validation and TypeScript type inference.
+
+```typescript
+import * as v from 'valibot'
+
+const GuardConfigSchema = v.object({
+  debounceMs: v.optional(v.pipe(v.number(), v.minValue(0)), 300),
+  maxRequestsPerMinute: v.optional(v.pipe(v.number(), v.minValue(1)), 60),
+  maxCostPerHour: v.optional(v.pipe(v.number(), v.minValue(0)), 10),
+  deduplicateWindow: v.optional(v.pipe(v.number(), v.minValue(0)), 5000),
+  minInputLength: v.optional(v.pipe(v.number(), v.minValue(0)), 2),
+  maxInputTokens: v.optional(v.pipe(v.number(), v.minValue(1))),
+})
+
+const TokenShieldConfigSchema = v.object({
+  modules: v.optional(v.object({
+    guard: v.optional(v.boolean(), true),
+    cache: v.optional(v.boolean(), true),
+    context: v.optional(v.boolean(), true),
+    router: v.optional(v.boolean(), false),
+    prefix: v.optional(v.boolean(), true),
+    ledger: v.optional(v.boolean(), true),
+  })),
+  guard: v.optional(GuardConfigSchema),
+  cache: v.optional(CacheConfigSchema),
+  context: v.optional(ContextConfigSchema),
+  router: v.optional(RouterConfigSchema),
+  prefix: v.optional(PrefixConfigSchema),
+  ledger: v.optional(LedgerConfigSchema),
+  breaker: v.optional(BreakerConfigSchema),
+  onBlocked: v.optional(v.function()),
+  onUsage: v.optional(v.function()),
+})
+
+export type TokenShieldConfig = v.InferOutput<typeof TokenShieldConfigSchema>
+```
+
+---
+
+## 8. Pricing Registry
+
+**File:** `lib/tokenshield/pricing-registry.ts`
+
+A standalone, importable module containing pricing data for all supported models.
+
+### Structure
+
+```typescript
+export interface ModelPricingEntry {
+  id: string
+  provider: 'openai' | 'anthropic' | 'google'
+  name: string
+  inputPerMillion: number
+  outputPerMillion: number
+  cachedInputDiscount: number   // 0.5 for OpenAI (50% off), 0.9 for Anthropic (90% off)
+  contextWindow: number
+  maxOutputTokens: number
+  supportsVision: boolean
+  supportsFunctions: boolean
+  deprecated?: boolean
+}
+
+export const PRICING_REGISTRY: Record<string, ModelPricingEntry> = { ... }
+```
+
+### Models to include (current as of Feb 2026)
+
+**OpenAI:**
+- GPT-4o ($2.50 / $10.00)
+- GPT-4o-mini ($0.15 / $0.60)
+- GPT-4.1 ($2.00 / $8.00)
+- GPT-4.1-mini ($0.40 / $1.60)
+- GPT-4.1-nano ($0.10 / $0.40)
+- o1 ($15.00 / $60.00)
+- o1-mini ($3.00 / $12.00)
+- o3 ($10.00 / $40.00)
+- o3-mini ($1.10 / $4.40)
+
+**Anthropic:**
+- Claude Opus 4 ($15.00 / $75.00)
+- Claude Sonnet 4 ($3.00 / $15.00)
+- Claude Haiku 3.5 ($0.80 / $4.00)
+
+**Google:**
+- Gemini 2.0 Flash ($0.10 / $0.40)
+- Gemini 2.0 Pro ($1.25 / $5.00)
+- Gemini 1.5 Flash ($0.075 / $0.30)
+- Gemini 1.5 Pro ($1.25 / $5.00)
+
+### Update strategy
+
+Pricing data is embedded in the npm package as a static JSON object. Users get updated pricing by updating their `@tokenshield/core` version. Provide a `registerModel()` function for custom/fine-tuned models:
+
+```typescript
+import { registerModel } from '@tokenshield/core/pricing'
+
+registerModel({
+  id: 'ft:gpt-4o-mini:my-org:custom:abc123',
+  provider: 'openai',
+  name: 'My Fine-tuned Model',
+  inputPerMillion: 0.30,
+  outputPerMillion: 1.20,
+  cachedInputDiscount: 0.5,
+  contextWindow: 128000,
+  maxOutputTokens: 16384,
+  supportsVision: false,
+  supportsFunctions: true,
+})
+```
+
+---
+
+## 9. Testing Strategy
+
+### Unit tests (Vitest + happy-dom)
+
+Every module gets a dedicated test file. Use `vitest` as the runner with `happy-dom` as the DOM environment.
+
+```
+lib/tokenshield/__tests__/
+  token-counter.test.ts
+  cost-estimator.test.ts
+  context-manager.test.ts
+  response-cache.test.ts
+  model-router.test.ts
+  request-guard.test.ts
+  prefix-optimizer.test.ts
+  cost-ledger.test.ts
+  tool-token-counter.test.ts
+  stream-tracker.test.ts
+  circuit-breaker.test.ts
+  middleware.test.ts
+  pricing-registry.test.ts
+```
+
+### React hook tests (@testing-library/react)
+
+```
+lib/tokenshield/__tests__/
+  react/
+    provider.test.tsx
+    use-token-count.test.tsx
+    use-savings.test.tsx
+    use-cost-ledger.test.tsx
+    use-response-cache.test.tsx
+    use-request-guard.test.tsx
+    use-model-router.test.tsx
+    use-budget-alert.test.tsx
+```
+
+### Integration tests (MSW for API mocking)
+
+Mock LLM provider APIs at the network level using MSW. Test the full middleware pipeline end-to-end without real API calls.
+
+### What to test
+
+| Module | Key test cases |
+|---|---|
+| token-counter | Exact match against known tiktoken output; chat message overhead formula; empty input; unicode/CJK |
+| cost-estimator | Known model pricing; cached token discount; unknown model fallback |
+| context-manager | 20-message conversation trimmed to budget; system prompt never trimmed; pinned messages preserved; tool token budget subtraction |
+| response-cache | Exact hit; fuzzy hit above threshold; fuzzy miss below threshold; TTL expiry; IndexedDB persistence |
+| model-router | Simple prompt → cheapest model; complex prompt → expensive model; never upgrades |
+| request-guard | Debounce blocks rapid calls; dedup blocks identical in-flight; dedup window blocks recent identical; rate limit fires |
+| prefix-optimizer | System prompt always first; stable prefix across calls; Anthropic cache breakpoints |
+| cost-ledger | Records real usage; per-module attribution; per-feature filtering; IndexedDB persistence; export JSON/CSV |
+| circuit-breaker | Session limit triggers stop; hourly limit triggers warn; daily limit persists across refresh |
+| stream-tracker | Counts tokens as chunks arrive; abort returns accurate usage; integrates with ledger |
+| middleware | Full pipeline: guard → cache → context → router → prefix → ledger; cache hit short-circuits; blocked request throws TokenShieldBlockedError |
+
+---
+
+## 10. Build & Release Pipeline
+
+### Bundling with tsup
+
+Use `tsup` (MIT, zero-config esbuild-based bundler) for ESM + CJS dual output with `.d.ts` generation.
+
+```typescript
+// tsup.config.ts
+import { defineConfig } from 'tsup'
+
+export default defineConfig({
+  entry: {
+    index: 'src/index.ts',
+    'token-counter': 'src/token-counter.ts',
+    'cost-estimator': 'src/cost-estimator.ts',
+    // ... each module as a separate entry
+  },
+  format: ['esm', 'cjs'],
+  dts: true,
+  splitting: true,
+  clean: true,
+  external: ['react', 'react-dom', 'ai'],
+  treeshake: true,
+})
+```
+
+### TypeScript config requirements
+
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "declaration": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true
   }
 }
 ```
 
-### Why this is defensible
+### CI pipeline
 
-1. **Network effect with the AI SDK ecosystem.** The AI SDK has 21k+ stars and
-   is THE standard for React AI apps. Being a first-class middleware means
-   every AI SDK user is a potential TokenShield user.
-
-2. **Middleware composability.** TokenShield stacks with other middlewares
-   (extractReasoningMiddleware, guardrails, RAG). It doesn't compete with them.
-
-3. **Zero-config win.** The default config saves money immediately without any
-   tuning. Developers see savings on their FIRST deploy.
+1. `pnpm install`
+2. `pnpm lint` (ESLint)
+3. `pnpm test` (Vitest)
+4. `pnpm build` (tsup)
+5. Bundle size check (fail if core > 15KB gzip)
 
 ---
 
-## React Hooks API (for granular control)
+## 11. Implementation Roadmap
 
-For developers who want UI integration beyond the middleware:
+### Phase 1: Core Module Hardening
 
-```tsx
-import {
-  TokenShieldProvider,
-  useTokenBudget,
-  useCostLedger,
-  useModelRouter,
-  useResponseCache,
-  useRequestGuard,
-} from '@tokenshield/react'
+Priority: Fix bugs and align modules with this spec.
 
-// Provider wraps your app
-<TokenShieldProvider config={{ defaultModel: 'gpt-4o', budget: 4000 }}>
-  <App />
-</TokenShieldProvider>
+1. **Add `valibot` dependency** and create config schemas for all modules
+2. **Add `ohash` dependency** and replace async SHA-256 in response cache
+3. **Add `mitt` dependency** and create unified SDK event bus
+4. **Create `pricing-registry.ts`** — extract MODEL_PRICING into standalone module with `registerModel()`
+5. **Fix request guard** — add `deduplicateWindow`, `minInputLength`, `maxInputTokens`
+6. **Fix context manager** — integrate tool token counting into budget calculation
+7. **Add `countFast()`** to token counter for real-time UI estimation
 
-// Live token counting as user types
-const { tokens, cost, withinBudget, breakdown } = useTokenBudget(messages)
+### Phase 2: Middleware Integration
 
-// Real-time savings dashboard
-const { totalSpent, totalSaved, savingsRate, breakdown } = useCostLedger()
+Wire disconnected modules into the middleware pipeline.
 
-// Manual routing control
-const { route, decision } = useModelRouter()
-const { model, reason, confidence } = decision
+8. **Wire stream tracker** into `wrapStream` — count tokens in real-time, handle abort
+9. **Wire circuit breaker** into middleware — auto-instantiate from config, persist via IndexedDB
+10. **Add `estimateCostFromUsage()`** to cost estimator — accept AI SDK usage objects directly
+11. **Add usage field normalization** — handle both `promptTokens`/`completionTokens` and `inputTokens`/`outputTokens` from different AI SDK versions
 
-// Cache management
-const { lookup, store, hitRate, clear } = useResponseCache()
+### Phase 3: React Enhancement
 
-// Guard status
-const { check, isBlocked, reason } = useRequestGuard()
-```
+12. **Add `useBudgetAlert` hook** — subscribe to circuit breaker events
+13. **Add `useTokenEstimate` hook** — fast approximate count for keystroke feedback
+14. **Improve `TokenShieldProvider`** — add graceful degradation, imperative initialization mode
+15. **Add ledger export** — `exportJSON()` and `exportCSV()` methods
+
+### Phase 4: Testing & Polish
+
+16. **Add Vitest unit tests** for all 11 modules
+17. **Add React hook tests** with @testing-library/react
+18. **Add MSW integration tests** for full middleware pipeline
+19. **Add tsup build config** and verify tree-shaking
+
+---
+
+## 12. Known Bugs & Required Fixes
+
+### Bug 1: Usage field name normalization (FIXED in previous review)
+
+**Problem:** OpenAI uses `prompt_tokens`/`completion_tokens`, Anthropic/Google use `input_tokens`/`output_tokens`.
+**Status:** Fixed in `api-client.ts`. Both naming conventions are now exposed.
+
+### Bug 2: Request guard API mismatch with spec
+
+**Problem:** Spec defined `maxConcurrent`, `minInputLength`, `maxInputTokens`, `deduplicateWindow`. Implementation has `debounceMs`, `maxRequestsPerMinute`, `maxCostPerHour`, `deduplicateInFlight`.
+**Fix:** Add the missing config fields to `GuardConfig` and implement the logic.
+
+### Bug 3: Deduplication window not implemented
+
+**Problem:** Only in-flight dedup exists. Once a request completes, identical prompts immediately pass through.
+**Fix:** Add a `recentPrompts: Map<string, number>` (hash → timestamp) and block prompts matching within the `deduplicateWindow`.
+
+### Bug 4: Stream tracker not wired into middleware
+
+**Problem:** `StreamTokenTracker` exists but `wrapStream` in middleware does not use it.
+**Fix:** Create a `TransformStream` in `wrapStream` that pipes chunks through `StreamTokenTracker.processChunk()` and records usage on completion or abort.
+
+### Bug 5: Circuit breaker requires manual instantiation
+
+**Problem:** Middleware config accepts `breaker` config but the breaker is instantiated inline. No IndexedDB persistence, no event emission.
+**Fix:** Wire breaker into middleware lifecycle with optional persistence and mitt events.
+
+### Bug 6: Tool tokens not subtracted from context budget
+
+**Problem:** Context manager does not account for hidden tool definition tokens when calculating available budget.
+**Fix:** Accept `toolDefinitions` in `ContextBudget`, call `countToolTokens()`, subtract from available tokens before trimming.
 
 ---
 
@@ -553,95 +901,27 @@ const { check, isBlocked, reason } = useRequestGuard()
 
 ### Open Core Model (PostHog/Supabase pattern)
 
-Research shows open-core achieves 40% faster community growth and stronger customer
-retention than pure SaaS. PostHog reached $1.4B valuation with this model.
-
-**Free tier (MIT license, npm package):**
-Everything that SAVES money is free. This drives adoption.
-
-- Token counter (exact BPE)
-- Context manager (sliding window + priority trimming)
-- Response cache (in-memory + IndexedDB)
-- Model router (complexity scoring + routing)
-- Request guard (debounce + dedup + rate limit)
-- Prefix optimizer (message ordering for provider cache hits)
-- Cost ledger (session-only, resets on refresh)
+**Free tier (MIT license):** Everything that SAVES money.
+- Token counter, context manager, response cache, model router, request guard, prefix optimizer
+- Cost ledger (session-only)
 - Vercel AI SDK middleware
 - React hooks
+- Circuit breaker (session-only)
 
-**Pro tier ($29/month per project):**
-Everything that gives VISIBILITY is paid. This is what companies need.
+**Pro tier ($29/month per project):** Everything that gives VISIBILITY.
+- Persistent cost ledger (IndexedDB + cloud sync)
+- Budget alerts (email/webhook)
+- Per-feature cost attribution
+- Historical analytics
+- JSON/CSV export
 
-- Persistent cost ledger (survives refresh, IndexedDB + cloud sync)
-- Budget alerts (email/webhook when spend exceeds threshold)
-- Cost attribution per feature (tag requests with feature names, see cost per feature)
-- Historical analytics (trends, forecasts, anomaly detection)
-- Export to JSON/CSV for finance teams
-- Priority support
-
-**Team tier ($99/month, up to 10 seats):**
-Everything that enables GOVERNANCE is paid at the team level.
-
+**Team tier ($99/month, up to 10 seats):** Everything that enables GOVERNANCE.
 - Per-user cost tracking
-- Team budget management (set per-developer or per-team limits)
-- Role-based access (who can override router decisions)
-- Slack/Discord notifications for budget alerts
+- Team budget management
+- Role-based access
+- Slack/Discord notifications
 - SSO integration
-- Custom model tier configurations
-
-### Why this pricing works
-
-1. **Free tier is genuinely valuable.** It actually saves money. This isn't a
-   crippled trial -- it's a production-grade tool. Developers adopt it because
-   it works, not because of marketing.
-
-2. **The upgrade trigger is organizational, not technical.** Individual devs
-   don't need persistence or alerts. Companies do when the CFO asks
-   "how much are we spending on AI?" The free tier has no answer. Pro does.
-
-3. **$29/month is a trivial line item for a project spending $500+/month on AI.**
-   If TokenShield saves 40-60% of that, the ROI is 7-10x the subscription cost.
-
-4. **We never hold savings hostage.** If a dev wants to stay free forever and
-   save money, they can. The paid tier sells convenience, not the savings themselves.
 
 ---
 
-## NPM Package Architecture
-
-Three packages, all tree-shakeable:
-
-### @tokenshield/core
-Zero-dependency except `gpt-tokenizer` (~600KB tree-shaken for single encoding).
-Contains: token counter, cost estimator, context manager, response cache, model
-router, request guard, prefix optimizer, cost ledger.
-
-Works in any JS/TS environment (Node, browser, edge, Deno).
-
-### @tokenshield/react
-Peer deps: `react`, `@tokenshield/core`.
-Contains: TokenShieldProvider, all hooks, React-specific state management.
-
-### @tokenshield/ai-sdk
-Peer deps: `ai` (>=6.0), `@tokenshield/core`.
-Contains: `tokenShield()` middleware factory, AI SDK-specific types and utilities.
-
----
-
-## Success Metrics
-
-### Adoption
-- npm weekly downloads (target: 1,000 in month 1, 10,000 in month 3)
-- GitHub stars (target: 500 in month 1, 2,000 in month 3)
-- AI SDK middleware ecosystem listing
-
-### Proof of value
-- Average savings rate across all users (target: 40%+)
-- Token counter accuracy vs provider usage object (target: 99%+ match rate)
-- Cache hit rate in production apps (target: 15-25%)
-- Correct model routing rate (cheap model gives equivalent answer, target: 85%+)
-
-### Revenue
-- Free-to-paid conversion rate (target: 5-8% of active projects)
-- Monthly recurring revenue (target: $5k MRR at month 6)
-- Net revenue retention (target: 120%+ -- teams upgrade, not just pay)
+*End of specification. This document is the single source of truth for TokenShield SDK development.*
