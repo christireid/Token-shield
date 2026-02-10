@@ -1,0 +1,489 @@
+"use client"
+
+/**
+ * TokenShield React Integration
+ *
+ * Hooks and context provider that wire the SDK into React/Next.js apps.
+ * Tracks cumulative savings across the session and exposes
+ * real-time cost data to any component.
+ */
+
+import React, {
+  createContext,
+  useContext,
+  useCallback,
+  useRef,
+  useMemo,
+  useSyncExternalStore,
+} from "react"
+import { countExactTokens, countChatTokens, type ChatMessage } from "./token-counter"
+import { estimateCost, calculateSavings, type ModelPricing, MODEL_PRICING } from "./cost-estimator"
+import { fitToBudget, smartFit, type Message, type ContextBudget } from "./context-manager"
+import { ResponseCache } from "./response-cache"
+import { CostLedger } from "./cost-ledger"
+import { analyzeComplexity, routeToModel, type RoutingDecision } from "./model-router"
+import { RequestGuard, type GuardConfig, type GuardResult } from "./request-guard"
+
+// ---------------------
+// Session savings store
+// ---------------------
+interface SavingsEvent {
+  timestamp: number
+  type: "cache_hit" | "context_trim" | "model_downgrade" | "request_blocked"
+  tokensSaved: number
+  dollarsSaved: number
+  details: string
+}
+
+interface SavingsState {
+  events: SavingsEvent[]
+  totalTokensSaved: number
+  totalDollarsSaved: number
+  totalRequestsMade: number
+  totalRequestsBlocked: number
+  totalCacheHits: number
+}
+
+function createSavingsStore() {
+  let state: SavingsState = {
+    events: [],
+    totalTokensSaved: 0,
+    totalDollarsSaved: 0,
+    totalRequestsMade: 0,
+    totalRequestsBlocked: 0,
+    totalCacheHits: 0,
+  }
+  const listeners = new Set<() => void>()
+
+  return {
+    getState: () => state,
+    subscribe: (listener: () => void) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    addEvent: (event: SavingsEvent) => {
+      state = {
+        ...state,
+        events: [...state.events, event],
+        totalTokensSaved: state.totalTokensSaved + event.tokensSaved,
+        totalDollarsSaved: state.totalDollarsSaved + event.dollarsSaved,
+        totalCacheHits:
+          state.totalCacheHits + (event.type === "cache_hit" ? 1 : 0),
+        totalRequestsBlocked:
+          state.totalRequestsBlocked +
+          (event.type === "request_blocked" ? 1 : 0),
+      }
+      for (const l of listeners) l()
+    },
+    incrementRequests: () => {
+      state = { ...state, totalRequestsMade: state.totalRequestsMade + 1 }
+      for (const l of listeners) l()
+    },
+    reset: () => {
+      state = {
+        events: [],
+        totalTokensSaved: 0,
+        totalDollarsSaved: 0,
+        totalRequestsMade: 0,
+        totalRequestsBlocked: 0,
+        totalCacheHits: 0,
+      }
+      for (const l of listeners) l()
+    },
+  }
+}
+
+// ---------------------
+// Context
+// ---------------------
+interface TokenShieldContextValue {
+  cache: ResponseCache
+  guard: RequestGuard
+  savingsStore: ReturnType<typeof createSavingsStore>
+  defaultModelId: string
+  /** Global CostLedger instance. Optional: only present when ledgerConfig is provided */
+  ledger?: CostLedger
+}
+
+const TokenShieldContext = createContext<TokenShieldContextValue | null>(null)
+
+export interface TokenShieldProviderProps {
+  children: React.ReactNode
+  defaultModelId?: string
+  guardConfig?: Partial<GuardConfig>
+  cacheConfig?: {
+    maxEntries?: number
+    ttlMs?: number
+    similarityThreshold?: number
+  }
+
+  /**
+   * Optional ledger configuration. When provided, TokenShieldProvider will
+   * instantiate a CostLedger and make it available via useCostLedger().
+   */
+  ledgerConfig?: {
+    /** Persist ledger entries to IndexedDB across sessions */
+    persist?: boolean
+    /** Optional default feature tag applied to all ledger entries */
+    feature?: string
+  }
+}
+
+/**
+ * Provider that initializes the SDK and makes it available to all hooks.
+ * Wrap your app (or the part that uses AI) with this.
+ */
+export function TokenShieldProvider({
+  children,
+  defaultModelId = "gpt-4o-mini",
+  guardConfig,
+  cacheConfig,
+  ledgerConfig,
+}: TokenShieldProviderProps) {
+  const cacheRef = useRef<ResponseCache | null>(null)
+  const guardRef = useRef<RequestGuard | null>(null)
+  const storeRef = useRef<ReturnType<typeof createSavingsStore> | null>(null)
+  const ledgerRef = useRef<CostLedger | null>(null)
+
+  if (!cacheRef.current) {
+    cacheRef.current = new ResponseCache(cacheConfig)
+  }
+  if (!guardRef.current) {
+    guardRef.current = new RequestGuard({
+      ...guardConfig,
+      modelId: defaultModelId,
+    })
+  }
+  if (!storeRef.current) {
+    storeRef.current = createSavingsStore()
+  }
+  if (!ledgerRef.current && ledgerConfig !== undefined) {
+    ledgerRef.current = new CostLedger({ persist: ledgerConfig.persist })
+  }
+
+  const value = useMemo(
+    () => ({
+      cache: cacheRef.current!,
+      guard: guardRef.current!,
+      savingsStore: storeRef.current!,
+      defaultModelId,
+      ledger: ledgerRef.current ?? undefined,
+    }),
+    [defaultModelId]
+  )
+
+  return (
+    <TokenShieldContext.Provider value={value}>
+      {children}
+    </TokenShieldContext.Provider>
+  )
+}
+
+function useTokenShield() {
+  const ctx = useContext(TokenShieldContext)
+  if (!ctx) {
+    throw new Error("useTokenShield hooks must be used within <TokenShieldProvider>")
+  }
+  return ctx
+}
+
+// ---------------------
+// Hooks
+// ---------------------
+
+/**
+ * Track cumulative savings across the session.
+ * Reactively updates when any savings event occurs.
+ */
+export function useSavings() {
+  const { savingsStore } = useTokenShield()
+  return useSyncExternalStore(
+    savingsStore.subscribe,
+    savingsStore.getState,
+    savingsStore.getState
+  )
+}
+
+/**
+ * Count tokens in real-time as the user types.
+ * Returns exact BPE token count and estimated cost.
+ */
+export function useTokenCount(text: string, modelId?: string) {
+  const { defaultModelId } = useTokenShield()
+  const model = modelId ?? defaultModelId
+
+  return useMemo(() => {
+    if (!text || text.length === 0) {
+      return { tokens: 0, cost: 0, characters: 0, ratio: 0 }
+    }
+    const count = countExactTokens(text)
+    const cost = estimateCost(model, count.tokens, 0)
+    return {
+      tokens: count.tokens,
+      cost: cost.inputCost,
+      characters: count.characters,
+      ratio: count.ratio,
+    }
+  }, [text, model])
+}
+
+/**
+ * Analyze prompt complexity and get a routing recommendation.
+ */
+export function useComplexityAnalysis(prompt: string, defaultModel?: string) {
+  const { defaultModelId } = useTokenShield()
+  const model = defaultModel ?? defaultModelId
+
+  return useMemo(() => {
+    if (!prompt || prompt.length === 0) {
+      return null
+    }
+    return routeToModel(prompt, model)
+  }, [prompt, model])
+}
+
+/**
+ * Manage conversation context within a token budget.
+ * Returns the trimmed messages and savings data.
+ */
+export function useContextManager(
+  messages: Message[],
+  budget: ContextBudget
+) {
+  const { savingsStore, defaultModelId } = useTokenShield()
+
+  return useMemo(() => {
+    const result = smartFit(messages, budget)
+
+    if (result.evictedTokens > 0) {
+      const savings = calculateSavings(
+        defaultModelId,
+        result.totalTokens + result.evictedTokens,
+        result.totalTokens,
+        budget.reservedForOutput
+      )
+      // We don't fire events in useMemo (side effects)
+      // Instead, return the data and let the consumer decide
+      return {
+        ...result,
+        savings: {
+          tokensSaved: result.evictedTokens,
+          dollarsSaved: savings.savedDollars,
+          percentSaved: savings.savedPercent,
+        },
+      }
+    }
+
+    return { ...result, savings: null }
+  }, [messages, budget, defaultModelId, savingsStore])
+}
+
+/**
+ * Check the response cache before making an API call.
+ * Returns a function that wraps your API call with caching.
+ */
+export function useResponseCache() {
+  const { cache, savingsStore, defaultModelId } = useTokenShield()
+
+  const cachedFetch = useCallback(
+    async (
+      prompt: string,
+      apiFn: (prompt: string) => Promise<{ response: string; inputTokens: number; outputTokens: number }>,
+      model?: string
+    ) => {
+      const modelId = model ?? defaultModelId
+
+      // Check cache first
+      const cacheResult = await cache.lookup(prompt, modelId)
+      if (cacheResult.hit && cacheResult.entry) {
+        const cost = estimateCost(
+          modelId,
+          cacheResult.entry.inputTokens,
+          cacheResult.entry.outputTokens
+        )
+        savingsStore.addEvent({
+          timestamp: Date.now(),
+          type: "cache_hit",
+          tokensSaved: cacheResult.entry.inputTokens + cacheResult.entry.outputTokens,
+          dollarsSaved: cost.totalCost,
+          details: `Cache ${cacheResult.matchType} (${((cacheResult.similarity ?? 1) * 100).toFixed(0)}% match)`,
+        })
+        return {
+          response: cacheResult.entry.response,
+          fromCache: true,
+          matchType: cacheResult.matchType,
+          similarity: cacheResult.similarity,
+        }
+      }
+
+      // Cache miss - call API
+      savingsStore.incrementRequests()
+      const result = await apiFn(prompt)
+      await cache.store(prompt, result.response, modelId, result.inputTokens, result.outputTokens)
+
+      return {
+        response: result.response,
+        fromCache: false,
+        matchType: undefined,
+        similarity: undefined,
+      }
+    },
+    [cache, savingsStore, defaultModelId]
+  )
+
+  const stats = useCallback(() => cache.stats(), [cache])
+
+  return { cachedFetch, stats }
+}
+
+/**
+ * Guard requests with debouncing, rate limiting, and cost gating.
+ */
+export function useRequestGuard() {
+  const { guard, savingsStore } = useTokenShield()
+
+  const checkRequest = useCallback(
+    (prompt: string, expectedOutputTokens?: number): GuardResult => {
+      const result = guard.check(prompt, expectedOutputTokens)
+      if (!result.allowed) {
+        savingsStore.addEvent({
+          timestamp: Date.now(),
+          type: "request_blocked",
+          tokensSaved: 0,
+          dollarsSaved: result.estimatedCost,
+          details: result.reason ?? "Request blocked",
+        })
+      }
+      return result
+    },
+    [guard, savingsStore]
+  )
+
+  const startRequest = useCallback(
+    (prompt: string) => guard.startRequest(prompt),
+    [guard]
+  )
+
+  const completeRequest = useCallback(
+    (prompt: string, inputTokens: number, outputTokens: number) =>
+      guard.completeRequest(prompt, inputTokens, outputTokens),
+    [guard]
+  )
+
+  const stats = useCallback(() => guard.stats(), [guard])
+
+  return { checkRequest, startRequest, completeRequest, stats }
+}
+
+/**
+ * Subscribe to the CostLedger summary. Requires that TokenShieldProvider
+ * was initialized with a ledgerConfig. Returns overall spending and
+ * savings statistics, or, if a featureName is provided, a breakdown for
+ * that specific feature. The return shape matches the ledger summary but
+ * filters out only the relevant fields.
+ */
+export function useCostLedger(featureName?: string) {
+  const { ledger } = useTokenShield()
+  if (!ledger) {
+    throw new Error(
+      "useCostLedger requires TokenShieldProvider with ledgerConfig; no ledger is available"
+    )
+  }
+  return useSyncExternalStore(
+    (listener) => ledger.subscribe(listener),
+    () => {
+      const summary = ledger.getSummary()
+      if (featureName) {
+        const data = summary.byFeature[featureName]
+        return {
+          totalSpent: data?.cost ?? 0,
+          totalSaved: data?.saved ?? 0,
+          totalCalls: data?.calls ?? 0,
+          savingsRate:
+            data && data.cost + data.saved > 0
+              ? data.saved / (data.cost + data.saved)
+              : 0,
+          breakdown: data,
+        }
+      }
+      return {
+        totalSpent: summary.totalSpent,
+        totalSaved: summary.totalSaved,
+        totalCalls: summary.totalCalls,
+        savingsRate:
+          summary.totalSpent + summary.totalSaved > 0
+            ? summary.totalSaved /
+              (summary.totalSpent + summary.totalSaved)
+            : 0,
+        breakdown: summary.byFeature,
+      }
+    },
+    () => {
+      // For server rendering, return same as client snapshot
+      const summary = ledger.getSummary()
+      if (featureName) {
+        const data = summary.byFeature[featureName]
+        return {
+          totalSpent: data?.cost ?? 0,
+          totalSaved: data?.saved ?? 0,
+          totalCalls: data?.calls ?? 0,
+          savingsRate:
+            data && data.cost + data.saved > 0
+              ? data.saved / (data.cost + data.saved)
+              : 0,
+          breakdown: data,
+        }
+      }
+      return {
+        totalSpent: summary.totalSpent,
+        totalSaved: summary.totalSaved,
+        totalCalls: summary.totalCalls,
+        savingsRate:
+          summary.totalSpent + summary.totalSaved > 0
+            ? summary.totalSaved /
+              (summary.totalSpent + summary.totalSaved)
+            : 0,
+        breakdown: summary.byFeature,
+      }
+    }
+  )
+}
+
+/**
+ * Alias for useCostLedger that emphasizes per-feature cost tracking.
+ */
+export function useFeatureCost(featureName: string) {
+  return useCostLedger(featureName)
+}
+
+/**
+ * Route a prompt to the cheapest appropriate model.
+ */
+export function useModelRouter(prompt: string, options?: {
+  allowedProviders?: ModelPricing["provider"][]
+  defaultModel?: string
+}) {
+  const { defaultModelId, savingsStore } = useTokenShield()
+  const model = options?.defaultModel ?? defaultModelId
+
+  const routing = useMemo((): RoutingDecision | null => {
+    if (!prompt || prompt.length === 0) return null
+    return routeToModel(prompt, model, {
+      allowedProviders: options?.allowedProviders,
+    })
+  }, [prompt, model, options?.allowedProviders])
+
+  const confirmRouting = useCallback(() => {
+    if (routing && routing.savingsVsDefault > 0) {
+      savingsStore.addEvent({
+        timestamp: Date.now(),
+        type: "model_downgrade",
+        tokensSaved: 0,
+        dollarsSaved: routing.savingsVsDefault,
+        details: `Routed to ${routing.selectedModel.name} instead of default`,
+      })
+    }
+  }, [routing, savingsStore])
+
+  return { routing, confirmRouting }
+}
