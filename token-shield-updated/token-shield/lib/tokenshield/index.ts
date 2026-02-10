@@ -5,7 +5,7 @@
  * Every module uses exact token counting (gpt-tokenizer BPE),
  * real provider pricing data, and deterministic algorithms.
  *
- * 12 Modules:
+ * 12 Core Modules:
  *  1. token-counter      - Exact BPE token counting (matches OpenAI's tiktoken)
  *  2. cost-estimator     - Real pricing from OpenAI, Anthropic, Google
  *  3. context-manager    - Token-budget-aware conversation history management
@@ -20,8 +20,13 @@
  * 12. user-budget-manager - Per-user daily/monthly token budget assignment (Team tier)
  *
  * Plus:
- * - AI SDK Middleware   - Drop-in LanguageModelV3Middleware for Vercel AI SDK
- * - React Integration   - Provider, hooks, and real-time cost tracking
+ * - AI SDK Middleware    - Drop-in LanguageModelV3Middleware for Vercel AI SDK
+ * - React Integration    - Provider, hooks, and real-time cost tracking
+ * - Typed Error Hierarchy - Structured, catchable errors with machine-readable codes
+ * - Composable Pipeline  - Pick-and-choose middleware stages with hooks
+ * - Structured Logger    - Observability with OTel-style spans
+ * - Provider Adapter     - Multi-provider routing with retries and health tracking
+ * - Performance Benchmarks - Hot-path benchmarking suite
  *
  * npm deps: gpt-tokenizer (BPE encoding), idb-keyval (IndexedDB persistence)
  */
@@ -154,7 +159,6 @@ export {
 // AI SDK Middleware
 export {
   tokenShieldMiddleware,
-  TokenShieldBlockedError,
   getLedger,
   type TokenShieldMiddlewareConfig,
 } from "./middleware"
@@ -199,6 +203,17 @@ export {
   type TokenShieldEvents,
 } from "./event-bus"
 
+// Typed Error Hierarchy
+export {
+  TokenShieldError,
+  TokenShieldBlockedError,
+  TokenShieldConfigError,
+  TokenShieldBudgetError,
+  TokenShieldCryptoError,
+  ERROR_CODES,
+  type ErrorCode,
+} from "./errors"
+
 // Config Schemas
 export {
   validateConfig,
@@ -219,3 +234,51 @@ export {
   createEncryptedStore,
   type EncryptedStoreConfig,
 } from "./crypto-store"
+
+// Composable Pipeline
+export {
+  Pipeline,
+  createPipeline,
+  createBreakerStage,
+  createBudgetStage,
+  createGuardStage,
+  createCacheStage,
+  createContextStage,
+  createRouterStage,
+  createPrefixStage,
+  type PipelineContext,
+  type PipelineStage,
+  type PipelineHook,
+} from "./pipeline"
+
+// Observability — Structured Logging + Spans
+export {
+  TokenShieldLogger,
+  logger,
+  createLogger,
+  type LogLevel,
+  type LogEntry,
+  type LoggerConfig,
+  type Span,
+  type CompletedSpan,
+} from "./logger"
+
+// Multi-Provider Adapter
+export {
+  ProviderAdapter,
+  createProviderAdapter,
+  retryWithBackoff,
+  type ProviderName,
+  type ProviderConfig,
+  type ProviderHealth,
+  type AdapterConfig,
+} from "./provider-adapter"
+
+// Performance Benchmarks
+export {
+  bench,
+  benchAsync,
+  runAllBenchmarks,
+  formatResults,
+  type BenchmarkResult,
+} from "./benchmark"

@@ -34,6 +34,10 @@ import { CostCircuitBreaker, type BreakerConfig } from "./circuit-breaker"
 import { StreamTokenTracker } from "./stream-tracker"
 import { UserBudgetManager, type UserBudgetConfig, type BudgetExceededEvent, type BudgetWarningEvent } from "./user-budget-manager"
 import type { ChatMessage } from "./token-counter"
+import { TokenShieldConfigSchema } from "./config-schemas"
+import { TokenShieldConfigError } from "./errors"
+import { TokenShieldBlockedError } from "./errors"
+import * as v from "valibot"
 
 // -------------------------------------------------------
 // Config
@@ -152,6 +156,8 @@ interface ShieldMeta {
   userBudgetInflight?: number
   /** True when user budget tier routing was applied — prevents complexity router from overriding */
   tierRouted?: boolean
+  /** Cached last user text to avoid redundant extraction in wrapGenerate/wrapStream */
+  lastUserText?: string
 }
 
 /** AI SDK prompt type used internally for type-safe extraction */
@@ -179,6 +185,28 @@ function extractLastUserText(params: Record<string, unknown>): string {
  * passed directly to wrapLanguageModel().
  */
 export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) {
+  // Validate config against valibot schema (catches typos, wrong types, out-of-range values)
+  try {
+    // Extract the schema-validatable subset (excludes functions like getUserId, onBlocked, onUsage)
+    const schemaInput: Record<string, unknown> = {}
+    if (config.modules) schemaInput.modules = config.modules
+    if (config.guard) schemaInput.guard = config.guard
+    if (config.cache) schemaInput.cache = config.cache
+    if (config.context) schemaInput.context = config.context
+    if (config.router) schemaInput.router = config.router
+    if (config.prefix) schemaInput.prefix = config.prefix
+    if (config.ledger) schemaInput.ledger = config.ledger
+    if (config.breaker) schemaInput.breaker = config.breaker
+    if (config.userBudget?.budgets) schemaInput.userBudget = config.userBudget.budgets
+    v.parse(TokenShieldConfigSchema, schemaInput)
+  } catch (err) {
+    if (err instanceof v.ValiError) {
+      const path = err.issues?.[0]?.path?.map((p: { key: string | number }) => p.key).join(".") ?? "unknown"
+      throw new TokenShieldConfigError(`Invalid config at "${path}": ${err.message}`, path)
+    }
+    throw err
+  }
+
   const modules = {
     guard: true,
     cache: true,
@@ -268,6 +296,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
 
       const lastUserMessage = messages.filter((m) => m.role === "user").pop()
       const lastUserText = lastUserMessage?.content ?? ""
+      meta.lastUserText = lastUserText
 
       // -- 0. BREAKER CHECK --
       if (breaker && lastUserText) {
@@ -524,7 +553,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
 
       // Store in cache for future requests (fire-and-forget to avoid blocking response)
       if (cache && responseText) {
-        const cachedUserText = extractLastUserText(params)
+        const cachedUserText = meta?.lastUserText ?? extractLastUserText(params)
         if (cachedUserText) {
           cache.store(cachedUserText, responseText, modelId, inputTokens, outputTokens).catch(() => {})
         }
@@ -574,7 +603,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
 
       // Complete the guard request tracking (pass actual model for accurate cost logging)
       if (guard) {
-        const guardUserText = extractLastUserText(params)
+        const guardUserText = meta?.lastUserText ?? extractLastUserText(params)
         if (guardUserText) {
           guard.completeRequest(guardUserText, inputTokens, outputTokens, modelId)
         }
@@ -684,7 +713,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
 
         // Store in cache for future requests (fire-and-forget)
         if (cache) {
-          const cachedUserText = extractLastUserText(params)
+          const cachedUserText = meta?.lastUserText ?? extractLastUserText(params)
           const responseText = tracker.getText()
           if (cachedUserText && responseText) {
             cache.store(cachedUserText, responseText, modelId, usage.inputTokens, usage.outputTokens).catch(() => {})
@@ -735,7 +764,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
 
         // Complete guard request tracking (pass actual model for accurate cost logging)
         if (guard) {
-          const guardUserText = extractLastUserText(params)
+          const guardUserText = meta?.lastUserText ?? extractLastUserText(params)
           if (guardUserText) {
             guard.completeRequest(guardUserText, usage.inputTokens, usage.outputTokens, modelId)
           }
@@ -810,16 +839,8 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
   return middleware
 }
 
-/**
- * Custom error thrown when the request guard blocks a request.
- * Callers can catch this specifically to show user-friendly messages.
- */
-export class TokenShieldBlockedError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = "TokenShieldBlockedError"
-  }
-}
+// TokenShieldBlockedError is now imported from ./errors and re-exported for backward compatibility
+export { TokenShieldBlockedError } from "./errors"
 
 /**
  * Convenience: get the cost ledger from a middleware instance.

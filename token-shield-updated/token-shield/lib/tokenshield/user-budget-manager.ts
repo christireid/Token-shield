@@ -109,6 +109,8 @@ const MAX_CACHE_SIZE = 1000
 const MAX_WARNING_MAP_SIZE = 500
 /** Maximum distinct users tracked in inflightByUser before FIFO eviction */
 const MAX_TRACKED_USERS = 5000
+/** Maximum spend records kept in memory (prevents unbounded growth in high-throughput) */
+const MAX_BUDGET_RECORDS = 50_000
 
 // -------------------------------------------------------
 // Implementation
@@ -320,7 +322,8 @@ export class UserBudgetManager {
       }
     }
 
-    return { allowed: true, status }
+    // Return fresh status that includes the just-reserved inflight
+    return { allowed: true, status: estimatedCostDollars > 0 ? this.getStatus(userId) : status }
   }
 
   /**
@@ -361,9 +364,12 @@ export class UserBudgetManager {
 
     this.records.push(record)
 
-    // Clean up old records (keep last 30 days)
+    // Clean up old records (keep last 30 days) + enforce hard cap
     const thirtyDaysAgo = Date.now() - THIRTY_DAYS_MS
     this.records = this.records.filter((r) => r.timestamp > thirtyDaysAgo)
+    if (this.records.length > MAX_BUDGET_RECORDS) {
+      this.records = this.records.slice(-MAX_BUDGET_RECORDS)
+    }
 
     // Persist to IndexedDB
     if (this.idbStore) {

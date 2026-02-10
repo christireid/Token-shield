@@ -135,6 +135,9 @@ const DEFAULT_CONFIG: BreakerConfig = {
   storageKey: "tokenshield-breaker",
 }
 
+/** Maximum spend records kept in memory (prevents unbounded growth in high-throughput scenarios) */
+const MAX_BREAKER_RECORDS = 50_000
+
 export class CostCircuitBreaker {
   private config: BreakerConfig
   private records: SpendRecord[] = []
@@ -163,6 +166,19 @@ export class CostCircuitBreaker {
 
     // Check each limit
     const limits = this.config.limits
+
+    // Auto-reset time-window warnings when spend drops below 80% threshold
+    // (session warnings never auto-reset — they clear on explicit reset() only)
+    if (limits.perHour != null && status.spend.lastHour < limits.perHour * 0.8) {
+      this.warningFired.delete("hour-warning")
+    }
+    if (limits.perDay != null && status.spend.lastDay < limits.perDay * 0.8) {
+      this.warningFired.delete("day-warning")
+    }
+    if (limits.perMonth != null && status.spend.lastMonth < limits.perMonth * 0.8) {
+      this.warningFired.delete("month-warning")
+    }
+
     const checks: { type: BreakerEvent["limitType"]; current: number; limit: number }[] = []
 
     if (limits.perSession !== undefined) {
@@ -254,9 +270,12 @@ export class CostCircuitBreaker {
       model,
     })
 
-    // Clean up old records (keep last 30 days)
+    // Clean up old records (keep last 30 days) + enforce hard cap
     const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
     this.records = this.records.filter((r) => r.timestamp > thirtyDaysAgo)
+    if (this.records.length > MAX_BREAKER_RECORDS) {
+      this.records = this.records.slice(-MAX_BREAKER_RECORDS)
+    }
 
     this.save()
   }
