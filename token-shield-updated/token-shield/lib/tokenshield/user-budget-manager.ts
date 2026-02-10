@@ -16,6 +16,7 @@
 
 import { get, set, createStore, type UseStore } from "idb-keyval"
 import { estimateCost } from "./cost-estimator"
+import { shieldEvents } from "./event-bus"
 
 // -------------------------------------------------------
 // Types
@@ -105,6 +106,12 @@ export class UserBudgetManager {
   private listeners = new Set<() => void>()
   private idbStore: UseStore | null = null
   private warningFired = new Map<string, number>()
+  /** Estimated cost of in-flight requests per user (prevents concurrent overspend) */
+  private inflightByUser = new Map<string, number>()
+  /** Monotonic version counter — incremented on every state change */
+  private _version = 0
+  /** Cached snapshots per user, invalidated when _version changes */
+  private _snapshotCache = new Map<string, { version: number; snapshot: UserBudgetStatus }>()
 
   constructor(config: UserBudgetConfig = {}) {
     this.config = config
@@ -128,6 +135,7 @@ export class UserBudgetManager {
   }
 
   private notify() {
+    this._version++
     for (const l of this.listeners) l()
   }
 
@@ -180,8 +188,11 @@ export class UserBudgetManager {
     const oneDayMs = 24 * 60 * 60 * 1000
     const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
 
+    // Include in-flight cost from concurrent requests that haven't completed yet
+    const inflight = this.inflightByUser.get(userId) ?? 0
+
     // Check daily limit
-    const projectedDaily = status.spend.daily + estimatedCostDollars
+    const projectedDaily = status.spend.daily + estimatedCostDollars + inflight
     const dailyWarningKey = `${userId}-daily`
     // Reset daily warning if it was fired more than 24 hours ago
     const dailyWarningTime = this.warningFired.get(dailyWarningKey)
@@ -190,22 +201,26 @@ export class UserBudgetManager {
     }
     if (status.limits.daily > 0 && projectedDaily >= status.limits.daily * 0.8 && !this.warningFired.has(dailyWarningKey)) {
       this.warningFired.set(dailyWarningKey, now)
-      this.config.onBudgetWarning?.(userId, {
-        limitType: "daily",
+      const warningEvent = {
+        limitType: "daily" as const,
         currentSpend: status.spend.daily,
         limit: status.limits.daily,
         percentUsed: pct(projectedDaily, status.limits.daily),
         timestamp: Date.now(),
-      })
+      }
+      this.config.onBudgetWarning?.(userId, warningEvent)
+      shieldEvents.emit('userBudget:warning', { userId, limitType: warningEvent.limitType, currentSpend: warningEvent.currentSpend, limit: warningEvent.limit, percentUsed: warningEvent.percentUsed })
     }
     if (projectedDaily >= status.limits.daily) {
-      this.config.onBudgetExceeded?.(userId, {
-        limitType: "daily",
+      const exceededEvent = {
+        limitType: "daily" as const,
         currentSpend: status.spend.daily,
         limit: status.limits.daily,
         percentUsed: pct(projectedDaily, status.limits.daily),
         timestamp: Date.now(),
-      })
+      }
+      this.config.onBudgetExceeded?.(userId, exceededEvent)
+      shieldEvents.emit('userBudget:exceeded', { userId, limitType: exceededEvent.limitType, currentSpend: exceededEvent.currentSpend, limit: exceededEvent.limit })
       return {
         allowed: false,
         reason: `User ${userId} daily budget exceeded ($${status.spend.daily.toFixed(4)} / $${status.limits.daily.toFixed(2)})`,
@@ -214,7 +229,7 @@ export class UserBudgetManager {
     }
 
     // Check monthly limit
-    const projectedMonthly = status.spend.monthly + estimatedCostDollars
+    const projectedMonthly = status.spend.monthly + estimatedCostDollars + inflight
     const monthlyWarningKey = `${userId}-monthly`
     // Reset monthly warning if it was fired more than 30 days ago
     const monthlyWarningTime = this.warningFired.get(monthlyWarningKey)
@@ -223,22 +238,26 @@ export class UserBudgetManager {
     }
     if (status.limits.monthly > 0 && projectedMonthly >= status.limits.monthly * 0.8 && !this.warningFired.has(monthlyWarningKey)) {
       this.warningFired.set(monthlyWarningKey, now)
-      this.config.onBudgetWarning?.(userId, {
-        limitType: "monthly",
+      const warningEvent = {
+        limitType: "monthly" as const,
         currentSpend: status.spend.monthly,
         limit: status.limits.monthly,
         percentUsed: pct(projectedMonthly, status.limits.monthly),
         timestamp: Date.now(),
-      })
+      }
+      this.config.onBudgetWarning?.(userId, warningEvent)
+      shieldEvents.emit('userBudget:warning', { userId, limitType: warningEvent.limitType, currentSpend: warningEvent.currentSpend, limit: warningEvent.limit, percentUsed: warningEvent.percentUsed })
     }
     if (projectedMonthly >= status.limits.monthly) {
-      this.config.onBudgetExceeded?.(userId, {
-        limitType: "monthly",
+      const exceededEvent = {
+        limitType: "monthly" as const,
         currentSpend: status.spend.monthly,
         limit: status.limits.monthly,
         percentUsed: pct(projectedMonthly, status.limits.monthly),
         timestamp: Date.now(),
-      })
+      }
+      this.config.onBudgetExceeded?.(userId, exceededEvent)
+      shieldEvents.emit('userBudget:exceeded', { userId, limitType: exceededEvent.limitType, currentSpend: exceededEvent.currentSpend, limit: exceededEvent.limit })
       return {
         allowed: false,
         reason: `User ${userId} monthly budget exceeded ($${status.spend.monthly.toFixed(4)} / $${status.limits.monthly.toFixed(2)})`,
@@ -246,11 +265,17 @@ export class UserBudgetManager {
       }
     }
 
+    // Reserve estimated cost as in-flight to prevent concurrent overspend
+    if (estimatedCostDollars > 0) {
+      this.inflightByUser.set(userId, inflight + estimatedCostDollars)
+    }
+
     return { allowed: true, status }
   }
 
   /**
    * Record actual spending after a request completes.
+   * Clears any in-flight reservation for this user.
    */
   async recordSpend(userId: string, cost: number, model: string): Promise<void> {
     const record: UserSpendRecord = {
@@ -261,6 +286,17 @@ export class UserBudgetManager {
     }
 
     this.records.push(record)
+
+    // Clear in-flight reservation (actual cost is now recorded)
+    const inflight = this.inflightByUser.get(userId) ?? 0
+    if (inflight > 0) {
+      const remaining = Math.max(0, inflight - cost)
+      if (remaining > 0) {
+        this.inflightByUser.set(userId, remaining)
+      } else {
+        this.inflightByUser.delete(userId)
+      }
+    }
 
     // Clean up old records (keep last 30 days)
     const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
@@ -275,13 +311,38 @@ export class UserBudgetManager {
       }
     }
 
+    shieldEvents.emit('userBudget:spend', { userId, cost, model })
     this.notify()
   }
 
   /**
+   * Release in-flight cost reservation without recording actual spend.
+   * Call this when a request fails/is cancelled and recordSpend won't be called.
+   */
+  releaseInflight(userId: string, estimatedCost: number): void {
+    const inflight = this.inflightByUser.get(userId) ?? 0
+    if (inflight > 0) {
+      const remaining = Math.max(0, inflight - estimatedCost)
+      if (remaining > 0) {
+        this.inflightByUser.set(userId, remaining)
+      } else {
+        this.inflightByUser.delete(userId)
+      }
+    }
+  }
+
+  /**
    * Get comprehensive budget status for a user.
+   * Returns the same object reference if the underlying data hasn't changed,
+   * making it safe for use with React's useSyncExternalStore.
    */
   getStatus(userId: string): UserBudgetStatus {
+    // Return cached snapshot if version hasn't changed
+    const cached = this._snapshotCache.get(userId)
+    if (cached && cached.version === this._version) {
+      return cached.snapshot
+    }
+
     const limits = this.resolveLimits(userId)
     const now = Date.now()
     const oneDayAgo = now - 24 * 60 * 60 * 1000
@@ -298,8 +359,10 @@ export class UserBudgetManager {
 
     const tier = limits?.tier ?? "standard"
 
+    let snapshot: UserBudgetStatus
+
     if (!limits) {
-      return {
+      snapshot = {
         userId,
         limits: null,
         spend: { daily: dailySpend, monthly: monthlySpend },
@@ -308,22 +371,37 @@ export class UserBudgetManager {
         isOverBudget: false,
         tier,
       }
+    } else {
+      const dailyRemaining = Math.max(0, limits.daily - dailySpend)
+      const monthlyRemaining = Math.max(0, limits.monthly - monthlySpend)
+      const dailyPercent = limits.daily > 0 ? (dailySpend / limits.daily) * 100 : 0
+      const monthlyPercent = limits.monthly > 0 ? (monthlySpend / limits.monthly) * 100 : 0
+
+      snapshot = {
+        userId,
+        limits,
+        spend: { daily: dailySpend, monthly: monthlySpend },
+        remaining: { daily: dailyRemaining, monthly: monthlyRemaining },
+        percentUsed: { daily: dailyPercent, monthly: monthlyPercent },
+        isOverBudget: dailySpend >= limits.daily || monthlySpend >= limits.monthly,
+        tier,
+      }
     }
 
-    const dailyRemaining = Math.max(0, limits.daily - dailySpend)
-    const monthlyRemaining = Math.max(0, limits.monthly - monthlySpend)
-    const dailyPercent = limits.daily > 0 ? (dailySpend / limits.daily) * 100 : 0
-    const monthlyPercent = limits.monthly > 0 ? (monthlySpend / limits.monthly) * 100 : 0
-
-    return {
-      userId,
-      limits,
-      spend: { daily: dailySpend, monthly: monthlySpend },
-      remaining: { daily: dailyRemaining, monthly: monthlyRemaining },
-      percentUsed: { daily: dailyPercent, monthly: monthlyPercent },
-      isOverBudget: dailySpend >= limits.daily || monthlySpend >= limits.monthly,
-      tier,
+    // If cached snapshot has identical values, keep the old reference
+    if (cached &&
+      cached.snapshot.spend.daily === snapshot.spend.daily &&
+      cached.snapshot.spend.monthly === snapshot.spend.monthly &&
+      cached.snapshot.isOverBudget === snapshot.isOverBudget &&
+      cached.snapshot.tier === snapshot.tier &&
+      cached.snapshot.limits === snapshot.limits
+    ) {
+      this._snapshotCache.set(userId, { version: this._version, snapshot: cached.snapshot })
+      return cached.snapshot
     }
+
+    this._snapshotCache.set(userId, { version: this._version, snapshot })
+    return snapshot
   }
 
   /**
@@ -408,6 +486,7 @@ export class UserBudgetManager {
     this.records = this.records.filter((r) => r.userId !== userId)
     this.warningFired.delete(`${userId}-daily`)
     this.warningFired.delete(`${userId}-monthly`)
+    this.inflightByUser.delete(userId)
 
     if (this.idbStore) {
       try {
@@ -426,6 +505,7 @@ export class UserBudgetManager {
   async reset(): Promise<void> {
     this.records = []
     this.warningFired.clear()
+    this.inflightByUser.clear()
 
     if (this.idbStore) {
       try {

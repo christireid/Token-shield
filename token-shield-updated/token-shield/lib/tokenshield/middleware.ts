@@ -145,6 +145,8 @@ interface ShieldMeta {
   complexity?: ComplexityScore
   /** User ID for per-user budget tracking */
   userId?: string
+  /** Estimated cost reserved as in-flight during budget check */
+  userBudgetInflight?: number
 }
 
 /**
@@ -276,6 +278,13 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
         if (!budgetCheck.allowed) {
           config.onBlocked?.(budgetCheck.reason ?? "User budget exceeded")
           throw new TokenShieldBlockedError(budgetCheck.reason ?? "Request blocked by user budget limit")
+        }
+
+        // Store the estimated cost that was reserved as in-flight
+        try {
+          meta.userBudgetInflight = estimateCost(modelId, estimatedInput, expectedOut).totalCost
+        } catch {
+          meta.userBudgetInflight = 0
         }
 
         // Apply model tier routing if configured
@@ -425,7 +434,16 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
 
       // Call the real model
       const startTime = Date.now()
-      const result = await doGenerate()
+      let result: Record<string, unknown>
+      try {
+        result = await doGenerate()
+      } catch (err) {
+        // Release in-flight budget reservation on API failure
+        if (userBudgetManager && meta?.userId && meta.userBudgetInflight) {
+          userBudgetManager.releaseInflight(meta.userId, meta.userBudgetInflight)
+        }
+        throw err
+      }
       const latencyMs = Date.now() - startTime
 
       // Extract usage from result
@@ -566,7 +584,16 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
 
       // Call the real model's stream
       const startTime = Date.now()
-      const result = await doStream()
+      let result: Record<string, unknown>
+      try {
+        result = await doStream()
+      } catch (err) {
+        // Release in-flight budget reservation on stream init failure
+        if (userBudgetManager && meta?.userId && meta.userBudgetInflight) {
+          userBudgetManager.releaseInflight(meta.userId, meta.userBudgetInflight)
+        }
+        throw err
+      }
 
       const modelId = String(params.modelId ?? "")
       const tracker = new StreamTokenTracker({ modelId })
