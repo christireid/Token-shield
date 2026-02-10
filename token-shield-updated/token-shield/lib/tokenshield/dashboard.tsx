@@ -22,7 +22,7 @@
  *   />
  */
 
-import React, { useMemo } from "react"
+import React, { Component, useMemo } from "react"
 import { useSavings, useCostLedger, useBudgetAlert, useUserBudget } from "./react"
 import type { CostCircuitBreaker } from "./circuit-breaker"
 import type { UserBudgetManager } from "./user-budget-manager"
@@ -122,13 +122,15 @@ function SavingsSection() {
   )
 }
 
+/** Error boundary that silently renders nothing when a child throws (e.g., useCostLedger with no ledger configured) */
+class OptionalSection extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  state = { hasError: false }
+  static getDerivedStateFromError() { return { hasError: true } }
+  render() { return this.state.hasError ? null : this.props.children }
+}
+
 function LedgerSection() {
-  let ledger
-  try {
-    ledger = useCostLedger()
-  } catch {
-    return null // No ledger configured
-  }
+  const ledger = useCostLedger()
 
   return (
     <div>
@@ -264,7 +266,7 @@ export function TokenShieldDashboard({
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         <SavingsSection />
 
-        {showLedger && <LedgerSection />}
+        {showLedger && <OptionalSection><LedgerSection /></OptionalSection>}
 
         {breaker && <BreakerSection breaker={breaker} />}
 

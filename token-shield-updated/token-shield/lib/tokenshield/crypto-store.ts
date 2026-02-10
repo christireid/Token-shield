@@ -144,10 +144,10 @@ export class EncryptedStore {
       this.cryptoKey = config.encryption.key
     } else if (config.encryption.mode === "passphrase") {
       this.keyPromise = deriveKeyFromPassphrase(config.encryption.passphrase)
-      this.keyPromise.then((k) => { this.cryptoKey = k })
+      this.keyPromise.then((k) => { this.cryptoKey = k }).catch(() => {})
     } else if (config.encryption.mode === "session") {
       this.keyPromise = getSessionKey()
-      this.keyPromise.then((k) => { this.cryptoKey = k })
+      this.keyPromise.then((k) => { this.cryptoKey = k }).catch(() => {})
     }
   }
 

@@ -107,7 +107,7 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
 const MAX_CACHE_SIZE = 1000
 const MAX_WARNING_MAP_SIZE = 500
-/** Maximum distinct users tracked in inflightByUser before LRU eviction */
+/** Maximum distinct users tracked in inflightByUser before FIFO eviction */
 const MAX_TRACKED_USERS = 5000
 
 // -------------------------------------------------------

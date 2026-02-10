@@ -110,28 +110,19 @@ describe("tokenShieldMiddleware", () => {
   })
 
   describe("request guard", () => {
-    it("blocks requests that are too short", async () => {
+    it("blocks requests shorter than minInputLength", async () => {
       const onBlocked = vi.fn()
+      // Guard defaults: minInputLength=2. A single-char user message should be blocked.
       const mw = tokenShieldMiddleware({
         modules: { guard: true, cache: false, context: false, router: false, prefix: false, ledger: false },
         guard: { debounceMs: 0, maxRequestsPerMinute: 999, maxCostPerHour: 999 },
         onBlocked,
       })
 
-      // "a" is too short (minInputLength defaults based on guard config)
-      // Actually the default minInputLength in RequestGuard is 0, so guard won't block on length
-      // Let's test debounce instead: two rapid calls
-      const params1 = makeParams("Hello, how are you doing today?")
-      await mw.transformParams({ params: params1 })
-
-      // Second call with same text should be debounced
-      const params2 = makeParams("Hello, how are you doing today?")
-      try {
-        await mw.transformParams({ params: params2 })
-        // If it doesn't throw, guard allowed it (debounce may have passed)
-      } catch (err) {
-        expect(err).toBeInstanceOf(TokenShieldBlockedError)
-      }
+      // "a" is only 1 character — below minInputLength=2
+      const params = makeParams("a")
+      await expect(mw.transformParams({ params })).rejects.toThrow(TokenShieldBlockedError)
+      expect(onBlocked).toHaveBeenCalled()
     })
   })
 
@@ -327,6 +318,73 @@ describe("tokenShieldMiddleware", () => {
       // After failure, inflight should be released
       const status = mw.userBudgetManager!.getStatus("user-1")
       expect(status.inflight).toBe(0)
+    })
+
+    it("records user budget spend after stream completes", async () => {
+      const mw = tokenShieldMiddleware({
+        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        userBudget: {
+          getUserId: () => "stream-user",
+          budgets: {
+            users: { "stream-user": { daily: 100, monthly: 1000 } },
+          },
+        },
+      })
+
+      const params = makeParams("Hello stream")
+      const transformed = await mw.transformParams({ params })
+
+      // Verify inflight was reserved
+      const statusBefore = mw.userBudgetManager!.getStatus("stream-user")
+      expect(statusBefore.inflight).toBeGreaterThan(0)
+
+      // Create a stream that completes normally
+      const chunks = [
+        { type: "text-delta", textDelta: "Hi " },
+        { type: "text-delta", textDelta: "there!" },
+      ]
+      const originalStream = new ReadableStream({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(chunk)
+          controller.close()
+        },
+      })
+      const doStream = vi.fn(async () => ({ stream: originalStream }))
+
+      const result = await mw.wrapStream({ doStream, params: transformed as Record<string, unknown> })
+
+      // Consume the stream to trigger usage recording
+      const reader = (result.stream as ReadableStream).getReader()
+      while (!(await reader.read()).done) { /* drain */ }
+
+      // After stream completes: inflight released and spend recorded
+      const statusAfter = mw.userBudgetManager!.getStatus("stream-user")
+      expect(statusAfter.inflight).toBe(0)
+      expect(statusAfter.spend.daily).toBeGreaterThanOrEqual(0)
+    })
+
+    it("releases inflight on stream init failure", async () => {
+      const mw = tokenShieldMiddleware({
+        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        userBudget: {
+          getUserId: () => "fail-stream-user",
+          budgets: {
+            users: { "fail-stream-user": { daily: 100, monthly: 1000 } },
+          },
+        },
+      })
+
+      const params = makeParams("Hello fail")
+      const transformed = await mw.transformParams({ params })
+
+      const doStream = vi.fn(async () => { throw new Error("Stream init failed") })
+
+      await expect(
+        mw.wrapStream({ doStream, params: transformed as Record<string, unknown> })
+      ).rejects.toThrow("Stream init failed")
+
+      // Inflight should be released despite failure
+      expect(mw.userBudgetManager!.getStatus("fail-stream-user").inflight).toBe(0)
     })
   })
 

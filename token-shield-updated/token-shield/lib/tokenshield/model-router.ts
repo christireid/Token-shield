@@ -272,16 +272,29 @@ export function routeToModel(
     }))
     .sort((a, b) => a.cost.totalCost - b.cost.totalCost)
 
-  const selected = sorted[0]
-  const fallback =
-    sorted.find((s) => tierOrder[s.model.tier] > tierOrder[selected.model.tier]) ??
-    sorted[sorted.length - 1]
-
   const defaultCost = estimateCost(
     defaultModelId,
     complexity.signals.tokenCount,
     expectedOutput
   )
+
+  // If no candidates match the filter, fall back to the default model
+  if (sorted.length === 0) {
+    const fallbackModel = MODEL_PRICING[defaultModelId] ?? Object.values(MODEL_PRICING)[0]
+    return {
+      complexity,
+      selectedModel: fallbackModel,
+      fallbackModel: fallbackModel,
+      estimatedCost: defaultCost,
+      cheapestAlternativeCost: defaultCost,
+      savingsVsDefault: 0,
+    }
+  }
+
+  const selected = sorted[0]
+  const fallback =
+    sorted.find((s) => tierOrder[s.model.tier] > tierOrder[selected.model.tier]) ??
+    sorted[sorted.length - 1]
 
   return {
     complexity,
