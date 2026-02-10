@@ -270,6 +270,9 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
           const msg = err instanceof Error ? err.message : "Unknown error"
           throw new TokenShieldBlockedError(`Failed to resolve user ID: ${msg}`)
         }
+        if (!userId || typeof userId !== "string") {
+          throw new TokenShieldBlockedError("getUserId() must return a non-empty string")
+        }
         meta.userId = userId
         const modelId = String(params.modelId ?? "")
         const estimatedInput = lastUserText ? countTokens(lastUserText) : 0
@@ -322,7 +325,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
 
       const originalInputTokens = messages.reduce((sum, m) => sum + countTokens(m.content) + 5, 0)
       meta.originalInputTokens = originalInputTokens
-      meta.originalModel = String(params.modelId ?? "")
+      if (!meta.originalModel) meta.originalModel = String(params.modelId ?? "")
 
       let workingMessages = messages
 
@@ -408,6 +411,12 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
       // Cache hit: return cached response without calling the model
       if (meta?.cacheHit) {
         const modelId = String(params.modelId ?? "")
+
+        // Release in-flight reservation — no API call will happen
+        if (userBudgetManager && meta.userId && meta.userBudgetInflight) {
+          userBudgetManager.releaseInflight(meta.userId, meta.userBudgetInflight)
+        }
+
         if (ledger) {
           await ledger.recordCacheHit({
             model: modelId,
@@ -549,6 +558,12 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
       // Cache hit: return a simulated stream without calling the model
       if (meta?.cacheHit) {
         const modelId = String(params.modelId ?? "")
+
+        // Release in-flight reservation — no API call will happen
+        if (userBudgetManager && meta.userId && meta.userBudgetInflight) {
+          userBudgetManager.releaseInflight(meta.userId, meta.userBudgetInflight)
+        }
+
         if (ledger) {
           await ledger.recordCacheHit({
             model: modelId,

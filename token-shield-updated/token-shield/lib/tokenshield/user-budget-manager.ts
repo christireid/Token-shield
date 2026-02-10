@@ -161,6 +161,11 @@ export class UserBudgetManager {
   } {
     const status = this.getStatus(userId)
 
+    // No user ID — always allow (nothing to track)
+    if (!userId) {
+      return { allowed: true, status }
+    }
+
     // No limits configured — always allow
     if (!status.limits) {
       return { allowed: true, status }
@@ -278,6 +283,9 @@ export class UserBudgetManager {
    * Clears any in-flight reservation for this user.
    */
   async recordSpend(userId: string, cost: number, model: string): Promise<void> {
+    if (cost < 0) return // Ignore negative costs
+    if (!userId) return // Ignore empty user IDs
+
     const record: UserSpendRecord = {
       timestamp: Date.now(),
       cost,
