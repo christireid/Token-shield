@@ -105,12 +105,16 @@ export class RequestGuard {
   /**
    * Check if a request should proceed. Returns a gate decision
    * with the reason if blocked.
+   *
+   * @param modelId - Optional model ID for cost estimation. Falls back to
+   *   config.modelId when not provided (backward-compatible).
    */
-  check(prompt: string, expectedOutputTokens = 500): GuardResult {
+  check(prompt: string, expectedOutputTokens = 500, modelId?: string): GuardResult {
     const now = Date.now()
     const inputTokens = countTokens(prompt)
+    const effectiveModel = modelId ?? this.config.modelId
     const cost = estimateCost(
-      this.config.modelId,
+      effectiveModel,
       inputTokens,
       expectedOutputTokens
     )
@@ -278,17 +282,21 @@ export class RequestGuard {
 
   /**
    * Mark a request as completed and log its cost.
+   *
+   * @param modelId - Optional model ID for cost calculation. Falls back to
+   *   config.modelId when not provided.
    */
   completeRequest(
     prompt: string,
     actualInputTokens: number,
-    actualOutputTokens: number
+    actualOutputTokens: number,
+    modelId?: string
   ): void {
     const normalized = prompt.trim().toLowerCase()
     this.inFlight.delete(normalized)
 
     const cost = estimateCost(
-      this.config.modelId,
+      modelId ?? this.config.modelId,
       actualInputTokens,
       actualOutputTokens
     )

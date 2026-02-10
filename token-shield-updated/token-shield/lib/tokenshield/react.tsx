@@ -492,13 +492,16 @@ export function useModelRouter(prompt: string, options?: {
 }) {
   const { defaultModelId, savingsStore } = useTokenShield()
   const model = options?.defaultModel ?? defaultModelId
+  // Derive a stable key from the providers array so callers don't need to memoize it
+  const providersKey = options?.allowedProviders?.join(",") ?? ""
 
   const routing = useMemo((): RoutingDecision | null => {
     if (!prompt || prompt.length === 0) return null
+    const providers = providersKey ? providersKey.split(",") as ModelPricing["provider"][] : undefined
     return routeToModel(prompt, model, {
-      allowedProviders: options?.allowedProviders,
+      allowedProviders: providers,
     })
-  }, [prompt, model, options?.allowedProviders])
+  }, [prompt, model, providersKey])
 
   const confirmRouting = useCallback(() => {
     if (routing && routing.savingsVsDefault > 0) {

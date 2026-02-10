@@ -69,11 +69,14 @@ export interface LedgerSummary {
 // Implementation
 // ----------------------------
 
+const MAX_LEDGER_ENTRIES = 10_000
+
 export class CostLedger {
   private entries: LedgerEntry[] = []
   private listeners = new Set<() => void>()
   private idbStore: UseStore | null = null
   private persistEnabled: boolean
+  private hydrated = false
 
   constructor(options?: { persist?: boolean; storeName?: string }) {
     this.persistEnabled = options?.persist ?? false
@@ -162,6 +165,11 @@ export class CostLedger {
     }
 
     this.entries.push(ledgerEntry)
+
+    // Evict oldest entries when over capacity to prevent unbounded growth
+    if (this.entries.length > MAX_LEDGER_ENTRIES) {
+      this.entries = this.entries.slice(-MAX_LEDGER_ENTRIES)
+    }
 
     // Persist to IndexedDB if enabled
     if (this.persistEnabled && this.idbStore) {
@@ -293,21 +301,27 @@ export class CostLedger {
 
   /**
    * Load entries from IndexedDB (for session restore).
+   * Idempotent: calling multiple times is safe (second call returns 0).
    */
   async hydrate(): Promise<number> {
-    if (!this.persistEnabled || !this.idbStore) return 0
+    if (!this.persistEnabled || !this.idbStore || this.hydrated) return 0
+    this.hydrated = true
     try {
       const allKeys = await keys<string>(this.idbStore)
+      const existingIds = new Set(this.entries.map((e) => e.id))
       let loaded = 0
       for (const key of allKeys) {
         const entry = await get<LedgerEntry>(key, this.idbStore)
-        if (entry) {
+        if (entry && !existingIds.has(entry.id)) {
           this.entries.push(entry)
           loaded++
         }
       }
       if (loaded > 0) {
         this.entries.sort((a, b) => a.timestamp - b.timestamp)
+        if (this.entries.length > MAX_LEDGER_ENTRIES) {
+          this.entries = this.entries.slice(-MAX_LEDGER_ENTRIES)
+        }
         this.notify()
       }
       return loaded

@@ -189,6 +189,7 @@ export class CostCircuitBreaker {
 
     for (const c of checks) {
       const projectedSpend = c.current + estimatedCost
+      const pctUsed = c.limit > 0 ? (projectedSpend / c.limit) * 100 : 999
 
       // Fire warning at 80%
       const warningKey = `${c.type}-warning`
@@ -198,7 +199,7 @@ export class CostCircuitBreaker {
           limitType: c.type,
           currentSpend: c.current,
           limit: c.limit,
-          percentUsed: (projectedSpend / c.limit) * 100,
+          percentUsed: pctUsed,
           action: "warn",
           timestamp: Date.now(),
         })
@@ -211,7 +212,7 @@ export class CostCircuitBreaker {
           limitType: c.type,
           currentSpend: c.current,
           limit: c.limit,
-          percentUsed: (projectedSpend / c.limit) * 100,
+          percentUsed: pctUsed,
           action: this.config.action,
           timestamp: Date.now(),
         }
@@ -231,7 +232,7 @@ export class CostCircuitBreaker {
           // Allow but at reduced rate (caller handles throttling)
           return {
             allowed: true,
-            reason: `Throttled: ${c.type} limit at ${((projectedSpend / c.limit) * 100).toFixed(0)}%`,
+            reason: `Throttled: ${c.type} limit at ${pctUsed.toFixed(0)}%`,
             status: this.getStatus(),
           }
         }

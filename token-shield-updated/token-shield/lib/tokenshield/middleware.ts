@@ -131,6 +131,9 @@ export interface TokenShieldMiddlewareConfig {
  */
 const SHIELD_META = Symbol("tokenshield")
 
+/** Per-message token overhead: 4 structural tokens + ~1 role token (see token-counter.ts) */
+const MSG_OVERHEAD_TOKENS = 5
+
 interface ShieldMeta {
   cacheHit?: {
     response: string
@@ -332,7 +335,8 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
       try {
         // -- 1. GUARD CHECK --
         if (guard && lastUserText) {
-          const check = guard.check(lastUserText)
+          const guardModelId = String(params.modelId ?? "")
+          const check = guard.check(lastUserText, undefined, guardModelId || undefined)
           if (!check.allowed) {
             config.onBlocked?.(check.reason ?? "Request blocked")
             throw new TokenShieldBlockedError(check.reason ?? "Request blocked by TokenShield guard")
@@ -362,7 +366,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
         throw err
       }
 
-      const originalInputTokens = messages.reduce((sum, m) => sum + countTokens(m.content) + 5, 0)
+      const originalInputTokens = messages.reduce((sum, m) => sum + countTokens(m.content) + MSG_OVERHEAD_TOKENS, 0)
       meta.originalInputTokens = originalInputTokens
       if (!meta.originalModel) meta.originalModel = String(params.modelId ?? "")
 
@@ -568,11 +572,11 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
         saved: perRequestSaved,
       })
 
-      // Complete the guard request tracking
+      // Complete the guard request tracking (pass actual model for accurate cost logging)
       if (guard) {
         const guardUserText = extractLastUserText(params)
         if (guardUserText) {
-          guard.completeRequest(guardUserText, inputTokens, outputTokens)
+          guard.completeRequest(guardUserText, inputTokens, outputTokens, modelId)
         }
       }
 
@@ -729,11 +733,11 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
           saved: streamPerRequestSaved,
         })
 
-        // Complete guard request tracking
+        // Complete guard request tracking (pass actual model for accurate cost logging)
         if (guard) {
           const guardUserText = extractLastUserText(params)
           if (guardUserText) {
-            guard.completeRequest(guardUserText, usage.inputTokens, usage.outputTokens)
+            guard.completeRequest(guardUserText, usage.inputTokens, usage.outputTokens, modelId)
           }
         }
 
