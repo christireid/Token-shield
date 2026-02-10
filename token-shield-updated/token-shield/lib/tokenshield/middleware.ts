@@ -200,6 +200,13 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
       })
     : null
 
+  // Hydrate persisted budget data from IndexedDB
+  if (userBudgetManager && config.userBudget?.budgets.persist) {
+    userBudgetManager.hydrate().catch(() => {
+      // Hydration failed silently — budget starts from $0
+    })
+  }
+
   // Expose ledger for external access (e.g., useCostLedger hook)
   const middleware = {
     /** Access the cost ledger for reading savings data */
@@ -254,7 +261,13 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
 
       // -- 0b. USER BUDGET CHECK --
       if (userBudgetManager && config.userBudget) {
-        const userId = config.userBudget.getUserId()
+        let userId: string
+        try {
+          userId = config.userBudget.getUserId()
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Unknown error"
+          throw new TokenShieldBlockedError(`Failed to resolve user ID: ${msg}`)
+        }
         meta.userId = userId
         const modelId = String(params.modelId ?? "")
         const estimatedInput = lastUserText ? countTokens(lastUserText) : 0
@@ -268,7 +281,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
         // Apply model tier routing if configured
         const tierModel = userBudgetManager.getModelForUser(userId)
         if (tierModel && tierModel !== params.modelId) {
-          meta.originalModel = String(params.modelId)
+          if (!meta.originalModel) meta.originalModel = String(params.modelId)
           params = { ...params, modelId: tierModel }
         }
       }
@@ -341,7 +354,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
             })[0]
 
           if (cheapestTier && cheapestTier.modelId !== params.modelId) {
-            meta.originalModel = String(params.modelId)
+            if (!meta.originalModel) meta.originalModel = String(params.modelId)
             params = { ...params, modelId: cheapestTier.modelId }
           }
         }

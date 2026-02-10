@@ -44,7 +44,7 @@ export interface UserBudgetConfig {
   /** Called when a user reaches a warning threshold (80% of a limit) */
   onBudgetWarning?: (userId: string, event: BudgetWarningEvent) => void
   /** Model ID mappings per tier — used for automatic model routing */
-  tierModels?: Record<UserBudgetTier, string>
+  tierModels?: Partial<Record<UserBudgetTier, string>>
 }
 
 export interface BudgetExceededEvent {
@@ -104,7 +104,7 @@ export class UserBudgetManager {
   private records: UserSpendRecord[] = []
   private listeners = new Set<() => void>()
   private idbStore: UseStore | null = null
-  private warningFired = new Set<string>()
+  private warningFired = new Map<string, number>()
 
   constructor(config: UserBudgetConfig = {}) {
     this.config = config
@@ -172,61 +172,77 @@ export class UserBudgetManager {
       }
     }
 
+    // Helper: safe percentage that avoids division by zero
+    const pct = (value: number, limit: number) =>
+      limit > 0 ? (value / limit) * 100 : (value > 0 ? Infinity : 100)
+
+    const now = Date.now()
+    const oneDayMs = 24 * 60 * 60 * 1000
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
+
     // Check daily limit
     const projectedDaily = status.spend.daily + estimatedCostDollars
     const dailyWarningKey = `${userId}-daily`
-    if (projectedDaily >= status.limits.daily * 0.8 && !this.warningFired.has(dailyWarningKey)) {
-      this.warningFired.add(dailyWarningKey)
+    // Reset daily warning if it was fired more than 24 hours ago
+    const dailyWarningTime = this.warningFired.get(dailyWarningKey)
+    if (dailyWarningTime !== undefined && now - dailyWarningTime > oneDayMs) {
+      this.warningFired.delete(dailyWarningKey)
+    }
+    if (status.limits.daily > 0 && projectedDaily >= status.limits.daily * 0.8 && !this.warningFired.has(dailyWarningKey)) {
+      this.warningFired.set(dailyWarningKey, now)
       this.config.onBudgetWarning?.(userId, {
         limitType: "daily",
         currentSpend: status.spend.daily,
         limit: status.limits.daily,
-        percentUsed: (projectedDaily / status.limits.daily) * 100,
+        percentUsed: pct(projectedDaily, status.limits.daily),
         timestamp: Date.now(),
       })
     }
     if (projectedDaily >= status.limits.daily) {
-      const event: BudgetExceededEvent = {
+      this.config.onBudgetExceeded?.(userId, {
         limitType: "daily",
         currentSpend: status.spend.daily,
         limit: status.limits.daily,
-        percentUsed: (projectedDaily / status.limits.daily) * 100,
+        percentUsed: pct(projectedDaily, status.limits.daily),
         timestamp: Date.now(),
-      }
-      this.config.onBudgetExceeded?.(userId, event)
+      })
       return {
         allowed: false,
         reason: `User ${userId} daily budget exceeded ($${status.spend.daily.toFixed(4)} / $${status.limits.daily.toFixed(2)})`,
-        status: this.getStatus(userId),
+        status,
       }
     }
 
     // Check monthly limit
     const projectedMonthly = status.spend.monthly + estimatedCostDollars
     const monthlyWarningKey = `${userId}-monthly`
-    if (projectedMonthly >= status.limits.monthly * 0.8 && !this.warningFired.has(monthlyWarningKey)) {
-      this.warningFired.add(monthlyWarningKey)
+    // Reset monthly warning if it was fired more than 30 days ago
+    const monthlyWarningTime = this.warningFired.get(monthlyWarningKey)
+    if (monthlyWarningTime !== undefined && now - monthlyWarningTime > thirtyDaysMs) {
+      this.warningFired.delete(monthlyWarningKey)
+    }
+    if (status.limits.monthly > 0 && projectedMonthly >= status.limits.monthly * 0.8 && !this.warningFired.has(monthlyWarningKey)) {
+      this.warningFired.set(monthlyWarningKey, now)
       this.config.onBudgetWarning?.(userId, {
         limitType: "monthly",
         currentSpend: status.spend.monthly,
         limit: status.limits.monthly,
-        percentUsed: (projectedMonthly / status.limits.monthly) * 100,
+        percentUsed: pct(projectedMonthly, status.limits.monthly),
         timestamp: Date.now(),
       })
     }
     if (projectedMonthly >= status.limits.monthly) {
-      const event: BudgetExceededEvent = {
+      this.config.onBudgetExceeded?.(userId, {
         limitType: "monthly",
         currentSpend: status.spend.monthly,
         limit: status.limits.monthly,
-        percentUsed: (projectedMonthly / status.limits.monthly) * 100,
+        percentUsed: pct(projectedMonthly, status.limits.monthly),
         timestamp: Date.now(),
-      }
-      this.config.onBudgetExceeded?.(userId, event)
+      })
       return {
         allowed: false,
         reason: `User ${userId} monthly budget exceeded ($${status.spend.monthly.toFixed(4)} / $${status.limits.monthly.toFixed(2)})`,
-        status: this.getStatus(userId),
+        status,
       }
     }
 
