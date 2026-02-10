@@ -538,7 +538,10 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
           const costEst = estimateCost(modelId, inputTokens, outputTokens)
           await userBudgetManager.recordSpend(meta.userId, costEst.totalCost, modelId)
         } catch {
-          // If estimate fails (unknown model), ignore
+          // estimateCost failed (unknown model) — still release inflight reservation
+          if (meta.userBudgetInflight) {
+            userBudgetManager.releaseInflight(meta.userId, meta.userBudgetInflight)
+          }
         }
       }
 
@@ -701,7 +704,10 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
             const costEst = estimateCost(modelId, usage.inputTokens, usage.outputTokens)
             userBudgetManager.recordSpend(meta.userId, costEst.totalCost, modelId)
           } catch {
-            // If estimate fails (unknown model), ignore
+            // estimateCost failed (unknown model) — still release inflight reservation
+            if (meta.userBudgetInflight) {
+              userBudgetManager.releaseInflight(meta.userId, meta.userBudgetInflight)
+            }
           }
         }
       }

@@ -283,8 +283,22 @@ export class UserBudgetManager {
    * Clears any in-flight reservation for this user.
    */
   async recordSpend(userId: string, cost: number, model: string): Promise<void> {
-    if (cost <= 0) return // Ignore zero or negative costs
+    if (cost < 0) return // Ignore negative costs
     if (!userId) return // Ignore empty user IDs
+
+    // Always clear in-flight reservation, even for zero-cost responses
+    const inflight = this.inflightByUser.get(userId) ?? 0
+    if (inflight > 0) {
+      const remaining = Math.max(0, inflight - Math.max(cost, inflight))
+      if (remaining > 0) {
+        this.inflightByUser.set(userId, remaining)
+      } else {
+        this.inflightByUser.delete(userId)
+      }
+    }
+
+    // Skip creating a record for zero-cost responses
+    if (cost === 0) return
 
     const record: UserSpendRecord = {
       timestamp: Date.now(),
@@ -294,17 +308,6 @@ export class UserBudgetManager {
     }
 
     this.records.push(record)
-
-    // Clear in-flight reservation (actual cost is now recorded)
-    const inflight = this.inflightByUser.get(userId) ?? 0
-    if (inflight > 0) {
-      const remaining = Math.max(0, inflight - cost)
-      if (remaining > 0) {
-        this.inflightByUser.set(userId, remaining)
-      } else {
-        this.inflightByUser.delete(userId)
-      }
-    }
 
     // Clean up old records (keep last 30 days)
     const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
