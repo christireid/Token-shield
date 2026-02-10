@@ -32,7 +32,7 @@ import { CostLedger } from "./cost-ledger"
 import { MODEL_PRICING, estimateCost } from "./cost-estimator"
 import { CostCircuitBreaker, type BreakerConfig } from "./circuit-breaker"
 import { StreamTokenTracker } from "./stream-tracker"
-import { UserBudgetManager, type UserBudgetConfig } from "./user-budget-manager"
+import { UserBudgetManager, type UserBudgetConfig, type BudgetExceededEvent, type BudgetWarningEvent } from "./user-budget-manager"
 import type { ChatMessage } from "./token-counter"
 
 // -------------------------------------------------------
@@ -110,9 +110,9 @@ export interface TokenShieldMiddlewareConfig {
     /** Budget configuration (users, defaultBudget, tierModels, etc.) */
     budgets: Omit<UserBudgetConfig, 'onBudgetExceeded' | 'onBudgetWarning'>
     /** Called when a user exceeds their budget */
-    onBudgetExceeded?: (userId: string, event: { limitType: string; currentSpend: number; limit: number }) => void
+    onBudgetExceeded?: (userId: string, event: BudgetExceededEvent) => void
     /** Called when a user approaches their budget (80%) */
-    onBudgetWarning?: (userId: string, event: { limitType: string; currentSpend: number; limit: number; percentUsed: number }) => void
+    onBudgetWarning?: (userId: string, event: BudgetWarningEvent) => void
   }
 
   /** Called when a request is blocked by the guard */
@@ -429,12 +429,20 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
           })
         }
 
+        // Compute dollar savings for the cache hit (consistent units: dollars)
+        let cacheHitSavedDollars = 0
+        try {
+          cacheHitSavedDollars = estimateCost(modelId, meta.cacheHit.inputTokens, meta.cacheHit.outputTokens).totalCost
+        } catch {
+          // Unknown model — can't estimate dollar savings
+        }
+
         config.onUsage?.({
           model: modelId,
           inputTokens: 0,
           outputTokens: 0,
           cost: 0,
-          saved: meta.cacheHit.inputTokens + meta.cacheHit.outputTokens,
+          saved: cacheHitSavedDollars,
         })
 
         return {
@@ -502,13 +510,20 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
           latencyMs,
         })
 
-        const entry = ledger.getSummary()
+        // Report per-request cost and savings (not aggregates)
+        let perRequestCost = 0
+        try {
+          perRequestCost = estimateCost(modelId, inputTokens, outputTokens).totalCost
+        } catch {
+          // Unknown model
+        }
+        const perRequestSaved = contextSavedDollars + routerSavedDollars + prefixSavedDollars
         config.onUsage?.({
           model: modelId,
           inputTokens,
           outputTokens,
-          cost: entry.avgCostPerCall,
-          saved: entry.totalSaved,
+          cost: perRequestCost,
+          saved: perRequestSaved,
         })
       }
 
@@ -579,12 +594,20 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
           })
         }
 
+        // Compute dollar savings for the cache hit (consistent units: dollars)
+        let streamCacheHitSavedDollars = 0
+        try {
+          streamCacheHitSavedDollars = estimateCost(modelId, meta.cacheHit.inputTokens, meta.cacheHit.outputTokens).totalCost
+        } catch {
+          // Unknown model — can't estimate dollar savings
+        }
+
         config.onUsage?.({
           model: modelId,
           inputTokens: 0,
           outputTokens: 0,
           cost: 0,
-          saved: meta.cacheHit.inputTokens + meta.cacheHit.outputTokens,
+          saved: streamCacheHitSavedDollars,
         })
 
         // Create a ReadableStream that emits the cached response as a single chunk
@@ -668,13 +691,20 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
             latencyMs,
           }).catch(() => {})
 
-          const entry = ledger.getSummary()
+          // Report per-request cost and savings (not aggregates)
+          let streamPerRequestCost = 0
+          try {
+            streamPerRequestCost = estimateCost(modelId, usage.inputTokens, usage.outputTokens).totalCost
+          } catch {
+            // Unknown model
+          }
+          const streamPerRequestSaved = contextSavedDollars + routerSavedDollars + prefixSavedDollars
           config.onUsage?.({
             model: modelId,
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
-            cost: entry.avgCostPerCall,
-            saved: entry.totalSaved,
+            cost: streamPerRequestCost,
+            saved: streamPerRequestSaved,
           })
         }
 
@@ -717,6 +747,16 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
         }
       }
 
+      // Guard flag to prevent double-recording when cancel() fires while
+      // a pending pull() read is still in-flight (both paths would call
+      // recordStreamUsage, leading to double billing).
+      let usageRecorded = false
+      const recordStreamUsageOnce = (usage: { inputTokens: number; outputTokens: number }) => {
+        if (usageRecorded) return
+        usageRecorded = true
+        recordStreamUsage(usage)
+      }
+
       // Create a ReadableStream that reads from the original, pipes chunks
       // through the tracker, and handles both normal completion and abort.
       const reader = originalStream.getReader()
@@ -727,7 +767,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
             if (done) {
               // Stream completed normally
               const usage = tracker.finish()
-              recordStreamUsage(usage)
+              recordStreamUsageOnce(usage)
               controller.close()
               return
             }
@@ -742,7 +782,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
           } catch (err) {
             // Stream errored -- still record what we have
             const usage = tracker.abort()
-            recordStreamUsage(usage)
+            recordStreamUsageOnce(usage)
             controller.error(err)
           }
         },
@@ -750,7 +790,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
           // Stream was aborted by the consumer (e.g., user clicked "Stop generating")
           reader.cancel()
           const usage = tracker.abort()
-          recordStreamUsage(usage)
+          recordStreamUsageOnce(usage)
         },
       })
 

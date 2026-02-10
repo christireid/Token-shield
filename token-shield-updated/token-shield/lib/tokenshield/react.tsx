@@ -279,7 +279,7 @@ export function useContextManager(
     }
 
     return { ...result, savings: null }
-  }, [messages, budget, defaultModelId, savingsStore])
+  }, [messages, budget, defaultModelId])
 }
 
 /**
@@ -385,6 +385,11 @@ export function useRequestGuard() {
  * savings statistics, or, if a featureName is provided, a breakdown for
  * that specific feature. The return shape matches the ledger summary but
  * filters out only the relevant fields.
+ *
+ * Uses a version-based cache so that getSnapshot returns a referentially
+ * stable object when the underlying data hasn't changed. This prevents
+ * the infinite re-render loop that would occur if useSyncExternalStore
+ * received a new object reference on every call.
  */
 export function useCostLedger(featureName?: string) {
   const { ledger } = useTokenShield()
@@ -393,52 +398,45 @@ export function useCostLedger(featureName?: string) {
       "useCostLedger requires TokenShieldProvider with ledgerConfig; no ledger is available"
     )
   }
-  return useSyncExternalStore(
-    (listener: () => void) => ledger.subscribe(listener),
-    () => {
-      const summary = ledger.getSummary()
-      if (featureName) {
-        const data = summary.byFeature[featureName]
-        return {
-          totalSpent: data?.cost ?? 0,
-          totalSaved: data?.saved ?? 0,
-          totalCalls: data?.calls ?? 0,
-          savingsRate:
-            data && data.cost + data.saved > 0
-              ? data.saved / (data.cost + data.saved)
-              : 0,
-          breakdown: data,
-        }
-      }
-      return {
-        totalSpent: summary.totalSpent,
-        totalSaved: summary.totalSaved,
-        totalCalls: summary.totalCalls,
+
+  // Version counter incremented by subscribe callback when ledger changes
+  const versionRef = useRef(0)
+  // Cached snapshot: only recomputed when version changes
+  const cacheRef = useRef<{ version: number; snapshot: LedgerSnapshot }>({
+    version: -1,
+    snapshot: EMPTY_LEDGER_SNAPSHOT,
+  })
+
+  const subscribe = useCallback(
+    (listener: () => void) =>
+      ledger.subscribe(() => {
+        versionRef.current++
+        listener()
+      }),
+    [ledger]
+  )
+
+  const getSnapshot = useCallback((): LedgerSnapshot => {
+    if (cacheRef.current.version === versionRef.current) {
+      return cacheRef.current.snapshot
+    }
+    const summary = ledger.getSummary()
+    let snapshot: LedgerSnapshot
+
+    if (featureName) {
+      const data = summary.byFeature[featureName]
+      snapshot = {
+        totalSpent: data?.cost ?? 0,
+        totalSaved: data?.saved ?? 0,
+        totalCalls: data?.calls ?? 0,
         savingsRate:
-          summary.totalSpent + summary.totalSaved > 0
-            ? summary.totalSaved /
-              (summary.totalSpent + summary.totalSaved)
+          data && data.cost + data.saved > 0
+            ? data.saved / (data.cost + data.saved)
             : 0,
-        breakdown: summary.byFeature,
+        breakdown: data,
       }
-    },
-    () => {
-      // For server rendering, return same as client snapshot
-      const summary = ledger.getSummary()
-      if (featureName) {
-        const data = summary.byFeature[featureName]
-        return {
-          totalSpent: data?.cost ?? 0,
-          totalSaved: data?.saved ?? 0,
-          totalCalls: data?.calls ?? 0,
-          savingsRate:
-            data && data.cost + data.saved > 0
-              ? data.saved / (data.cost + data.saved)
-              : 0,
-          breakdown: data,
-        }
-      }
-      return {
+    } else {
+      snapshot = {
         totalSpent: summary.totalSpent,
         totalSaved: summary.totalSaved,
         totalCalls: summary.totalCalls,
@@ -450,7 +448,32 @@ export function useCostLedger(featureName?: string) {
         breakdown: summary.byFeature,
       }
     }
-  )
+
+    cacheRef.current = { version: versionRef.current, snapshot }
+    return snapshot
+  }, [ledger, featureName])
+
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
+}
+
+interface LedgerSnapshot {
+  totalSpent: number
+  totalSaved: number
+  totalCalls: number
+  savingsRate: number
+  breakdown: unknown
+}
+
+const EMPTY_LEDGER_SNAPSHOT: LedgerSnapshot = {
+  totalSpent: 0,
+  totalSaved: 0,
+  totalCalls: 0,
+  savingsRate: 0,
+  breakdown: undefined,
+}
+
+function getServerSnapshot(): LedgerSnapshot {
+  return EMPTY_LEDGER_SNAPSHOT
 }
 
 /**
