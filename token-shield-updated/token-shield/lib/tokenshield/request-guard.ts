@@ -298,15 +298,24 @@ export class RequestGuard {
   /**
    * Create a debounced version of a function that only calls through
    * after the debounce period. Previous calls are aborted.
+   *
+   * When a new call supersedes a pending one, the previous promise
+   * resolves with null immediately (it does not hang).
    */
   debounce<T>(
     fn: (prompt: string, signal: AbortSignal) => Promise<T>
   ): (prompt: string) => Promise<T | null> {
     let pendingController: AbortController | null = null
+    let pendingResolve: ((value: T | null) => void) | null = null
 
     return (prompt: string) => {
-      return new Promise((resolve) => {
-        // Cancel previous
+      return new Promise<T | null>((resolve, reject) => {
+        // Resolve the superseded call with null so its promise doesn't hang
+        if (pendingResolve) {
+          pendingResolve(null)
+          pendingResolve = null
+        }
+        // Cancel previous in-flight request
         if (pendingController) {
           pendingController.abort()
         }
@@ -314,7 +323,11 @@ export class RequestGuard {
           clearTimeout(this.debounceTimer)
         }
 
+        pendingResolve = resolve
+
         this.debounceTimer = setTimeout(async () => {
+          pendingResolve = null
+
           const guardResult = this.check(prompt)
           if (!guardResult.allowed) {
             resolve(null)
@@ -329,7 +342,7 @@ export class RequestGuard {
             if (err instanceof DOMException && err.name === "AbortError") {
               resolve(null)
             } else {
-              throw err
+              reject(err)
             }
           }
         }, this.config.debounceMs)

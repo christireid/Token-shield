@@ -284,42 +284,42 @@ export class CostCircuitBreaker {
     const limits = this.config.limits
     const trippedLimits: BreakerEvent[] = []
 
-    if (limits.perSession && sessionSpend >= limits.perSession) {
+    if (limits.perSession != null && sessionSpend >= limits.perSession) {
       trippedLimits.push({
         limitType: "session",
         currentSpend: sessionSpend,
         limit: limits.perSession,
-        percentUsed: (sessionSpend / limits.perSession) * 100,
+        percentUsed: limits.perSession > 0 ? (sessionSpend / limits.perSession) * 100 : 999,
         action: this.config.action,
         timestamp: now,
       })
     }
-    if (limits.perHour && hourSpend >= limits.perHour) {
+    if (limits.perHour != null && hourSpend >= limits.perHour) {
       trippedLimits.push({
         limitType: "hour",
         currentSpend: hourSpend,
         limit: limits.perHour,
-        percentUsed: (hourSpend / limits.perHour) * 100,
+        percentUsed: limits.perHour > 0 ? (hourSpend / limits.perHour) * 100 : 999,
         action: this.config.action,
         timestamp: now,
       })
     }
-    if (limits.perDay && daySpend >= limits.perDay) {
+    if (limits.perDay != null && daySpend >= limits.perDay) {
       trippedLimits.push({
         limitType: "day",
         currentSpend: daySpend,
         limit: limits.perDay,
-        percentUsed: (daySpend / limits.perDay) * 100,
+        percentUsed: limits.perDay > 0 ? (daySpend / limits.perDay) * 100 : 999,
         action: this.config.action,
         timestamp: now,
       })
     }
-    if (limits.perMonth && monthSpend >= limits.perMonth) {
+    if (limits.perMonth != null && monthSpend >= limits.perMonth) {
       trippedLimits.push({
         limitType: "month",
         currentSpend: monthSpend,
         limit: limits.perMonth,
-        percentUsed: (monthSpend / limits.perMonth) * 100,
+        percentUsed: limits.perMonth > 0 ? (monthSpend / limits.perMonth) * 100 : 999,
         action: this.config.action,
         timestamp: now,
       })

@@ -551,14 +551,15 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
         })
       }
 
-      // Report per-request cost and savings (always, even when ledger is disabled)
+      // Compute cost once for all downstream consumers (onUsage, breaker, userBudget)
       let perRequestCost = 0
       try {
         perRequestCost = estimateCost(modelId, inputTokens, outputTokens).totalCost
       } catch {
-        // Unknown model
+        // Unknown model — cost stays 0
       }
       const perRequestSaved = contextSavedDollars + routerSavedDollars + prefixSavedDollars
+
       config.onUsage?.({
         model: modelId,
         inputTokens,
@@ -576,26 +577,15 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
       }
 
       // Record spending in circuit breaker
-      if (breaker) {
-        try {
-          const costEst = estimateCost(modelId, inputTokens, outputTokens)
-          breaker.recordSpend(costEst.totalCost, modelId)
-        } catch {
-          // If estimate fails (unknown model), ignore
-        }
+      if (breaker && perRequestCost > 0) {
+        breaker.recordSpend(perRequestCost, modelId)
       }
 
       // Record spending in per-user budget manager
+      // (recordSpend handles cost=0 correctly: releases inflight, skips record creation)
       if (userBudgetManager && meta?.userId) {
-        try {
-          const costEst = estimateCost(modelId, inputTokens, outputTokens)
-          await userBudgetManager.recordSpend(meta.userId, costEst.totalCost, modelId, meta.userBudgetInflight)
-        } catch {
-          // estimateCost failed (unknown model) — still release inflight reservation
-          if (meta.userBudgetInflight) {
-            userBudgetManager.releaseInflight(meta.userId, meta.userBudgetInflight)
-          }
-        }
+        await userBudgetManager.recordSpend(meta.userId, perRequestCost, modelId, meta.userBudgetInflight)
+          .catch(() => { /* IDB write failed — inflight already released synchronously */ })
       }
 
       return result
@@ -722,14 +712,15 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
           }).catch(() => {})
         }
 
-        // Report per-request cost and savings (always, even when ledger is disabled)
+        // Compute cost once for all downstream consumers (onUsage, breaker, userBudget)
         let streamPerRequestCost = 0
         try {
           streamPerRequestCost = estimateCost(modelId, usage.inputTokens, usage.outputTokens).totalCost
         } catch {
-          // Unknown model
+          // Unknown model — cost stays 0
         }
         const streamPerRequestSaved = contextSavedDollars + routerSavedDollars + prefixSavedDollars
+
         config.onUsage?.({
           model: modelId,
           inputTokens: usage.inputTokens,
@@ -747,28 +738,15 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
         }
 
         // Record spending in circuit breaker
-        if (breaker) {
-          try {
-            const costEst = estimateCost(modelId, usage.inputTokens, usage.outputTokens)
-            breaker.recordSpend(costEst.totalCost, modelId)
-          } catch {
-            // If estimate fails (unknown model), ignore
-          }
+        if (breaker && streamPerRequestCost > 0) {
+          breaker.recordSpend(streamPerRequestCost, modelId)
         }
 
         // Record spending in per-user budget manager (fire-and-forget with .catch)
+        // (recordSpend handles cost=0 correctly: releases inflight, skips record creation)
         if (userBudgetManager && meta?.userId) {
-          try {
-            const costEst = estimateCost(modelId, usage.inputTokens, usage.outputTokens)
-            userBudgetManager.recordSpend(meta.userId, costEst.totalCost, modelId, meta.userBudgetInflight).catch(() => {
-              // IDB write failed, inflight was already cleaned up synchronously
-            })
-          } catch {
-            // estimateCost failed (unknown model) — still release inflight reservation
-            if (meta.userBudgetInflight) {
-              userBudgetManager.releaseInflight(meta.userId, meta.userBudgetInflight)
-            }
-          }
+          userBudgetManager.recordSpend(meta.userId, streamPerRequestCost, modelId, meta.userBudgetInflight)
+            .catch(() => { /* IDB write failed — inflight already released synchronously */ })
         }
       }
 
@@ -785,15 +763,16 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
       // Create a ReadableStream that reads from the original, pipes chunks
       // through the tracker, and handles both normal completion and abort.
       const reader = originalStream.getReader()
+      let streamCancelled = false
       const monitoredStream = new ReadableStream({
         async pull(controller) {
           try {
             const { done, value } = await reader.read()
-            if (done) {
-              // Stream completed normally
+            if (done || streamCancelled) {
+              // Stream completed normally (or cancel fired while read was pending)
               const usage = tracker.finish()
               recordStreamUsageOnce(usage)
-              controller.close()
+              try { controller.close() } catch { /* already closed by cancel */ }
               return
             }
 
@@ -803,16 +782,17 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
               tracker.addChunk(c.textDelta)
             }
 
-            controller.enqueue(value)
+            try { controller.enqueue(value) } catch { /* stream cancelled mid-read */ }
           } catch (err) {
             // Stream errored -- still record what we have
             const usage = tracker.abort()
             recordStreamUsageOnce(usage)
-            controller.error(err)
+            try { controller.error(err) } catch { /* already closed/errored */ }
           }
         },
         cancel() {
           // Stream was aborted by the consumer (e.g., user clicked "Stop generating")
+          streamCancelled = true
           reader.cancel()
           const usage = tracker.abort()
           recordStreamUsageOnce(usage)
