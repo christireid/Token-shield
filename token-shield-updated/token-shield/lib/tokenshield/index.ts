@@ -177,6 +177,12 @@ export {
   type TokenShieldProviderProps,
 } from "./react"
 
+// Dashboard Component
+export {
+  TokenShieldDashboard,
+  type TokenShieldDashboardProps,
+} from "./dashboard"
+
 // Pricing Registry
 export {
   PRICING_REGISTRY,
@@ -206,3 +212,10 @@ export {
   UserBudgetLimitsSchema,
   type TokenShieldConfig,
 } from "./config-schemas"
+
+// Encrypted Storage
+export {
+  EncryptedStore,
+  createEncryptedStore,
+  type EncryptedStoreConfig,
+} from "./crypto-store"

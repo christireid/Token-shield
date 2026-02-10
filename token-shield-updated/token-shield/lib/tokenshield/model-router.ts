@@ -120,11 +120,20 @@ const SUBTASK_PATTERNS =
 const CONTEXT_PATTERNS =
   /\babove\b|\bprevious\b|\bearlier\b|\bmentioned\b|\brefer.*?to\b|\bgiven\b|\bbased on\b/i
 
+/** FIFO cache for analyzeComplexity — avoids re-running BPE + regex on identical prompts */
+const MAX_COMPLEXITY_CACHE = 100
+/** Skip caching prompts longer than this to prevent large memory consumption */
+const MAX_CACHEABLE_PROMPT_LENGTH = 10_000
+const complexityCache = new Map<string, ComplexityScore>()
+
 /**
  * Analyze a prompt and return measurable complexity signals.
  * Every signal is computed from the actual text - no guessing.
+ * Results are cached (FIFO, max 100 entries) for repeated prompts.
  */
 export function analyzeComplexity(prompt: string): ComplexityScore {
+  const cached = complexityCache.get(prompt)
+  if (cached) return cached
   const words = prompt.split(/\s+/).filter((w) => w.length > 0)
   const wordCount = words.length
   const sentences = prompt.split(/[.!?]+/).filter((s) => s.trim().length > 0)
@@ -203,7 +212,19 @@ export function analyzeComplexity(prompt: string): ComplexityScore {
     recommendedTier = "flagship"
   }
 
-  return { score, tier, signals, recommendedTier }
+  const result: ComplexityScore = { score, tier, signals, recommendedTier }
+
+  // Store in LRU cache; evict oldest entry when at capacity
+  // Only cache short prompts to prevent memory bloat from very long inputs
+  if (prompt.length <= MAX_CACHEABLE_PROMPT_LENGTH) {
+    complexityCache.set(prompt, result)
+    if (complexityCache.size > MAX_COMPLEXITY_CACHE) {
+      const oldest = complexityCache.keys().next().value
+      if (oldest !== undefined) complexityCache.delete(oldest)
+    }
+  }
+
+  return result
 }
 
 /**

@@ -107,6 +107,8 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
 const MAX_CACHE_SIZE = 1000
 const MAX_WARNING_MAP_SIZE = 500
+/** Maximum distinct users tracked in inflightByUser before LRU eviction */
+const MAX_TRACKED_USERS = 5000
 
 // -------------------------------------------------------
 // Implementation
@@ -208,8 +210,19 @@ export class UserBudgetManager {
 
     // Evict stale warning entries to prevent unbounded map growth
     if (this.warningFired.size > MAX_WARNING_MAP_SIZE) {
+      // First pass: remove expired entries (>30 days old)
       for (const [key, time] of this.warningFired) {
         if (now - time > THIRTY_DAYS_MS) this.warningFired.delete(key)
+      }
+      // Hard cap: if still over limit, evict oldest entries (FIFO)
+      if (this.warningFired.size > MAX_WARNING_MAP_SIZE) {
+        const excess = this.warningFired.size - MAX_WARNING_MAP_SIZE
+        let evicted = 0
+        for (const key of this.warningFired.keys()) {
+          if (evicted >= excess) break
+          this.warningFired.delete(key)
+          evicted++
+        }
       }
     }
 
@@ -297,6 +310,14 @@ export class UserBudgetManager {
     // Reserve estimated cost as in-flight to prevent concurrent overspend
     if (estimatedCostDollars > 0) {
       this.inflightByUser.set(userId, inflight + estimatedCostDollars)
+      // Invalidate snapshot cache so next getStatus() reflects the new inflight
+      // (no notify() — this is a read-path change, not a state mutation for React)
+      this._snapshotCache.delete(userId)
+      // FIFO eviction: remove the oldest entry when the map exceeds capacity
+      if (this.inflightByUser.size > MAX_TRACKED_USERS) {
+        const oldest = this.inflightByUser.keys().next().value
+        if (oldest !== undefined) this.inflightByUser.delete(oldest)
+      }
     }
 
     return { allowed: true, status }
@@ -371,6 +392,8 @@ export class UserBudgetManager {
       } else {
         this.inflightByUser.delete(userId)
       }
+      // Invalidate snapshot cache so next getStatus() reflects released inflight
+      this._snapshotCache.delete(userId)
     }
   }
 
