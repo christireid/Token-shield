@@ -289,7 +289,7 @@ export class UserBudgetManager {
     // Always clear in-flight reservation, even for zero-cost responses
     const inflight = this.inflightByUser.get(userId) ?? 0
     if (inflight > 0) {
-      const remaining = Math.max(0, inflight - Math.max(cost, inflight))
+      const remaining = Math.max(0, inflight - cost)
       if (remaining > 0) {
         this.inflightByUser.set(userId, remaining)
       } else {
