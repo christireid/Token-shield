@@ -18,12 +18,12 @@ import React, {
   useEffect,
   useSyncExternalStore,
 } from "react"
-import { countExactTokens, countChatTokens, type ChatMessage } from "./token-counter"
-import { estimateCost, calculateSavings, type ModelPricing, MODEL_PRICING } from "./cost-estimator"
-import { fitToBudget, smartFit, type Message, type ContextBudget } from "./context-manager"
+import { countExactTokens, type ChatMessage } from "./token-counter"
+import { estimateCost, calculateSavings, type ModelPricing } from "./cost-estimator"
+import { smartFit, type Message, type ContextBudget } from "./context-manager"
 import { ResponseCache } from "./response-cache"
 import { CostLedger } from "./cost-ledger"
-import { analyzeComplexity, routeToModel, type RoutingDecision } from "./model-router"
+import { routeToModel, type RoutingDecision } from "./model-router"
 import { RequestGuard, type GuardConfig, type GuardResult } from "./request-guard"
 import { CostCircuitBreaker } from "./circuit-breaker"
 import { UserBudgetManager, type UserBudgetStatus } from "./user-budget-manager"
@@ -394,7 +394,7 @@ export function useCostLedger(featureName?: string) {
     )
   }
   return useSyncExternalStore(
-    (listener) => ledger.subscribe(listener),
+    (listener: () => void) => ledger.subscribe(listener),
     () => {
       const summary = ledger.getSummary()
       if (featureName) {
