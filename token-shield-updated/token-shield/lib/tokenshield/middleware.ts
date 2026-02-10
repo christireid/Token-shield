@@ -32,6 +32,7 @@ import { CostLedger } from "./cost-ledger"
 import { MODEL_PRICING, estimateCost } from "./cost-estimator"
 import { CostCircuitBreaker, type BreakerConfig } from "./circuit-breaker"
 import { StreamTokenTracker } from "./stream-tracker"
+import { UserBudgetManager, type UserBudgetConfig } from "./user-budget-manager"
 import type { ChatMessage } from "./token-counter"
 
 // -------------------------------------------------------
@@ -98,6 +99,22 @@ export interface TokenShieldMiddlewareConfig {
    */
   breaker?: BreakerConfig
 
+  /**
+   * Optional per-user budget management. When provided, each request is checked
+   * against the user's daily/monthly limits before proceeding.
+   * Requires a getUserId function to identify the current user.
+   */
+  userBudget?: {
+    /** Function that returns the current user's ID */
+    getUserId: () => string
+    /** Budget configuration (users, defaultBudget, tierModels, etc.) */
+    budgets: Omit<UserBudgetConfig, 'onBudgetExceeded' | 'onBudgetWarning'>
+    /** Called when a user exceeds their budget */
+    onBudgetExceeded?: (userId: string, event: { limitType: string; currentSpend: number; limit: number }) => void
+    /** Called when a user approaches their budget (80%) */
+    onBudgetWarning?: (userId: string, event: { limitType: string; currentSpend: number; limit: number; percentUsed: number }) => void
+  }
+
   /** Called when a request is blocked by the guard */
   onBlocked?: (reason: string) => void
   /** Called with every ledger entry after a request completes */
@@ -126,6 +143,8 @@ interface ShieldMeta {
   routerSaved?: number
   prefixSaved?: number
   complexity?: ComplexityScore
+  /** User ID for per-user budget tracking */
+  userId?: string
 }
 
 /**
@@ -168,6 +187,19 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
   // Create a cost circuit breaker if configured
   const breaker = config.breaker ? new CostCircuitBreaker(config.breaker) : null
 
+  // Create a per-user budget manager if configured
+  const userBudgetManager = config.userBudget
+    ? new UserBudgetManager({
+        ...config.userBudget.budgets,
+        onBudgetExceeded: config.userBudget.onBudgetExceeded
+          ? (userId, event) => config.userBudget!.onBudgetExceeded!(userId, event)
+          : undefined,
+        onBudgetWarning: config.userBudget.onBudgetWarning
+          ? (userId, event) => config.userBudget!.onBudgetWarning!(userId, event)
+          : undefined,
+      })
+    : null
+
   // Expose ledger for external access (e.g., useCostLedger hook)
   const middleware = {
     /** Access the cost ledger for reading savings data */
@@ -176,6 +208,8 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
     cache,
     /** Access the request guard for stats */
     guard,
+    /** Access the per-user budget manager */
+    userBudgetManager,
 
     /**
      * transformParams runs BEFORE the model receives the request.
@@ -215,6 +249,27 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
         if (!breakCheck.allowed) {
           config.onBlocked?.(breakCheck.reason ?? "Budget exceeded")
           throw new TokenShieldBlockedError(breakCheck.reason ?? "Request blocked by TokenShield breaker")
+        }
+      }
+
+      // -- 0b. USER BUDGET CHECK --
+      if (userBudgetManager && config.userBudget) {
+        const userId = config.userBudget.getUserId()
+        meta.userId = userId
+        const modelId = String(params.modelId ?? "")
+        const estimatedInput = lastUserText ? countTokens(lastUserText) : 0
+        const expectedOut = config.context?.reserveForOutput ?? 500
+        const budgetCheck = userBudgetManager.check(userId, modelId, estimatedInput, expectedOut)
+        if (!budgetCheck.allowed) {
+          config.onBlocked?.(budgetCheck.reason ?? "User budget exceeded")
+          throw new TokenShieldBlockedError(budgetCheck.reason ?? "Request blocked by user budget limit")
+        }
+
+        // Apply model tier routing if configured
+        const tierModel = userBudgetManager.getModelForUser(userId)
+        if (tierModel && tierModel !== params.modelId) {
+          meta.originalModel = String(params.modelId)
+          params = { ...params, modelId: tierModel }
         }
       }
 
@@ -437,6 +492,16 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
         }
       }
 
+      // Record spending in per-user budget manager
+      if (userBudgetManager && meta?.userId) {
+        try {
+          const costEst = estimateCost(modelId, inputTokens, outputTokens)
+          await userBudgetManager.recordSpend(meta.userId, costEst.totalCost, modelId)
+        } catch {
+          // If estimate fails (unknown model), ignore
+        }
+      }
+
       return result
     },
 
@@ -570,6 +635,16 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
           try {
             const costEst = estimateCost(modelId, usage.inputTokens, usage.outputTokens)
             breaker.recordSpend(costEst.totalCost, modelId)
+          } catch {
+            // If estimate fails (unknown model), ignore
+          }
+        }
+
+        // Record spending in per-user budget manager
+        if (userBudgetManager && meta?.userId) {
+          try {
+            const costEst = estimateCost(modelId, usage.inputTokens, usage.outputTokens)
+            userBudgetManager.recordSpend(meta.userId, costEst.totalCost, modelId)
           } catch {
             // If estimate fails (unknown model), ignore
           }

@@ -108,6 +108,32 @@ export const BreakerConfigSchema = v.object({
 export type BreakerConfig = v.InferOutput<typeof BreakerConfigSchema>;
 
 // ---------------------------------------------------------------------------
+// User Budget
+// ---------------------------------------------------------------------------
+
+export const UserBudgetLimitsSchema = v.object({
+  daily: v.pipe(v.number(), v.minValue(0)),
+  monthly: v.pipe(v.number(), v.minValue(0)),
+  tier: v.optional(v.picklist(['standard', 'premium', 'unlimited'])),
+});
+
+export type UserBudgetLimitsConfig = v.InferOutput<typeof UserBudgetLimitsSchema>;
+
+export const UserBudgetConfigSchema = v.object({
+  users: v.optional(v.record(v.string(), UserBudgetLimitsSchema)),
+  defaultBudget: v.optional(UserBudgetLimitsSchema),
+  persist: v.optional(v.boolean(), false),
+  tierModels: v.optional(
+    v.record(
+      v.picklist(['standard', 'premium', 'unlimited']),
+      v.string(),
+    ),
+  ),
+});
+
+export type UserBudgetConfig = v.InferOutput<typeof UserBudgetConfigSchema>;
+
+// ---------------------------------------------------------------------------
 // Master config
 // ---------------------------------------------------------------------------
 
@@ -129,6 +155,7 @@ export const TokenShieldConfigSchema = v.object({
   prefix: v.optional(PrefixConfigSchema),
   ledger: v.optional(LedgerConfigSchema),
   breaker: v.optional(BreakerConfigSchema),
+  userBudget: v.optional(UserBudgetConfigSchema),
 });
 
 export type TokenShieldConfig = v.InferOutput<typeof TokenShieldConfigSchema>;

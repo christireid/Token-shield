@@ -26,6 +26,7 @@ import { CostLedger } from "./cost-ledger"
 import { analyzeComplexity, routeToModel, type RoutingDecision } from "./model-router"
 import { RequestGuard, type GuardConfig, type GuardResult } from "./request-guard"
 import { CostCircuitBreaker } from "./circuit-breaker"
+import { UserBudgetManager, type UserBudgetStatus } from "./user-budget-manager"
 
 // ---------------------
 // Session savings store
@@ -620,4 +621,32 @@ export function useBudgetAlert(breaker?: CostCircuitBreaker): {
   }, [breaker])
 
   return budgetState
+}
+
+/**
+ * Track per-user budget status in real time.
+ *
+ * Subscribes to a UserBudgetManager instance and returns the current
+ * budget state for the given userId. Updates reactively when spending
+ * changes.
+ *
+ * Usage:
+ *   const budgetManager = new UserBudgetManager({ ... })
+ *   const { remaining, percentUsed, isOverBudget } = useUserBudget(budgetManager, 'user-123')
+ */
+export function useUserBudget(
+  manager: UserBudgetManager,
+  userId: string
+): UserBudgetStatus {
+  const getSnapshot = useCallback(
+    () => manager.getStatus(userId),
+    [manager, userId]
+  )
+
+  const subscribe = useCallback(
+    (listener: () => void) => manager.subscribe(listener),
+    [manager]
+  )
+
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }

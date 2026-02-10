@@ -139,6 +139,17 @@ export {
   type BreakerCheckResult,
 } from "./circuit-breaker"
 
+// 12. User Budget Manager
+export {
+  UserBudgetManager,
+  type UserBudgetConfig,
+  type UserBudgetLimits,
+  type UserBudgetTier,
+  type UserBudgetStatus,
+  type BudgetExceededEvent,
+  type BudgetWarningEvent,
+} from "./user-budget-manager"
+
 // AI SDK Middleware
 export {
   tokenShieldMiddleware,
@@ -161,6 +172,7 @@ export {
   useModelRouter,
   useCostLedger,
   useFeatureCost,
+  useUserBudget,
   type TokenShieldProviderProps,
 } from "./react"
 
@@ -189,5 +201,7 @@ export {
   ContextConfigSchema,
   RouterConfigSchema,
   BreakerConfigSchema,
+  UserBudgetConfigSchema,
+  UserBudgetLimitsSchema,
   type TokenShieldConfig,
 } from "./config-schemas"
