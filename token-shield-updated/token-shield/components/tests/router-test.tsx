@@ -63,15 +63,15 @@ export function ModelRouterTest() {
         callOpenAI(messages, "gpt-4o-mini", { max_tokens: 100 }),
       ])
 
-      const expensiveCost = calculateRealCost("gpt-4o", expensiveRes.usage.prompt_tokens, expensiveRes.usage.completion_tokens)
-      const cheapCost = calculateRealCost("gpt-4o-mini", cheapRes.usage.prompt_tokens, cheapRes.usage.completion_tokens)
+      const expensiveCost = calculateRealCost("gpt-4o", expensiveRes.usage.prompt_tokens ?? 0, expensiveRes.usage.completion_tokens ?? 0)
+      const cheapCost = calculateRealCost("gpt-4o-mini", cheapRes.usage.prompt_tokens ?? 0, cheapRes.usage.completion_tokens ?? 0)
 
       setSimpleResults({
         expensive: {
           model: "gpt-4o",
           modelReturned: expensiveRes.model,
-          promptTokens: expensiveRes.usage.prompt_tokens,
-          completionTokens: expensiveRes.usage.completion_tokens,
+          promptTokens: expensiveRes.usage.prompt_tokens ?? 0,
+          completionTokens: expensiveRes.usage.completion_tokens ?? 0,
           totalCost: expensiveCost,
           latencyMs: expensiveRes.latencyMs,
           response: expensiveRes.content,
@@ -79,8 +79,8 @@ export function ModelRouterTest() {
         cheap: {
           model: "gpt-4o-mini",
           modelReturned: cheapRes.model,
-          promptTokens: cheapRes.usage.prompt_tokens,
-          completionTokens: cheapRes.usage.completion_tokens,
+          promptTokens: cheapRes.usage.prompt_tokens ?? 0,
+          completionTokens: cheapRes.usage.completion_tokens ?? 0,
           totalCost: cheapCost,
           latencyMs: cheapRes.latencyMs,
           response: cheapRes.content,

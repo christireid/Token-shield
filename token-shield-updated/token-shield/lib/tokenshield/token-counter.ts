@@ -159,84 +159,30 @@ export function truncateToTokenBudget(
 }
 
 /**
- * Count tokens for a specific model. This is a placeholder for
- * provider-specific tokenization. Currently, it simply counts tokens
- * using the OpenAI-compatible tokenizer (cl100k_base) for all models.
- * In future releases, this can dispatch to Anthropic or Google tokenizers.
+ * Count tokens for a specific model. Uses gpt-tokenizer (BPE) for all
+ * providers — 100% accurate for OpenAI, ~90% for Anthropic/Google.
+ * For billing-accurate counts on non-OpenAI models, use the `usage`
+ * object from the API response instead.
  */
 export function countModelTokens(modelId: string, text: string): number {
-  // Normalize model identifier for case‑insensitive matching
-  const id = modelId?.toLowerCase() ?? ""
-
-  // Try Anthropic tokenizers for Claude models
-  if (id.includes("claude") || id.includes("anthropic")) {
-    // First try ai-tokenizer's Claude encoding (approximate but high accuracy)
-    try {
-      // Dynamically require to avoid bundling errors when dependency is absent
-      const aiTok = require("ai-tokenizer")
-      // ai-tokenizer exposes encodings under the "encoding" key
-      const encoding = (aiTok?.encoding as any)?.claude
-      const Tokenizer = aiTok?.default || aiTok.Tokenizer
-      if (Tokenizer && encoding) {
-        const tokenizer = new Tokenizer(encoding)
-        return tokenizer.count(text)
-      }
-    } catch (err) {
-      // ignore and fall back to other options
-    }
-    // Next try the official Anthropic tokenizer (may be outdated for Claude 3)
-    try {
-      const anthropicTokenizer = require("@anthropic-ai/tokenizer")
-      if (typeof anthropicTokenizer.countTokens === "function") {
-        return anthropicTokenizer.countTokens(text)
-      }
-    } catch (err) {
-      // ignore and fall back
-    }
-    // Fallback to p50k_base via ai-tokenizer if available (approximation)
-    try {
-      const aiTok = require("ai-tokenizer")
-      const encoding = (aiTok?.encoding as any)?.p50k_base
-      const Tokenizer = aiTok?.default || aiTok.Tokenizer
-      if (Tokenizer && encoding) {
-        const tokenizer = new Tokenizer(encoding)
-        return tokenizer.count(text)
-      }
-    } catch (err) {
-      // ignore
-    }
-    // As a last resort, fall back to gpt-tokenizer
-    return countTokens(text)
-  }
-
-  // Try Google Gemini/Gemma tokenizers
-  if (id.includes("gemini") || id.includes("gemma") || id.includes("google")) {
-    // Try gemini-token-estimator for quick estimation
-    try {
-      const geminiEstimator = require("gemini-token-estimator")
-      if (typeof geminiEstimator.getTokenCount === "function") {
-        return geminiEstimator.getTokenCount(text)
-      }
-    } catch (err) {
-      // ignore and fall back
-    }
-    // Try ai-tokenizer with a Gemini encoding (if available)
-    try {
-      const aiTok = require("ai-tokenizer")
-      // Some Gemini models share Gemma2 encoding; use gemma2 or gemini if present
-      const encoding = (aiTok?.encoding as any)?.gemma2 || (aiTok?.encoding as any)?.gemini
-      const Tokenizer = aiTok?.default || aiTok.Tokenizer
-      if (Tokenizer && encoding) {
-        const tokenizer = new Tokenizer(encoding)
-        return tokenizer.count(text)
-      }
-    } catch (err) {
-      // ignore
-    }
-    // Fallback to gpt-tokenizer
-    return countTokens(text)
-  }
-
-  // Default: use OpenAI‑compatible tokenizer for other models
   return countTokens(text)
+}
+
+/**
+ * Fast approximate token count using character heuristics.
+ * ~4 chars/token for English, ~1.5 chars/token for CJK.
+ * Use for real-time UI feedback where exact BPE is too slow.
+ */
+export function countFast(text: string): number {
+  if (!text) return 0
+
+  const cjkRegex = /[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/g
+  const cjkMatches = text.match(cjkRegex)
+  const cjkCount = cjkMatches ? cjkMatches.length : 0
+  const nonCjkCount = text.length - cjkCount
+
+  const cjkTokens = cjkCount / 1.5
+  const nonCjkTokens = nonCjkCount / 4
+
+  return Math.max(1, Math.round(cjkTokens + nonCjkTokens))
 }
