@@ -86,13 +86,13 @@ export function ContextManagerTest() {
       const rawClientTokens = countChatTokens(rawMessages as ChatMessage[])
 
       const rawResponse = await callOpenAI(rawMessages, model, { max_tokens: 300 })
-      const rawCost = calculateRealCost(model, rawResponse.usage.prompt_tokens, rawResponse.usage.completion_tokens)
+      const rawCost = calculateRealCost(model, rawResponse.usage.prompt_tokens ?? 0, rawResponse.usage.completion_tokens ?? 0)
 
       setRawResult({
         label: "Raw (no optimization)",
         messagesCount: rawMessages.length,
-        openaiPromptTokens: rawResponse.usage.prompt_tokens,
-        openaiCompletionTokens: rawResponse.usage.completion_tokens,
+        openaiPromptTokens: rawResponse.usage.prompt_tokens ?? 0,
+        openaiCompletionTokens: rawResponse.usage.completion_tokens ?? 0,
         openaiTotalTokens: rawResponse.usage.total_tokens,
         realCost: rawCost,
         latencyMs: rawResponse.latencyMs,
@@ -115,13 +115,13 @@ export function ContextManagerTest() {
       const trimmedClientTokens = countChatTokens(trimmedMessages as ChatMessage[])
 
       const trimmedResponse = await callOpenAI(trimmedMessages, model, { max_tokens: 300 })
-      const trimmedCost = calculateRealCost(model, trimmedResponse.usage.prompt_tokens, trimmedResponse.usage.completion_tokens)
+      const trimmedCost = calculateRealCost(model, trimmedResponse.usage.prompt_tokens ?? 0, trimmedResponse.usage.completion_tokens ?? 0)
 
       setTrimmedResult({
         label: `TokenShield (budget: 600 input tokens)`,
         messagesCount: trimmedMessages.length,
-        openaiPromptTokens: trimmedResponse.usage.prompt_tokens,
-        openaiCompletionTokens: trimmedResponse.usage.completion_tokens,
+        openaiPromptTokens: trimmedResponse.usage.prompt_tokens ?? 0,
+        openaiCompletionTokens: trimmedResponse.usage.completion_tokens ?? 0,
         openaiTotalTokens: trimmedResponse.usage.total_tokens,
         realCost: trimmedCost,
         latencyMs: trimmedResponse.latencyMs,

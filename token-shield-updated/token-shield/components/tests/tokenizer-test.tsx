@@ -59,16 +59,16 @@ export function TokenizerTest() {
           { max_tokens: 1, temperature: 0 } // minimize output tokens to save money
         )
 
-        const diff = Math.abs(clientCount.total - res.usage.prompt_tokens)
-        const accuracy = res.usage.prompt_tokens > 0
-          ? (1 - diff / res.usage.prompt_tokens) * 100
+        const diff = Math.abs(clientCount.total - (res.usage.prompt_tokens ?? 0))
+        const accuracy = (res.usage.prompt_tokens ?? 0) > 0
+          ? (1 - diff / (res.usage.prompt_tokens ?? 0)) * 100
           : 100
 
         testResults.push({
           prompt,
           promptPreview: prompt.length > 60 ? prompt.slice(0, 60) + "..." : prompt,
           clientTokens: clientCount.total,
-          openaiTokens: res.usage.prompt_tokens,
+          openaiTokens: res.usage.prompt_tokens ?? 0,
           difference: diff,
           accuracy,
           model: res.model,

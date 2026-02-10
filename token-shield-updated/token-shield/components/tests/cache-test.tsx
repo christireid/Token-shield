@@ -55,16 +55,16 @@ export function CacheTest() {
       // STEP 1: First call - cache miss, real API call
       // Step 1 is always a cache miss - fresh cache
       const res1 = await callOpenAI([{ role: "user", content: ORIGINAL_PROMPT }], model, { max_tokens: 150 })
-      const cost1 = calculateRealCost(model, res1.usage.prompt_tokens, res1.usage.completion_tokens)
-      await cache.store(ORIGINAL_PROMPT, res1.content, model, res1.usage.prompt_tokens, res1.usage.completion_tokens)
+      const cost1 = calculateRealCost(model, res1.usage.prompt_tokens ?? 0, res1.usage.completion_tokens ?? 0)
+      await cache.store(ORIGINAL_PROMPT, res1.content, model, res1.usage.prompt_tokens ?? 0, res1.usage.completion_tokens ?? 0)
 
       results.push({
         label: "Step 1: First call (cache miss)",
         prompt: ORIGINAL_PROMPT,
         fromCache: false,
         apiCalled: true,
-        promptTokens: res1.usage.prompt_tokens,
-        completionTokens: res1.usage.completion_tokens,
+        promptTokens: res1.usage.prompt_tokens ?? 0,
+        completionTokens: res1.usage.completion_tokens ?? 0,
         realCost: cost1,
         latencyMs: res1.latencyMs,
         response: res1.content,
@@ -115,7 +115,7 @@ export function CacheTest() {
       } else {
         // Fuzzy miss - still make the API call to show the comparison
         const res3 = await callOpenAI([{ role: "user", content: FUZZY_PROMPT }], model, { max_tokens: 150 })
-        const cost3 = calculateRealCost(model, res3.usage.prompt_tokens, res3.usage.completion_tokens)
+        const cost3 = calculateRealCost(model, res3.usage.prompt_tokens ?? 0, res3.usage.completion_tokens ?? 0)
         results.push({
           label: "Step 3: Rephrased (cache miss - fuzzy threshold not met)",
           prompt: FUZZY_PROMPT,
@@ -123,8 +123,8 @@ export function CacheTest() {
           matchType: undefined,
           similarity: textSimilarity(ORIGINAL_PROMPT, FUZZY_PROMPT),
           apiCalled: true,
-          promptTokens: res3.usage.prompt_tokens,
-          completionTokens: res3.usage.completion_tokens,
+          promptTokens: res3.usage.prompt_tokens ?? 0,
+          completionTokens: res3.usage.completion_tokens ?? 0,
           realCost: cost3,
           latencyMs: res3.latencyMs,
           response: res3.content,

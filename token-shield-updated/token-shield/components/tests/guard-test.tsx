@@ -64,7 +64,7 @@ export function GuardTest() {
       let totalUnguardedCost = 0
       let totalUnguardedTokens = 0
       for (const res of unguardedCalls) {
-        const cost = calculateRealCost(model, res.usage.prompt_tokens, res.usage.completion_tokens)
+        const cost = calculateRealCost(model, res.usage.prompt_tokens ?? 0, res.usage.completion_tokens ?? 0)
         totalUnguardedCost += cost.totalCost
         totalUnguardedTokens += res.usage.total_tokens
       }
@@ -96,10 +96,10 @@ export function GuardTest() {
 
         if (check.allowed) {
           const res = await callOpenAI([{ role: "user", content: TEST_PROMPT }], model, { max_tokens: 10 })
-          const cost = calculateRealCost(model, res.usage.prompt_tokens, res.usage.completion_tokens)
+          const cost = calculateRealCost(model, res.usage.prompt_tokens ?? 0, res.usage.completion_tokens ?? 0)
           guardedTotalCost += cost.totalCost
           guardedCallsMade++
-          guard.completeRequest(TEST_PROMPT, res.usage.prompt_tokens, res.usage.completion_tokens)
+          guard.completeRequest(TEST_PROMPT, res.usage.prompt_tokens ?? 0, res.usage.completion_tokens ?? 0)
         } else {
           blockedCost += check.estimatedCost
         }
