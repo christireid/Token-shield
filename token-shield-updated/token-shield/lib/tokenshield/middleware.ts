@@ -147,6 +147,8 @@ interface ShieldMeta {
   userId?: string
   /** Estimated cost reserved as in-flight during budget check */
   userBudgetInflight?: number
+  /** True when user budget tier routing was applied — prevents complexity router from overriding */
+  tierRouted?: boolean
 }
 
 /**
@@ -295,6 +297,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
         if (tierModel && tierModel !== params.modelId) {
           if (!meta.originalModel) meta.originalModel = String(params.modelId)
           params = { ...params, modelId: tierModel }
+          meta.tierRouted = true
         }
       }
 
@@ -348,8 +351,8 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
         }
       }
 
-      // -- 4. MODEL ROUTER --
-      if (modules.router && config.router?.tiers && config.router.tiers.length > 0 && lastUserText) {
+      // -- 4. MODEL ROUTER (skipped when tier routing already applied a budget-enforced model) --
+      if (modules.router && !meta.tierRouted && config.router?.tiers && config.router.tiers.length > 0 && lastUserText) {
         const complexity = analyzeComplexity(lastUserText)
         meta.complexity = complexity
         const threshold = config.router.complexityThreshold ?? 50
@@ -536,7 +539,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
       if (userBudgetManager && meta?.userId) {
         try {
           const costEst = estimateCost(modelId, inputTokens, outputTokens)
-          await userBudgetManager.recordSpend(meta.userId, costEst.totalCost, modelId)
+          await userBudgetManager.recordSpend(meta.userId, costEst.totalCost, modelId, meta.userBudgetInflight)
         } catch {
           // estimateCost failed (unknown model) — still release inflight reservation
           if (meta.userBudgetInflight) {
@@ -627,7 +630,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
       const recordStreamUsage = (usage: { inputTokens: number; outputTokens: number }) => {
         const latencyMs = Date.now() - startTime
 
-        // Store in cache for future requests
+        // Store in cache for future requests (fire-and-forget with .catch to prevent unhandled rejection)
         if (cache) {
           const prompt = params.prompt as Array<{ role: string; content: Array<{ type: string; text?: string }> }>
           const lastUserMsg = prompt?.filter((m) => m.role === "user").pop()
@@ -638,11 +641,11 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
           const responseText = tracker.getText()
 
           if (lastUserText && responseText) {
-            cache.store(lastUserText, responseText, modelId, usage.inputTokens, usage.outputTokens)
+            cache.store(lastUserText, responseText, modelId, usage.inputTokens, usage.outputTokens).catch(() => {})
           }
         }
 
-        // Record in ledger
+        // Record in ledger (fire-and-forget with .catch to prevent unhandled rejection)
         if (ledger) {
           const contextSavedDollars = meta?.contextSaved
             ? (meta.contextSaved / 1_000_000) * (MODEL_PRICING[modelId]?.inputPerMillion ?? 2.5)
@@ -663,7 +666,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
             originalModel: meta?.originalModel,
             feature: config.ledger?.feature,
             latencyMs,
-          })
+          }).catch(() => {})
 
           const entry = ledger.getSummary()
           config.onUsage?.({
@@ -698,11 +701,13 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
           }
         }
 
-        // Record spending in per-user budget manager
+        // Record spending in per-user budget manager (fire-and-forget with .catch)
         if (userBudgetManager && meta?.userId) {
           try {
             const costEst = estimateCost(modelId, usage.inputTokens, usage.outputTokens)
-            userBudgetManager.recordSpend(meta.userId, costEst.totalCost, modelId)
+            userBudgetManager.recordSpend(meta.userId, costEst.totalCost, modelId, meta.userBudgetInflight).catch(() => {
+              // IDB write failed, inflight was already cleaned up synchronously
+            })
           } catch {
             // estimateCost failed (unknown model) — still release inflight reservation
             if (meta.userBudgetInflight) {
