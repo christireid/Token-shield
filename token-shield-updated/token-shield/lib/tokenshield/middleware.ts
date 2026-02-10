@@ -151,6 +151,24 @@ interface ShieldMeta {
   tierRouted?: boolean
 }
 
+/** AI SDK prompt type used internally for type-safe extraction */
+type AISDKPrompt = Array<{ role: string; content: Array<{ type: string; text?: string }> }>
+
+/**
+ * Extract the last user message text from an AI SDK prompt array.
+ * Centralizes the repeated pattern of filtering for user role, extracting
+ * text parts, and joining them — previously duplicated 4+ times.
+ */
+function extractLastUserText(params: Record<string, unknown>): string {
+  const prompt = params.prompt as AISDKPrompt | undefined
+  if (!prompt || !Array.isArray(prompt)) return ""
+  const lastUserMsg = prompt.filter((m) => m.role === "user").pop()
+  return lastUserMsg?.content
+    ?.filter((p: { type: string }) => p.type === "text")
+    .map((p: { text?: string }) => p.text ?? "")
+    .join("") ?? ""
+}
+
 /**
  * Create the TokenShield middleware.
  *
@@ -295,35 +313,53 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
         // Apply model tier routing if configured
         const tierModel = userBudgetManager.getModelForUser(userId)
         if (tierModel && tierModel !== params.modelId) {
+          // Compute savings from tier-based model routing
+          try {
+            const origCost = estimateCost(String(params.modelId), estimatedInput, expectedOut)
+            const tierCost = estimateCost(tierModel, estimatedInput, expectedOut)
+            meta.routerSaved = Math.max(0, origCost.totalCost - tierCost.totalCost)
+          } catch {
+            // Unknown model — can't compute savings
+          }
           if (!meta.originalModel) meta.originalModel = String(params.modelId)
           params = { ...params, modelId: tierModel }
           meta.tierRouted = true
         }
       }
 
-      // -- 1. GUARD CHECK --
-      if (guard && lastUserText) {
-        const check = guard.check(lastUserText)
-        if (!check.allowed) {
-          config.onBlocked?.(check.reason ?? "Request blocked")
-          throw new TokenShieldBlockedError(check.reason ?? "Request blocked by TokenShield guard")
-        }
-      }
-
-      // -- 2. CACHE LOOKUP --
-      if (cache && lastUserText) {
-        const modelId = String(params.modelId ?? "")
-        const lookup = await cache.lookup(lastUserText, modelId)
-        if (lookup.hit && lookup.entry) {
-          meta.cacheHit = {
-            response: lookup.entry.response,
-            inputTokens: lookup.entry.inputTokens,
-            outputTokens: lookup.entry.outputTokens,
+      // Wrap guard + cache in try-catch so in-flight budget reservations
+      // are released if either step throws (prevents phantom accumulation).
+      try {
+        // -- 1. GUARD CHECK --
+        if (guard && lastUserText) {
+          const check = guard.check(lastUserText)
+          if (!check.allowed) {
+            config.onBlocked?.(check.reason ?? "Request blocked")
+            throw new TokenShieldBlockedError(check.reason ?? "Request blocked by TokenShield guard")
           }
-          // Attach meta to params for wrapGenerate to use
-          ;(params as Record<string | symbol, unknown>)[SHIELD_META] = meta
-          return params // wrapGenerate will short-circuit
         }
+
+        // -- 2. CACHE LOOKUP --
+        if (cache && lastUserText) {
+          const modelId = String(params.modelId ?? "")
+          const lookup = await cache.lookup(lastUserText, modelId)
+          if (lookup.hit && lookup.entry) {
+            meta.cacheHit = {
+              response: lookup.entry.response,
+              inputTokens: lookup.entry.inputTokens,
+              outputTokens: lookup.entry.outputTokens,
+            }
+            // Attach meta to params for wrapGenerate to use
+            ;(params as Record<string | symbol, unknown>)[SHIELD_META] = meta
+            return params // wrapGenerate will short-circuit
+          }
+        }
+      } catch (err) {
+        // Release in-flight budget reservation if guard/cache throws
+        if (userBudgetManager && meta.userId && meta.userBudgetInflight) {
+          userBudgetManager.releaseInflight(meta.userId, meta.userBudgetInflight)
+        }
+        throw err
       }
 
       const originalInputTokens = messages.reduce((sum, m) => sum + countTokens(m.content) + 5, 0)
@@ -369,7 +405,16 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
             })[0]
 
           if (cheapestTier && cheapestTier.modelId !== params.modelId) {
-            if (!meta.originalModel) meta.originalModel = String(params.modelId)
+            // Compute savings from complexity-based model routing
+            const beforeRoutingModel = String(params.modelId)
+            try {
+              const origCost = estimateCost(beforeRoutingModel, meta.originalInputTokens ?? 0, config.context?.reserveForOutput ?? 500)
+              const cheaperCost = estimateCost(cheapestTier.modelId, meta.originalInputTokens ?? 0, config.context?.reserveForOutput ?? 500)
+              meta.routerSaved = (meta.routerSaved ?? 0) + Math.max(0, origCost.totalCost - cheaperCost.totalCost)
+            } catch {
+              // Unknown model — can't compute savings
+            }
+            if (!meta.originalModel) meta.originalModel = beforeRoutingModel
             params = { ...params, modelId: cheapestTier.modelId }
           }
         }
@@ -473,28 +518,23 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
       const modelId = String(params.modelId ?? "")
       const responseText = String(result.text ?? "")
 
-      // Store in cache for future requests
+      // Store in cache for future requests (fire-and-forget to avoid blocking response)
       if (cache && responseText) {
-        const prompt = params.prompt as Array<{ role: string; content: Array<{ type: string; text?: string }> }>
-        const lastUserMsg = prompt?.filter((m) => m.role === "user").pop()
-        const lastUserText = lastUserMsg?.content
-          ?.filter((p) => p.type === "text")
-          .map((p) => p.text ?? "")
-          .join("") ?? ""
-
-        if (lastUserText) {
-          await cache.store(lastUserText, responseText, modelId, inputTokens, outputTokens)
+        const cachedUserText = extractLastUserText(params)
+        if (cachedUserText) {
+          cache.store(cachedUserText, responseText, modelId, inputTokens, outputTokens).catch(() => {})
         }
       }
 
+      // Compute per-request savings (needed for both ledger and onUsage)
+      const contextSavedDollars = meta?.contextSaved
+        ? (meta.contextSaved / 1_000_000) * (MODEL_PRICING[modelId]?.inputPerMillion ?? 2.5)
+        : 0
+      const routerSavedDollars = meta?.routerSaved ?? 0
+      const prefixSavedDollars = meta?.prefixSaved ?? 0
+
       // Record in ledger
       if (ledger) {
-        const contextSavedDollars = meta?.contextSaved
-          ? (meta.contextSaved / 1_000_000) * (MODEL_PRICING[modelId]?.inputPerMillion ?? 2.5)
-          : 0
-        const routerSavedDollars = meta?.routerSaved ?? 0
-        const prefixSavedDollars = meta?.prefixSaved ?? 0
-
         await ledger.record({
           model: modelId,
           inputTokens,
@@ -509,34 +549,29 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
           feature: config.ledger?.feature,
           latencyMs,
         })
-
-        // Report per-request cost and savings (not aggregates)
-        let perRequestCost = 0
-        try {
-          perRequestCost = estimateCost(modelId, inputTokens, outputTokens).totalCost
-        } catch {
-          // Unknown model
-        }
-        const perRequestSaved = contextSavedDollars + routerSavedDollars + prefixSavedDollars
-        config.onUsage?.({
-          model: modelId,
-          inputTokens,
-          outputTokens,
-          cost: perRequestCost,
-          saved: perRequestSaved,
-        })
       }
+
+      // Report per-request cost and savings (always, even when ledger is disabled)
+      let perRequestCost = 0
+      try {
+        perRequestCost = estimateCost(modelId, inputTokens, outputTokens).totalCost
+      } catch {
+        // Unknown model
+      }
+      const perRequestSaved = contextSavedDollars + routerSavedDollars + prefixSavedDollars
+      config.onUsage?.({
+        model: modelId,
+        inputTokens,
+        outputTokens,
+        cost: perRequestCost,
+        saved: perRequestSaved,
+      })
 
       // Complete the guard request tracking
       if (guard) {
-        const prompt = params.prompt as Array<{ role: string; content: Array<{ type: string; text?: string }> }>
-        const lastUserMsg = prompt?.filter((m) => m.role === "user").pop()
-        const lastUserText = lastUserMsg?.content
-          ?.filter((p) => p.type === "text")
-          .map((p) => p.text ?? "")
-          .join("") ?? ""
-        if (lastUserText) {
-          guard.completeRequest(lastUserText, inputTokens, outputTokens)
+        const guardUserText = extractLastUserText(params)
+        if (guardUserText) {
+          guard.completeRequest(guardUserText, inputTokens, outputTokens)
         }
       }
 
@@ -653,29 +688,24 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
       const recordStreamUsage = (usage: { inputTokens: number; outputTokens: number }) => {
         const latencyMs = Date.now() - startTime
 
-        // Store in cache for future requests (fire-and-forget with .catch to prevent unhandled rejection)
+        // Store in cache for future requests (fire-and-forget)
         if (cache) {
-          const prompt = params.prompt as Array<{ role: string; content: Array<{ type: string; text?: string }> }>
-          const lastUserMsg = prompt?.filter((m) => m.role === "user").pop()
-          const lastUserText = lastUserMsg?.content
-            ?.filter((p) => p.type === "text")
-            .map((p) => p.text ?? "")
-            .join("") ?? ""
+          const cachedUserText = extractLastUserText(params)
           const responseText = tracker.getText()
-
-          if (lastUserText && responseText) {
-            cache.store(lastUserText, responseText, modelId, usage.inputTokens, usage.outputTokens).catch(() => {})
+          if (cachedUserText && responseText) {
+            cache.store(cachedUserText, responseText, modelId, usage.inputTokens, usage.outputTokens).catch(() => {})
           }
         }
 
-        // Record in ledger (fire-and-forget with .catch to prevent unhandled rejection)
-        if (ledger) {
-          const contextSavedDollars = meta?.contextSaved
-            ? (meta.contextSaved / 1_000_000) * (MODEL_PRICING[modelId]?.inputPerMillion ?? 2.5)
-            : 0
-          const routerSavedDollars = meta?.routerSaved ?? 0
-          const prefixSavedDollars = meta?.prefixSaved ?? 0
+        // Compute per-request savings (needed for both ledger and onUsage)
+        const contextSavedDollars = meta?.contextSaved
+          ? (meta.contextSaved / 1_000_000) * (MODEL_PRICING[modelId]?.inputPerMillion ?? 2.5)
+          : 0
+        const routerSavedDollars = meta?.routerSaved ?? 0
+        const prefixSavedDollars = meta?.prefixSaved ?? 0
 
+        // Record in ledger (fire-and-forget)
+        if (ledger) {
           ledger.record({
             model: modelId,
             inputTokens: usage.inputTokens,
@@ -690,34 +720,29 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
             feature: config.ledger?.feature,
             latencyMs,
           }).catch(() => {})
-
-          // Report per-request cost and savings (not aggregates)
-          let streamPerRequestCost = 0
-          try {
-            streamPerRequestCost = estimateCost(modelId, usage.inputTokens, usage.outputTokens).totalCost
-          } catch {
-            // Unknown model
-          }
-          const streamPerRequestSaved = contextSavedDollars + routerSavedDollars + prefixSavedDollars
-          config.onUsage?.({
-            model: modelId,
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            cost: streamPerRequestCost,
-            saved: streamPerRequestSaved,
-          })
         }
+
+        // Report per-request cost and savings (always, even when ledger is disabled)
+        let streamPerRequestCost = 0
+        try {
+          streamPerRequestCost = estimateCost(modelId, usage.inputTokens, usage.outputTokens).totalCost
+        } catch {
+          // Unknown model
+        }
+        const streamPerRequestSaved = contextSavedDollars + routerSavedDollars + prefixSavedDollars
+        config.onUsage?.({
+          model: modelId,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cost: streamPerRequestCost,
+          saved: streamPerRequestSaved,
+        })
 
         // Complete guard request tracking
         if (guard) {
-          const prompt = params.prompt as Array<{ role: string; content: Array<{ type: string; text?: string }> }>
-          const lastUserMsg = prompt?.filter((m) => m.role === "user").pop()
-          const lastUserText = lastUserMsg?.content
-            ?.filter((p) => p.type === "text")
-            .map((p) => p.text ?? "")
-            .join("") ?? ""
-          if (lastUserText) {
-            guard.completeRequest(lastUserText, usage.inputTokens, usage.outputTokens)
+          const guardUserText = extractLastUserText(params)
+          if (guardUserText) {
+            guard.completeRequest(guardUserText, usage.inputTokens, usage.outputTokens)
           }
         }
 

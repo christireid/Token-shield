@@ -254,7 +254,7 @@ export function useContextManager(
   messages: Message[],
   budget: ContextBudget
 ) {
-  const { savingsStore, defaultModelId } = useTokenShield()
+  const { defaultModelId } = useTokenShield()
 
   return useMemo(() => {
     const result = smartFit(messages, budget)

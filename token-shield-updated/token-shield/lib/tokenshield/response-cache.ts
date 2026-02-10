@@ -44,17 +44,6 @@ const DEFAULT_CONFIG: CacheConfig = {
   storeName: "tokenshield-cache",
 }
 
-// In-memory map for fast lookups without hitting IDB every time
-let memoryCache = new Map<string, CacheEntry>()
-let idbStore: ReturnType<typeof createStore> | null = null
-
-function getStore(config: CacheConfig) {
-  if (typeof window === "undefined") return null
-  if (!idbStore) {
-    idbStore = createStore(config.storeName, "responses")
-  }
-  return idbStore
-}
 
 /**
  * Normalize text for comparison: lowercase, collapse whitespace,
@@ -117,9 +106,21 @@ function hashKey(text: string): string {
 
 export class ResponseCache {
   private config: CacheConfig
+  /** Per-instance in-memory map for fast lookups without hitting IDB every time */
+  private memoryCache = new Map<string, CacheEntry>()
+  /** Per-instance IDB store (lazy-initialized on first access) */
+  private idbStore: ReturnType<typeof createStore> | null = null
 
   constructor(config: Partial<CacheConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
+  }
+
+  private getStore(): ReturnType<typeof createStore> | null {
+    if (typeof window === "undefined") return null
+    if (!this.idbStore) {
+      this.idbStore = createStore(this.config.storeName, "responses")
+    }
+    return this.idbStore
   }
 
   /**
@@ -137,7 +138,7 @@ export class ResponseCache {
     const key = hashKey(prompt)
 
     // 1. Exact match from memory
-    const memHit = memoryCache.get(key)
+    const memHit = this.memoryCache.get(key)
     if (memHit && (!model || memHit.model === model)) {
       if (Date.now() - memHit.createdAt < this.config.ttlMs) {
         memHit.accessCount++
@@ -145,19 +146,19 @@ export class ResponseCache {
         return { hit: true, entry: memHit, matchType: "exact", similarity: 1 }
       }
       // Expired
-      memoryCache.delete(key)
+      this.memoryCache.delete(key)
     }
 
     // 2. Exact match from IDB
     try {
-      const store = getStore(this.config)
+      const store = this.getStore()
       if (!store) throw new Error("no idb")
       const idbHit = await get<CacheEntry>(key, store)
       if (idbHit && (!model || idbHit.model === model)) {
         if (Date.now() - idbHit.createdAt < this.config.ttlMs) {
           idbHit.accessCount++
           idbHit.lastAccessed = Date.now()
-          memoryCache.set(key, idbHit)
+          this.memoryCache.set(key, idbHit)
           await set(key, idbHit, store)
           return {
             hit: true,
@@ -177,7 +178,7 @@ export class ResponseCache {
       let bestMatch: CacheEntry | undefined
       let bestSimilarity = 0
 
-      for (const entry of memoryCache.values()) {
+      for (const entry of this.memoryCache.values()) {
         if (model && entry.model !== model) continue
         if (Date.now() - entry.createdAt >= this.config.ttlMs) continue
 
@@ -227,24 +228,24 @@ export class ResponseCache {
       lastAccessed: Date.now(),
     }
 
-    memoryCache.set(key, entry)
+    this.memoryCache.set(key, entry)
 
     // Evict LRU if over capacity
-    if (memoryCache.size > this.config.maxEntries) {
+    if (this.memoryCache.size > this.config.maxEntries) {
       let oldestKey = ""
       let oldestAccess = Infinity
-      for (const [k, v] of memoryCache) {
+      for (const [k, v] of this.memoryCache) {
         if (v.lastAccessed < oldestAccess) {
           oldestAccess = v.lastAccessed
           oldestKey = k
         }
       }
-      if (oldestKey) memoryCache.delete(oldestKey)
+      if (oldestKey) this.memoryCache.delete(oldestKey)
     }
 
     // Persist to IDB
     try {
-      const store = getStore(this.config)
+      const store = this.getStore()
       if (!store) throw new Error("no idb")
       await set(key, entry, store)
     } catch {
@@ -257,14 +258,14 @@ export class ResponseCache {
    */
   async hydrate(): Promise<number> {
     try {
-      const store = getStore(this.config)
+      const store = this.getStore()
       if (!store) return 0
       const allKeys = await keys<string>(store)
       let loaded = 0
       for (const key of allKeys) {
         const entry = await get<CacheEntry>(key, store)
         if (entry && Date.now() - entry.createdAt < this.config.ttlMs) {
-          memoryCache.set(key, entry)
+          this.memoryCache.set(key, entry)
           loaded++
         } else if (entry) {
           await del(key, store) // clean expired
@@ -286,13 +287,13 @@ export class ResponseCache {
   } {
     let totalSavedTokens = 0
     let totalHits = 0
-    for (const entry of memoryCache.values()) {
+    for (const entry of this.memoryCache.values()) {
       totalSavedTokens +=
         (entry.inputTokens + entry.outputTokens) * entry.accessCount
       totalHits += entry.accessCount
     }
     return {
-      entries: memoryCache.size,
+      entries: this.memoryCache.size,
       totalSavedTokens,
       totalHits,
     }
@@ -302,9 +303,9 @@ export class ResponseCache {
    * Clear all cached entries.
    */
   async clear(): Promise<void> {
-    memoryCache = new Map()
+    this.memoryCache.clear()
     try {
-      const store = getStore(this.config)
+      const store = this.getStore()
       if (!store) return
       const allKeys = await keys<string>(store)
       for (const key of allKeys) {
