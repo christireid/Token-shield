@@ -283,7 +283,7 @@ export class UserBudgetManager {
    * Clears any in-flight reservation for this user.
    */
   async recordSpend(userId: string, cost: number, model: string): Promise<void> {
-    if (cost < 0) return // Ignore negative costs
+    if (cost <= 0) return // Ignore zero or negative costs
     if (!userId) return // Ignore empty user IDs
 
     const record: UserSpendRecord = {
@@ -328,6 +328,7 @@ export class UserBudgetManager {
    * Call this when a request fails/is cancelled and recordSpend won't be called.
    */
   releaseInflight(userId: string, estimatedCost: number): void {
+    if (!userId || estimatedCost <= 0) return
     const inflight = this.inflightByUser.get(userId) ?? 0
     if (inflight > 0) {
       const remaining = Math.max(0, inflight - estimatedCost)
@@ -445,15 +446,30 @@ export class UserBudgetManager {
 
   /**
    * Load spend records from IndexedDB (for session restore).
+   * Merges with any records already in memory to avoid losing
+   * spend data from requests that arrived before hydration completed.
    */
   async hydrate(): Promise<number> {
     if (!this.idbStore) return 0
     try {
-      const records = await get<UserSpendRecord[]>("user-budget-records", this.idbStore)
-      if (records && records.length > 0) {
-        // Filter out expired records
+      const persisted = await get<UserSpendRecord[]>("user-budget-records", this.idbStore)
+      if (persisted && persisted.length > 0) {
         const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
-        this.records = records.filter((r) => r.timestamp > thirtyDaysAgo)
+        const validPersisted = persisted.filter((r) => r.timestamp > thirtyDaysAgo)
+
+        // Merge: keep any in-memory records that were added while hydration was in flight.
+        // Deduplicate by checking timestamp+userId+cost (same record won't have identical triple).
+        const existingKeys = new Set(
+          this.records.map((r) => `${r.userId}:${r.timestamp}:${r.cost}`)
+        )
+        const merged = [...this.records]
+        for (const r of validPersisted) {
+          const key = `${r.userId}:${r.timestamp}:${r.cost}`
+          if (!existingKeys.has(key)) {
+            merged.push(r)
+          }
+        }
+        this.records = merged
         this.notify()
         return this.records.length
       }
@@ -484,6 +500,7 @@ export class UserBudgetManager {
     }
     this.warningFired.delete(`${userId}-daily`)
     this.warningFired.delete(`${userId}-monthly`)
+    this._snapshotCache.delete(userId)
     this.notify()
   }
 
@@ -495,6 +512,7 @@ export class UserBudgetManager {
     this.warningFired.delete(`${userId}-daily`)
     this.warningFired.delete(`${userId}-monthly`)
     this.inflightByUser.delete(userId)
+    this._snapshotCache.delete(userId)
 
     if (this.idbStore) {
       try {
@@ -514,6 +532,7 @@ export class UserBudgetManager {
     this.records = []
     this.warningFired.clear()
     this.inflightByUser.clear()
+    this._snapshotCache.clear()
 
     if (this.idbStore) {
       try {

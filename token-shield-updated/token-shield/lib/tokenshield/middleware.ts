@@ -18,8 +18,8 @@
  *   const result = await streamText({ model, messages })
  *
  * The middleware pipeline:
- *   1. transformParams: guard -> cache lookup -> context trim -> route -> prefix optimize
- *   2. wrapGenerate: cache return OR call model + record usage in ledger
+ *   1. transformParams: breaker -> user budget -> guard -> cache lookup -> context trim -> route -> prefix optimize
+ *   2. wrapGenerate/wrapStream: cache return OR call model + record usage in ledger + record user budget spend
  */
 
 import { countTokens } from "gpt-tokenizer"

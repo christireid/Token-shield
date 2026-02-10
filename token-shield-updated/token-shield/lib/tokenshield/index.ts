@@ -5,7 +5,7 @@
  * Every module uses exact token counting (gpt-tokenizer BPE),
  * real provider pricing data, and deterministic algorithms.
  *
- * 11 Modules:
+ * 12 Modules:
  *  1. token-counter      - Exact BPE token counting (matches OpenAI's tiktoken)
  *  2. cost-estimator     - Real pricing from OpenAI, Anthropic, Google
  *  3. context-manager    - Token-budget-aware conversation history management
@@ -17,6 +17,7 @@
  *  9. tool-token-counter - Hidden tool/function definition token overhead + image tokens + output prediction
  * 10. stream-tracker     - Real-time output token counting during streaming (survives abort)
  * 11. circuit-breaker    - Session/hourly/daily spending limits with hard-stop protection
+ * 12. user-budget-manager - Per-user daily/monthly token budget assignment (Team tier)
  *
  * Plus:
  * - AI SDK Middleware   - Drop-in LanguageModelV3Middleware for Vercel AI SDK
