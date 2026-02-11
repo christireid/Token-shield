@@ -18,14 +18,17 @@ import React, {
   useEffect,
   useSyncExternalStore,
 } from "react"
-import { countExactTokens, countChatTokens, type ChatMessage } from "./token-counter"
-import { estimateCost, calculateSavings, type ModelPricing, MODEL_PRICING } from "./cost-estimator"
-import { fitToBudget, smartFit, type Message, type ContextBudget } from "./context-manager"
+import { countExactTokens, type ChatMessage } from "./token-counter"
+import { estimateCost, calculateSavings, type ModelPricing } from "./cost-estimator"
+import { smartFit, type Message, type ContextBudget } from "./context-manager"
 import { ResponseCache } from "./response-cache"
 import { CostLedger } from "./cost-ledger"
-import { analyzeComplexity, routeToModel, type RoutingDecision } from "./model-router"
+import { routeToModel, type RoutingDecision } from "./model-router"
 import { RequestGuard, type GuardConfig, type GuardResult } from "./request-guard"
 import { CostCircuitBreaker } from "./circuit-breaker"
+import { UserBudgetManager, type UserBudgetStatus } from "./user-budget-manager"
+import { shieldEvents, type TokenShieldEvents } from "./event-bus"
+import type { ProviderAdapter, ProviderHealth } from "./provider-adapter"
 
 // ---------------------
 // Session savings store
@@ -65,9 +68,11 @@ function createSavingsStore() {
       return () => listeners.delete(listener)
     },
     addEvent: (event: SavingsEvent) => {
+      const MAX_EVENTS = 500
+      const newEvents = [...state.events, event]
       state = {
         ...state,
-        events: [...state.events, event],
+        events: newEvents.length > MAX_EVENTS ? newEvents.slice(-MAX_EVENTS) : newEvents,
         totalTokensSaved: state.totalTokensSaved + event.tokensSaved,
         totalDollarsSaved: state.totalDollarsSaved + event.dollarsSaved,
         totalCacheHits:
@@ -253,7 +258,7 @@ export function useContextManager(
   messages: Message[],
   budget: ContextBudget
 ) {
-  const { savingsStore, defaultModelId } = useTokenShield()
+  const { defaultModelId } = useTokenShield()
 
   return useMemo(() => {
     const result = smartFit(messages, budget)
@@ -278,7 +283,7 @@ export function useContextManager(
     }
 
     return { ...result, savings: null }
-  }, [messages, budget, defaultModelId, savingsStore])
+  }, [messages, budget, defaultModelId])
 }
 
 /**
@@ -384,6 +389,11 @@ export function useRequestGuard() {
  * savings statistics, or, if a featureName is provided, a breakdown for
  * that specific feature. The return shape matches the ledger summary but
  * filters out only the relevant fields.
+ *
+ * Uses a version-based cache so that getSnapshot returns a referentially
+ * stable object when the underlying data hasn't changed. This prevents
+ * the infinite re-render loop that would occur if useSyncExternalStore
+ * received a new object reference on every call.
  */
 export function useCostLedger(featureName?: string) {
   const { ledger } = useTokenShield()
@@ -392,52 +402,45 @@ export function useCostLedger(featureName?: string) {
       "useCostLedger requires TokenShieldProvider with ledgerConfig; no ledger is available"
     )
   }
-  return useSyncExternalStore(
-    (listener) => ledger.subscribe(listener),
-    () => {
-      const summary = ledger.getSummary()
-      if (featureName) {
-        const data = summary.byFeature[featureName]
-        return {
-          totalSpent: data?.cost ?? 0,
-          totalSaved: data?.saved ?? 0,
-          totalCalls: data?.calls ?? 0,
-          savingsRate:
-            data && data.cost + data.saved > 0
-              ? data.saved / (data.cost + data.saved)
-              : 0,
-          breakdown: data,
-        }
-      }
-      return {
-        totalSpent: summary.totalSpent,
-        totalSaved: summary.totalSaved,
-        totalCalls: summary.totalCalls,
+
+  // Version counter incremented by subscribe callback when ledger changes
+  const versionRef = useRef(0)
+  // Cached snapshot: only recomputed when version changes
+  const cacheRef = useRef<{ version: number; snapshot: LedgerSnapshot }>({
+    version: -1,
+    snapshot: EMPTY_LEDGER_SNAPSHOT,
+  })
+
+  const subscribe = useCallback(
+    (listener: () => void) =>
+      ledger.subscribe(() => {
+        versionRef.current++
+        listener()
+      }),
+    [ledger]
+  )
+
+  const getSnapshot = useCallback((): LedgerSnapshot => {
+    if (cacheRef.current.version === versionRef.current) {
+      return cacheRef.current.snapshot
+    }
+    const summary = ledger.getSummary()
+    let snapshot: LedgerSnapshot
+
+    if (featureName) {
+      const data = summary.byFeature[featureName]
+      snapshot = {
+        totalSpent: data?.cost ?? 0,
+        totalSaved: data?.saved ?? 0,
+        totalCalls: data?.calls ?? 0,
         savingsRate:
-          summary.totalSpent + summary.totalSaved > 0
-            ? summary.totalSaved /
-              (summary.totalSpent + summary.totalSaved)
+          data && data.cost + data.saved > 0
+            ? data.saved / (data.cost + data.saved)
             : 0,
-        breakdown: summary.byFeature,
+        breakdown: data,
       }
-    },
-    () => {
-      // For server rendering, return same as client snapshot
-      const summary = ledger.getSummary()
-      if (featureName) {
-        const data = summary.byFeature[featureName]
-        return {
-          totalSpent: data?.cost ?? 0,
-          totalSaved: data?.saved ?? 0,
-          totalCalls: data?.calls ?? 0,
-          savingsRate:
-            data && data.cost + data.saved > 0
-              ? data.saved / (data.cost + data.saved)
-              : 0,
-          breakdown: data,
-        }
-      }
-      return {
+    } else {
+      snapshot = {
         totalSpent: summary.totalSpent,
         totalSaved: summary.totalSaved,
         totalCalls: summary.totalCalls,
@@ -449,7 +452,32 @@ export function useCostLedger(featureName?: string) {
         breakdown: summary.byFeature,
       }
     }
-  )
+
+    cacheRef.current = { version: versionRef.current, snapshot }
+    return snapshot
+  }, [ledger, featureName])
+
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
+}
+
+interface LedgerSnapshot {
+  totalSpent: number
+  totalSaved: number
+  totalCalls: number
+  savingsRate: number
+  breakdown: unknown
+}
+
+const EMPTY_LEDGER_SNAPSHOT: LedgerSnapshot = {
+  totalSpent: 0,
+  totalSaved: 0,
+  totalCalls: 0,
+  savingsRate: 0,
+  breakdown: undefined,
+}
+
+function getServerSnapshot(): LedgerSnapshot {
+  return EMPTY_LEDGER_SNAPSHOT
 }
 
 /**
@@ -468,13 +496,16 @@ export function useModelRouter(prompt: string, options?: {
 }) {
   const { defaultModelId, savingsStore } = useTokenShield()
   const model = options?.defaultModel ?? defaultModelId
+  // Derive a stable key from the providers array so callers don't need to memoize it
+  const providersKey = options?.allowedProviders?.join(",") ?? ""
 
   const routing = useMemo((): RoutingDecision | null => {
     if (!prompt || prompt.length === 0) return null
+    const providers = providersKey ? providersKey.split(",") as ModelPricing["provider"][] : undefined
     return routeToModel(prompt, model, {
-      allowedProviders: options?.allowedProviders,
+      allowedProviders: providers,
     })
-  }, [prompt, model, options?.allowedProviders])
+  }, [prompt, model, providersKey])
 
   const confirmRouting = useCallback(() => {
     if (routing && routing.savingsVsDefault > 0) {
@@ -620,4 +651,341 @@ export function useBudgetAlert(breaker?: CostCircuitBreaker): {
   }, [breaker])
 
   return budgetState
+}
+
+/**
+ * Track per-user budget status in real time.
+ *
+ * Subscribes to a UserBudgetManager instance and returns the current
+ * budget state for the given userId. Updates reactively when spending
+ * changes.
+ *
+ * Usage:
+ *   const budgetManager = new UserBudgetManager({ ... })
+ *   const { remaining, percentUsed, isOverBudget } = useUserBudget(budgetManager, 'user-123')
+ */
+export function useUserBudget(
+  manager: UserBudgetManager,
+  userId: string
+): UserBudgetStatus {
+  const getSnapshot = useCallback(
+    () => manager.getStatus(userId),
+    [manager, userId]
+  )
+
+  const subscribe = useCallback(
+    (listener: () => void) => manager.subscribe(listener),
+    [manager]
+  )
+
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
+// ---------------------
+// Event Log Hook
+// ---------------------
+
+export interface EventLogEntry {
+  id: number
+  timestamp: number
+  type: string
+  data: Record<string, unknown>
+}
+
+let _eventIdCounter = 0
+
+/**
+ * Subscribe to the event bus and maintain a rolling log of recent events.
+ * Events are ordered most-recent-first and capped at maxEntries to prevent
+ * unbounded memory growth.
+ */
+export function useEventLog(maxEntries = 50): EventLogEntry[] {
+  const [log, setLog] = useState<EventLogEntry[]>([])
+
+  useEffect(() => {
+    const allEventTypes: Array<keyof TokenShieldEvents> = [
+      "request:blocked",
+      "request:allowed",
+      "cache:hit",
+      "cache:miss",
+      "cache:store",
+      "context:trimmed",
+      "router:downgraded",
+      "ledger:entry",
+      "breaker:warning",
+      "breaker:tripped",
+      "userBudget:warning",
+      "userBudget:exceeded",
+      "userBudget:spend",
+      "stream:chunk",
+      "stream:abort",
+      "stream:complete",
+    ]
+
+    const handlers: Array<() => void> = []
+
+    for (const eventType of allEventTypes) {
+      const handler = (data: Record<string, unknown>) => {
+        const entry: EventLogEntry = {
+          id: ++_eventIdCounter,
+          timestamp: Date.now(),
+          type: eventType,
+          data: data as Record<string, unknown>,
+        }
+        setLog((prev) => {
+          const next = [entry, ...prev]
+          return next.length > maxEntries ? next.slice(0, maxEntries) : next
+        })
+      }
+      shieldEvents.on(eventType, handler as any)
+      handlers.push(() => shieldEvents.off(eventType, handler as any))
+    }
+
+    return () => {
+      for (const unsub of handlers) unsub()
+    }
+  }, [maxEntries])
+
+  return log
+}
+
+// ---------------------
+// Provider Health Hook
+// ---------------------
+
+/**
+ * Subscribe to provider health data. Polls the adapter every 2 seconds
+ * (matching the useBudgetAlert pattern). If no adapter is provided,
+ * returns an empty array.
+ */
+export function useProviderHealth(adapter?: ProviderAdapter): ProviderHealth[] {
+  const [health, setHealth] = useState<ProviderHealth[]>([])
+
+  useEffect(() => {
+    if (!adapter) {
+      setHealth([])
+      return
+    }
+
+    function poll() {
+      setHealth(adapter!.getHealth())
+    }
+
+    poll()
+    const interval = setInterval(poll, 2000)
+    return () => clearInterval(interval)
+  }, [adapter])
+
+  return health
+}
+
+// ---------------------
+// Pipeline Metrics Hook
+// ---------------------
+
+export interface PipelineMetrics {
+  totalRequests: number
+  avgLatencyMs: number
+  cacheHitRate: number
+  blockedRate: number
+  lastEvent: EventLogEntry | null
+}
+
+const EMPTY_PIPELINE_METRICS: PipelineMetrics = {
+  totalRequests: 0,
+  avgLatencyMs: 0,
+  cacheHitRate: 0,
+  blockedRate: 0,
+  lastEvent: null,
+}
+
+/**
+ * Track pipeline stage timing from the event bus.
+ * Subscribes to cache:hit, cache:miss, request:blocked, request:allowed,
+ * and ledger:entry events to maintain running statistics.
+ */
+export function usePipelineMetrics(): PipelineMetrics {
+  const [metrics, setMetrics] = useState<PipelineMetrics>(EMPTY_PIPELINE_METRICS)
+
+  // Use refs for running counters so we don't close over stale state
+  const countersRef = useRef({
+    totalRequests: 0,
+    totalCacheHits: 0,
+    totalBlocked: 0,
+    cumulativeLatencyMs: 0,
+    latencySamples: 0,
+  })
+
+  const lastEventRef = useRef<EventLogEntry | null>(null)
+
+  useEffect(() => {
+    const trackedEvents: Array<keyof TokenShieldEvents> = [
+      "cache:hit",
+      "cache:miss",
+      "request:blocked",
+      "request:allowed",
+      "ledger:entry",
+    ]
+
+    function updateMetrics() {
+      const c = countersRef.current
+      setMetrics({
+        totalRequests: c.totalRequests,
+        avgLatencyMs: c.latencySamples > 0 ? Math.round(c.cumulativeLatencyMs / c.latencySamples) : 0,
+        cacheHitRate: c.totalRequests > 0 ? c.totalCacheHits / c.totalRequests : 0,
+        blockedRate: c.totalRequests > 0 ? c.totalBlocked / c.totalRequests : 0,
+        lastEvent: lastEventRef.current,
+      })
+    }
+
+    const handlers: Array<() => void> = []
+
+    for (const eventType of trackedEvents) {
+      const handler = (data: Record<string, unknown>) => {
+        const c = countersRef.current
+
+        const entry: EventLogEntry = {
+          id: ++_eventIdCounter,
+          timestamp: Date.now(),
+          type: eventType,
+          data: data as Record<string, unknown>,
+        }
+        lastEventRef.current = entry
+
+        switch (eventType) {
+          case "cache:hit":
+            c.totalRequests++
+            c.totalCacheHits++
+            break
+          case "cache:miss":
+            c.totalRequests++
+            break
+          case "request:blocked":
+            c.totalRequests++
+            c.totalBlocked++
+            break
+          case "request:allowed":
+            c.totalRequests++
+            break
+          case "ledger:entry": {
+            // Use cost as a proxy for latency if latencyMs is present in data
+            const latency = typeof data.latencyMs === "number" ? data.latencyMs : 0
+            if (latency > 0) {
+              c.cumulativeLatencyMs += latency
+              c.latencySamples++
+            }
+            break
+          }
+        }
+
+        updateMetrics()
+      }
+      shieldEvents.on(eventType, handler as any)
+      handlers.push(() => shieldEvents.off(eventType, handler as any))
+    }
+
+    return () => {
+      for (const unsub of handlers) unsub()
+    }
+  }, [])
+
+  return metrics
+}
+
+// -------------------------------------------------------
+// High-level useShieldedCall hook
+// -------------------------------------------------------
+
+export interface ShieldedCallMetrics {
+  /** Where the response came from */
+  source: "cache" | "api" | "none"
+  /** Similarity/resonance score (0-1, only for cache hits) */
+  confidence: number
+  /** Response latency in ms */
+  latencyMs: number
+}
+
+/**
+ * High-level hook that wraps any API call with the full TokenShield pipeline.
+ * Checks the response cache first (bigram or holographic), calls the API on miss,
+ * and teaches the cache on new responses. Exposes source/confidence/latency metrics.
+ *
+ * @example
+ * ```tsx
+ * const { call, metrics, isReady } = useShieldedCall()
+ *
+ * const response = await call(
+ *   "Explain React hooks",
+ *   async (prompt) => {
+ *     const res = await fetch("/api/chat", { method: "POST", body: JSON.stringify({ prompt }) })
+ *     const data = await res.json()
+ *     return { response: data.text, inputTokens: data.usage.input, outputTokens: data.usage.output }
+ *   },
+ *   "gpt-4o"
+ * )
+ * ```
+ */
+export function useShieldedCall() {
+  const { cache, savingsStore, defaultModelId } = useTokenShield()
+  const [metrics, setMetrics] = useState<ShieldedCallMetrics>({
+    source: "none",
+    confidence: 0,
+    latencyMs: 0,
+  })
+
+  const call = useCallback(
+    async (
+      prompt: string,
+      apiFn: (prompt: string) => Promise<{ response: string; inputTokens: number; outputTokens: number }>,
+      model?: string
+    ): Promise<string> => {
+      const modelId = model ?? defaultModelId
+      const start = performance.now()
+
+      // Check cache first
+      const cacheResult = await cache.lookup(prompt, modelId)
+      if (cacheResult.hit && cacheResult.entry) {
+        const latencyMs = performance.now() - start
+        setMetrics({
+          source: "cache",
+          confidence: cacheResult.similarity ?? 1,
+          latencyMs,
+        })
+
+        const cost = estimateCost(
+          modelId,
+          cacheResult.entry.inputTokens,
+          cacheResult.entry.outputTokens
+        )
+        savingsStore.addEvent({
+          timestamp: Date.now(),
+          type: "cache_hit",
+          tokensSaved: cacheResult.entry.inputTokens + cacheResult.entry.outputTokens,
+          dollarsSaved: cost.totalCost,
+          details: `Shield ${cacheResult.matchType} (${((cacheResult.similarity ?? 1) * 100).toFixed(0)}% confidence)`,
+        })
+
+        return cacheResult.entry.response
+      }
+
+      // Cache miss — call the API
+      savingsStore.incrementRequests()
+      const result = await apiFn(prompt)
+      const latencyMs = performance.now() - start
+
+      // Teach the cache
+      await cache.store(prompt, result.response, modelId, result.inputTokens, result.outputTokens)
+
+      setMetrics({
+        source: "api",
+        confidence: 0,
+        latencyMs,
+      })
+
+      return result.response
+    },
+    [cache, savingsStore, defaultModelId]
+  )
+
+  return { call, metrics, isReady: true }
 }

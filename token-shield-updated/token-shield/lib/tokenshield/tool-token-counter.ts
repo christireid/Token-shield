@@ -141,11 +141,23 @@ const PER_TOOL_OVERHEAD = 4 // approximate: type keyword, =, =>, any
 
 /**
  * Count the exact tokens that tool/function definitions add to your prompt.
- * These tokens are invisible in messages but appear in usage.prompt_tokens.
  *
- * @param tools - Array of tool definitions (OpenAI format)
- * @param inputPricePerMillion - Input token price for cost calculation
- * @returns Detailed token breakdown per tool and total cost
+ * These tokens are invisible in messages but appear in `usage.prompt_tokens`.
+ * Replicates OpenAI's internal pseudo-TypeScript namespace serialization to
+ * count tokens accurately, including per-tool and namespace structural overhead.
+ *
+ * @param tools - Array of tool definitions in OpenAI function-calling format
+ * @param inputPricePerMillion - Input token price per million for cost calculation (defaults to 0.15)
+ * @returns A {@link ToolTokenResult} with total tokens, per-tool breakdown, overhead, and cost helpers
+ * @example
+ * ```ts
+ * const result = countToolTokens([{
+ *   type: "function",
+ *   function: { name: "get_weather", description: "Get current weather", parameters: { type: "object", properties: { city: { type: "string" } } } }
+ * }])
+ * // result.totalTokens === 38
+ * // result.costPerRequest === 0.0000057
+ * ```
  */
 export function countToolTokens(
   tools: ToolDefinition[],
@@ -189,12 +201,20 @@ export function countToolTokens(
 
 /**
  * Optimize tool definitions to use fewer tokens.
- * Strategies:
- * - Shorten descriptions (they're the biggest token sink)
- * - Remove optional parameter descriptions that are self-evident
- * - Inline enum values more efficiently
  *
- * Returns the optimized tools and token savings.
+ * Applies token-reduction strategies: truncating long descriptions to 100
+ * characters, removing parameter descriptions that merely repeat the parameter
+ * name, and inlining enum values more efficiently. Does not alter tool behavior.
+ *
+ * @param tools - Array of tool definitions in OpenAI function-calling format
+ * @returns An object with the optimized tools array, original/optimized token counts, tokens saved, and human-readable suggestions
+ * @example
+ * ```ts
+ * const result = optimizeToolDefinitions(myTools)
+ * // result.savedTokens === 120
+ * // result.suggestions[0] === "get_weather: description truncated from 200 to 100 chars"
+ * // result.optimized — use these tool defs to save tokens
+ * ```
  */
 export function optimizeToolDefinitions(
   tools: ToolDefinition[]
@@ -288,19 +308,29 @@ export interface ImageTokenResult {
 }
 
 /**
- * Count tokens for an image input using OpenAI's tile-based formula.
+ * Count the tokens an image input will cost using OpenAI's tile-based formula.
  *
  * OpenAI's vision pricing:
  * - Base: 85 tokens per image
  * - Each 512x512 tile: 170 tokens
- * - Images are first scaled to fit in 2048x2048
- * - Then divided into 512x512 tiles (rounded up)
+ * - Images are first scaled to fit in 2048x2048, then shortest side scaled to 768px
+ * - Tile count = ceil(w/512) * ceil(h/512)
  *
- * "low" detail: fixed 85 tokens regardless of size
- * "high" detail: 85 + 170 * tiles
- * "auto": provider decides (assume high for cost safety)
+ * "low" detail: fixed 85 tokens regardless of size.
+ * "high" detail: 85 + 170 * tiles.
+ * "auto": assumes high detail for cost safety.
  *
- * Source: OpenAI API documentation + confirmed by oranlooney.com
+ * @param width - Image width in pixels
+ * @param height - Image height in pixels
+ * @param detail - Vision detail level: "low", "high", or "auto" (defaults to "auto")
+ * @returns An {@link ImageTokenResult} with token count, tile count, resize flag, and optional size recommendation
+ * @example
+ * ```ts
+ * const result = countImageTokens(1920, 1080, "high")
+ * // result.tokens === 765
+ * // result.tiles === 4
+ * // result.recommendation?.savedTokens — tokens saved by resizing
+ * ```
  */
 export function countImageTokens(
   width: number,
@@ -464,16 +494,29 @@ const TASK_PATTERNS: {
 ]
 
 /**
- * Predict the output token count for a given prompt.
+ * Predict the number of output tokens a model will generate for a given prompt.
  *
- * Uses task-type detection and input length correlation to estimate
- * how many output tokens the model will generate. This enables:
- * - More accurate pre-call cost estimates
- * - Smarter max_tokens values (not just 4096 for everything)
- * - Better request guard budgeting
+ * Uses task-type detection (factual Q&A, classification, code generation, etc.)
+ * and input length correlation to estimate output length. Enables more accurate
+ * pre-call cost estimates and smarter `max_tokens` values instead of blanket 4096.
  *
  * Based on research from ACL 2025 "Predicting Remaining Output Length"
  * and empirical data from the glukhov.org cost optimization guide.
+ *
+ * @param prompt - The user prompt to analyze
+ * @param options - Optional prediction tuning parameters
+ * @param options.safetyMargin - Multiplier applied to the predicted token count for the suggested max_tokens (defaults to 1.5)
+ * @param options.minMaxTokens - Hard minimum for the suggested max_tokens value (defaults to 50)
+ * @param options.maxMaxTokens - Hard maximum for the suggested max_tokens value (defaults to 4096)
+ * @returns An {@link OutputPrediction} with predicted tokens, confidence level, task type, suggested max_tokens, and savings vs a blanket 4096
+ * @example
+ * ```ts
+ * const pred = predictOutputTokens("What is the capital of France?")
+ * // pred.predictedTokens === 30
+ * // pred.taskType === "factual-qa"
+ * // pred.suggestedMaxTokens === 50
+ * // pred.savingsVsBlanket === 4046
+ * ```
  */
 export function predictOutputTokens(
   prompt: string,

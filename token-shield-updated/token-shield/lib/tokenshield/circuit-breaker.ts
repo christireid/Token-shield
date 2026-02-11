@@ -135,6 +135,9 @@ const DEFAULT_CONFIG: BreakerConfig = {
   storageKey: "tokenshield-breaker",
 }
 
+/** Maximum spend records kept in memory (prevents unbounded growth in high-throughput scenarios) */
+const MAX_BREAKER_RECORDS = 50_000
+
 export class CostCircuitBreaker {
   private config: BreakerConfig
   private records: SpendRecord[] = []
@@ -163,6 +166,19 @@ export class CostCircuitBreaker {
 
     // Check each limit
     const limits = this.config.limits
+
+    // Auto-reset time-window warnings when spend drops below 80% threshold
+    // (session warnings never auto-reset — they clear on explicit reset() only)
+    if (limits.perHour != null && status.spend.lastHour < limits.perHour * 0.8) {
+      this.warningFired.delete("hour-warning")
+    }
+    if (limits.perDay != null && status.spend.lastDay < limits.perDay * 0.8) {
+      this.warningFired.delete("day-warning")
+    }
+    if (limits.perMonth != null && status.spend.lastMonth < limits.perMonth * 0.8) {
+      this.warningFired.delete("month-warning")
+    }
+
     const checks: { type: BreakerEvent["limitType"]; current: number; limit: number }[] = []
 
     if (limits.perSession !== undefined) {
@@ -189,6 +205,7 @@ export class CostCircuitBreaker {
 
     for (const c of checks) {
       const projectedSpend = c.current + estimatedCost
+      const pctUsed = c.limit > 0 ? (projectedSpend / c.limit) * 100 : 999
 
       // Fire warning at 80%
       const warningKey = `${c.type}-warning`
@@ -198,7 +215,7 @@ export class CostCircuitBreaker {
           limitType: c.type,
           currentSpend: c.current,
           limit: c.limit,
-          percentUsed: (projectedSpend / c.limit) * 100,
+          percentUsed: pctUsed,
           action: "warn",
           timestamp: Date.now(),
         })
@@ -211,7 +228,7 @@ export class CostCircuitBreaker {
           limitType: c.type,
           currentSpend: c.current,
           limit: c.limit,
-          percentUsed: (projectedSpend / c.limit) * 100,
+          percentUsed: pctUsed,
           action: this.config.action,
           timestamp: Date.now(),
         }
@@ -231,7 +248,7 @@ export class CostCircuitBreaker {
           // Allow but at reduced rate (caller handles throttling)
           return {
             allowed: true,
-            reason: `Throttled: ${c.type} limit at ${((projectedSpend / c.limit) * 100).toFixed(0)}%`,
+            reason: `Throttled: ${c.type} limit at ${pctUsed.toFixed(0)}%`,
             status: this.getStatus(),
           }
         }
@@ -253,9 +270,12 @@ export class CostCircuitBreaker {
       model,
     })
 
-    // Clean up old records (keep last 30 days)
+    // Clean up old records (keep last 30 days) + enforce hard cap
     const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
     this.records = this.records.filter((r) => r.timestamp > thirtyDaysAgo)
+    if (this.records.length > MAX_BREAKER_RECORDS) {
+      this.records = this.records.slice(-MAX_BREAKER_RECORDS)
+    }
 
     this.save()
   }
@@ -284,42 +304,42 @@ export class CostCircuitBreaker {
     const limits = this.config.limits
     const trippedLimits: BreakerEvent[] = []
 
-    if (limits.perSession && sessionSpend >= limits.perSession) {
+    if (limits.perSession != null && sessionSpend >= limits.perSession) {
       trippedLimits.push({
         limitType: "session",
         currentSpend: sessionSpend,
         limit: limits.perSession,
-        percentUsed: (sessionSpend / limits.perSession) * 100,
+        percentUsed: limits.perSession > 0 ? (sessionSpend / limits.perSession) * 100 : 999,
         action: this.config.action,
         timestamp: now,
       })
     }
-    if (limits.perHour && hourSpend >= limits.perHour) {
+    if (limits.perHour != null && hourSpend >= limits.perHour) {
       trippedLimits.push({
         limitType: "hour",
         currentSpend: hourSpend,
         limit: limits.perHour,
-        percentUsed: (hourSpend / limits.perHour) * 100,
+        percentUsed: limits.perHour > 0 ? (hourSpend / limits.perHour) * 100 : 999,
         action: this.config.action,
         timestamp: now,
       })
     }
-    if (limits.perDay && daySpend >= limits.perDay) {
+    if (limits.perDay != null && daySpend >= limits.perDay) {
       trippedLimits.push({
         limitType: "day",
         currentSpend: daySpend,
         limit: limits.perDay,
-        percentUsed: (daySpend / limits.perDay) * 100,
+        percentUsed: limits.perDay > 0 ? (daySpend / limits.perDay) * 100 : 999,
         action: this.config.action,
         timestamp: now,
       })
     }
-    if (limits.perMonth && monthSpend >= limits.perMonth) {
+    if (limits.perMonth != null && monthSpend >= limits.perMonth) {
       trippedLimits.push({
         limitType: "month",
         currentSpend: monthSpend,
         limit: limits.perMonth,
-        percentUsed: (monthSpend / limits.perMonth) * 100,
+        percentUsed: limits.perMonth > 0 ? (monthSpend / limits.perMonth) * 100 : 999,
         action: this.config.action,
         timestamp: now,
       })

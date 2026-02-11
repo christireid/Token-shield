@@ -105,12 +105,16 @@ export class RequestGuard {
   /**
    * Check if a request should proceed. Returns a gate decision
    * with the reason if blocked.
+   *
+   * @param modelId - Optional model ID for cost estimation. Falls back to
+   *   config.modelId when not provided (backward-compatible).
    */
-  check(prompt: string, expectedOutputTokens = 500): GuardResult {
+  check(prompt: string, expectedOutputTokens = 500, modelId?: string): GuardResult {
     const now = Date.now()
     const inputTokens = countTokens(prompt)
+    const effectiveModel = modelId ?? this.config.modelId
     const cost = estimateCost(
-      this.config.modelId,
+      effectiveModel,
       inputTokens,
       expectedOutputTokens
     )
@@ -233,6 +237,10 @@ export class RequestGuard {
     // Allowed - record this request
     this.lastRequestTime = now
     this.requestTimestamps.push(now)
+    // Hard cap: keep only last 200 timestamps to prevent growth during bursts
+    if (this.requestTimestamps.length > 200) {
+      this.requestTimestamps = this.requestTimestamps.slice(-200)
+    }
     this.blockedCount = 0
 
     // Record this prompt for time-based deduplication
@@ -273,40 +281,68 @@ export class RequestGuard {
       startedAt: Date.now(),
     })
 
+    // Evict stale in-flight entries older than 5 minutes (never completed)
+    if (this.inFlight.size > 50) {
+      const staleThreshold = Date.now() - 300_000
+      for (const [key, req] of this.inFlight) {
+        if (req.startedAt < staleThreshold) {
+          req.controller.abort()
+          this.inFlight.delete(key)
+        }
+      }
+    }
+
     return controller
   }
 
   /**
    * Mark a request as completed and log its cost.
+   *
+   * @param modelId - Optional model ID for cost calculation. Falls back to
+   *   config.modelId when not provided.
    */
   completeRequest(
     prompt: string,
     actualInputTokens: number,
-    actualOutputTokens: number
+    actualOutputTokens: number,
+    modelId?: string
   ): void {
     const normalized = prompt.trim().toLowerCase()
     this.inFlight.delete(normalized)
 
     const cost = estimateCost(
-      this.config.modelId,
+      modelId ?? this.config.modelId,
       actualInputTokens,
       actualOutputTokens
     )
     this.costLog.push({ timestamp: Date.now(), cost: cost.totalCost })
+    // Hard cap: keep only last 500 entries to prevent growth in high-throughput
+    if (this.costLog.length > 500) {
+      this.costLog = this.costLog.slice(-500)
+    }
   }
 
   /**
    * Create a debounced version of a function that only calls through
    * after the debounce period. Previous calls are aborted.
+   *
+   * When a new call supersedes a pending one, the previous promise
+   * resolves with null immediately (it does not hang).
    */
   debounce<T>(
     fn: (prompt: string, signal: AbortSignal) => Promise<T>
   ): (prompt: string) => Promise<T | null> {
     let pendingController: AbortController | null = null
+    let pendingResolve: ((value: T | null) => void) | null = null
 
     return (prompt: string) => {
-      return new Promise((resolve) => {
-        // Cancel previous
+      return new Promise<T | null>((resolve, reject) => {
+        // Resolve the superseded call with null so its promise doesn't hang
+        if (pendingResolve) {
+          pendingResolve(null)
+          pendingResolve = null
+        }
+        // Cancel previous in-flight request
         if (pendingController) {
           pendingController.abort()
         }
@@ -314,7 +350,11 @@ export class RequestGuard {
           clearTimeout(this.debounceTimer)
         }
 
+        pendingResolve = resolve
+
         this.debounceTimer = setTimeout(async () => {
+          pendingResolve = null
+
           const guardResult = this.check(prompt)
           if (!guardResult.allowed) {
             resolve(null)
@@ -329,7 +369,7 @@ export class RequestGuard {
             if (err instanceof DOMException && err.name === "AbortError") {
               resolve(null)
             } else {
-              throw err
+              reject(err)
             }
           }
         }, this.config.debounceMs)

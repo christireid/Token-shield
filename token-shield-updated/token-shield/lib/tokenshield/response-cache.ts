@@ -12,6 +12,7 @@
  */
 
 import { get, set, del, keys, createStore } from "idb-keyval"
+import { NeuroElasticEngine, type NeuroElasticConfig } from "./neuro-elastic"
 
 export interface CacheEntry {
   key: string
@@ -35,6 +36,19 @@ export interface CacheConfig {
   similarityThreshold: number
   /** IndexedDB store name */
   storeName: string
+  /**
+   * Similarity encoding strategy:
+   * - "bigram" (default): Fast bigram Dice coefficient — good for near-duplicates
+   * - "holographic": Trigram-based holographic encoding with semantic seeding — better for paraphrases
+   */
+  encodingStrategy?: "bigram" | "holographic"
+  /**
+   * Semantic seeds for holographic encoding. Maps domain terms to seed angles.
+   * Terms sharing the same seed value will be encoded closer together.
+   * Only used when encodingStrategy is "holographic".
+   * @example { cost: 10, price: 10, billing: 10, budget: 10 }
+   */
+  semanticSeeds?: Record<string, number>
 }
 
 const DEFAULT_CONFIG: CacheConfig = {
@@ -44,17 +58,6 @@ const DEFAULT_CONFIG: CacheConfig = {
   storeName: "tokenshield-cache",
 }
 
-// In-memory map for fast lookups without hitting IDB every time
-let memoryCache = new Map<string, CacheEntry>()
-let idbStore: ReturnType<typeof createStore> | null = null
-
-function getStore(config: CacheConfig) {
-  if (typeof window === "undefined") return null
-  if (!idbStore) {
-    idbStore = createStore(config.storeName, "responses")
-  }
-  return idbStore
-}
 
 /**
  * Normalize text for comparison: lowercase, collapse whitespace,
@@ -91,7 +94,7 @@ export function textSimilarity(a: string, b: string): number {
     bigramsB.add(bNorm.slice(i, i + 2))
   }
 
-  if (bigramsA.size === 0 && bigramsB.size === 0) return 1
+  if (bigramsA.size === 0 && bigramsB.size === 0) return aNorm.length === bNorm.length ? 1 : 0
   if (bigramsA.size === 0 || bigramsB.size === 0) return 0
 
   let intersection = 0
@@ -117,9 +120,34 @@ function hashKey(text: string): string {
 
 export class ResponseCache {
   private config: CacheConfig
+  /** Per-instance in-memory map for fast lookups without hitting IDB every time */
+  private memoryCache = new Map<string, CacheEntry>()
+  /** Per-instance IDB store (lazy-initialized on first access) */
+  private idbStore: ReturnType<typeof createStore> | null = null
+  /** Optional holographic encoding engine for enhanced fuzzy matching */
+  private holoEngine: NeuroElasticEngine | null = null
 
   constructor(config: Partial<CacheConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
+
+    // Initialize holographic engine if strategy is set
+    if (this.config.encodingStrategy === "holographic") {
+      this.holoEngine = new NeuroElasticEngine({
+        threshold: this.config.similarityThreshold,
+        seeds: this.config.semanticSeeds,
+        maxMemories: this.config.maxEntries,
+        enableInhibition: true,
+        persist: false, // Persistence handled by ResponseCache's own IDB
+      })
+    }
+  }
+
+  private getStore(): ReturnType<typeof createStore> | null {
+    if (typeof window === "undefined") return null
+    if (!this.idbStore) {
+      this.idbStore = createStore(this.config.storeName, "responses")
+    }
+    return this.idbStore
   }
 
   /**
@@ -137,7 +165,7 @@ export class ResponseCache {
     const key = hashKey(prompt)
 
     // 1. Exact match from memory
-    const memHit = memoryCache.get(key)
+    const memHit = this.memoryCache.get(key)
     if (memHit && (!model || memHit.model === model)) {
       if (Date.now() - memHit.createdAt < this.config.ttlMs) {
         memHit.accessCount++
@@ -145,19 +173,19 @@ export class ResponseCache {
         return { hit: true, entry: memHit, matchType: "exact", similarity: 1 }
       }
       // Expired
-      memoryCache.delete(key)
+      this.memoryCache.delete(key)
     }
 
     // 2. Exact match from IDB
     try {
-      const store = getStore(this.config)
+      const store = this.getStore()
       if (!store) throw new Error("no idb")
       const idbHit = await get<CacheEntry>(key, store)
       if (idbHit && (!model || idbHit.model === model)) {
         if (Date.now() - idbHit.createdAt < this.config.ttlMs) {
           idbHit.accessCount++
           idbHit.lastAccessed = Date.now()
-          memoryCache.set(key, idbHit)
+          this.memoryCache.set(key, idbHit)
           await set(key, idbHit, store)
           return {
             hit: true,
@@ -174,10 +202,33 @@ export class ResponseCache {
 
     // 3. Fuzzy match against memory cache
     if (this.config.similarityThreshold < 1) {
+      // 3a. Holographic encoding (enhanced paraphrase detection)
+      if (this.holoEngine) {
+        const holoResult = this.holoEngine.find(prompt, model)
+        if (holoResult) {
+          // Find the corresponding cache entry by prompt, with TTL check
+          for (const entry of this.memoryCache.values()) {
+            if (entry.prompt === holoResult.prompt && (!model || entry.model === model)) {
+              // TTL check — skip expired entries
+              if (Date.now() - entry.createdAt >= this.config.ttlMs) continue
+              entry.accessCount++
+              entry.lastAccessed = Date.now()
+              return {
+                hit: true,
+                entry,
+                matchType: "fuzzy",
+                similarity: holoResult.score,
+              }
+            }
+          }
+        }
+      }
+
+      // 3b. Bigram fallback (original algorithm)
       let bestMatch: CacheEntry | undefined
       let bestSimilarity = 0
 
-      for (const entry of memoryCache.values()) {
+      for (const entry of this.memoryCache.values()) {
         if (model && entry.model !== model) continue
         if (Date.now() - entry.createdAt >= this.config.ttlMs) continue
 
@@ -227,24 +278,36 @@ export class ResponseCache {
       lastAccessed: Date.now(),
     }
 
-    memoryCache.set(key, entry)
+    this.memoryCache.set(key, entry)
+
+    // Teach the holographic engine about this entry
+    if (this.holoEngine) {
+      this.holoEngine.learn(prompt, response, model, inputTokens, outputTokens).catch(() => {})
+    }
 
     // Evict LRU if over capacity
-    if (memoryCache.size > this.config.maxEntries) {
+    if (this.memoryCache.size > this.config.maxEntries) {
       let oldestKey = ""
       let oldestAccess = Infinity
-      for (const [k, v] of memoryCache) {
+      for (const [k, v] of this.memoryCache) {
         if (v.lastAccessed < oldestAccess) {
           oldestAccess = v.lastAccessed
           oldestKey = k
         }
       }
-      if (oldestKey) memoryCache.delete(oldestKey)
+      if (oldestKey) {
+        this.memoryCache.delete(oldestKey)
+        // Evict from IDB to keep stores coherent
+        try {
+          const store = this.getStore()
+          if (store) del(oldestKey, store).catch(() => {})
+        } catch { /* IDB not available */ }
+      }
     }
 
     // Persist to IDB
     try {
-      const store = getStore(this.config)
+      const store = this.getStore()
       if (!store) throw new Error("no idb")
       await set(key, entry, store)
     } catch {
@@ -257,14 +320,18 @@ export class ResponseCache {
    */
   async hydrate(): Promise<number> {
     try {
-      const store = getStore(this.config)
+      const store = this.getStore()
       if (!store) return 0
       const allKeys = await keys<string>(store)
       let loaded = 0
       for (const key of allKeys) {
         const entry = await get<CacheEntry>(key, store)
         if (entry && Date.now() - entry.createdAt < this.config.ttlMs) {
-          memoryCache.set(key, entry)
+          this.memoryCache.set(key, entry)
+          // Populate holographic engine so fuzzy matching works after reload
+          if (this.holoEngine) {
+            this.holoEngine.learn(entry.prompt, entry.response, entry.model, entry.inputTokens, entry.outputTokens).catch(() => {})
+          }
           loaded++
         } else if (entry) {
           await del(key, store) // clean expired
@@ -286,13 +353,13 @@ export class ResponseCache {
   } {
     let totalSavedTokens = 0
     let totalHits = 0
-    for (const entry of memoryCache.values()) {
+    for (const entry of this.memoryCache.values()) {
       totalSavedTokens +=
         (entry.inputTokens + entry.outputTokens) * entry.accessCount
       totalHits += entry.accessCount
     }
     return {
-      entries: memoryCache.size,
+      entries: this.memoryCache.size,
       totalSavedTokens,
       totalHits,
     }
@@ -302,9 +369,12 @@ export class ResponseCache {
    * Clear all cached entries.
    */
   async clear(): Promise<void> {
-    memoryCache = new Map()
+    this.memoryCache.clear()
+    if (this.holoEngine) {
+      await this.holoEngine.clear()
+    }
     try {
-      const store = getStore(this.config)
+      const store = this.getStore()
       if (!store) return
       const allKeys = await keys<string>(store)
       for (const key of allKeys) {

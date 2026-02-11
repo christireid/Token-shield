@@ -158,6 +158,7 @@ export class StreamTokenTracker {
    * even on abort, we have accurate token counts from real-time tracking.
    */
   abort(): StreamUsage {
+    if (this.isCompleted) return this.getUsage()
     this.isAborted = true
     this.recountOutput()
     const usage = this.getUsage()
@@ -169,8 +170,10 @@ export class StreamTokenTracker {
    * Get current usage snapshot. Can be called at any time.
    */
   getUsage(): StreamUsage {
-    // Do a final recount if we haven't recently
-    if (this.chunkCount % (this.config.updateInterval ?? 5) !== 0) {
+    // Do a final recount if we haven't recently — but skip if stream is
+    // already finished/aborted, since finish() may have set provider-accurate
+    // counts that we don't want to overwrite with a buffer recount.
+    if (!this.isCompleted && !this.isAborted && this.chunkCount % (this.config.updateInterval ?? 5) !== 0) {
       this.recountOutput()
     }
 

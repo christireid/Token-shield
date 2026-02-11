@@ -58,7 +58,20 @@ const DEFAULT_CONFIG: PrefixOptimizerConfig = {
 }
 
 /**
- * Detect provider from model name string.
+ * Detect the LLM provider from a model identifier string.
+ *
+ * Checks for known substrings ("claude"/"anthropic" for Anthropic,
+ * "gemini"/"google" for Google) and defaults to "openai" for everything
+ * else (gpt-*, o1-*, etc.).
+ *
+ * @param modelId - The model identifier string (e.g., "gpt-4o", "claude-sonnet-4.5", "gemini-2.5-pro")
+ * @returns The detected provider: "openai", "anthropic", or "google"
+ * @example
+ * ```ts
+ * detectProvider("claude-sonnet-4.5") // "anthropic"
+ * detectProvider("gpt-4o")            // "openai"
+ * detectProvider("gemini-2.5-pro")    // "google"
+ * ```
  */
 export function detectProvider(modelId: string): Exclude<Provider, "auto"> {
   const lower = modelId.toLowerCase()
@@ -68,10 +81,23 @@ export function detectProvider(modelId: string): Exclude<Provider, "auto"> {
 }
 
 /**
- * Get the cache discount rate for a provider.
- * OpenAI: 50% discount on cached prefix tokens.
- * Anthropic: 90% discount on cached tokens.
- * Google: 75% discount on cached tokens (context caching).
+ * Get the prompt cache discount rate for a given provider.
+ *
+ * Returns the fraction of the input token price that is saved when tokens
+ * are served from the provider's prompt cache. For example, 0.9 means
+ * cached tokens cost only 10% of the normal input price.
+ *
+ * - OpenAI: 0.5 (50% discount on cached prefix tokens)
+ * - Anthropic: 0.9 (90% discount on cached tokens)
+ * - Google: 0.75 (75% discount via context caching)
+ *
+ * @param provider - The provider identifier ("openai", "anthropic", or "google")
+ * @returns A number between 0 and 1 representing the discount rate
+ * @example
+ * ```ts
+ * getCacheDiscountRate("anthropic") // 0.9
+ * getCacheDiscountRate("openai")    // 0.5
+ * ```
  */
 export function getCacheDiscountRate(provider: Exclude<Provider, "auto">): number {
   switch (provider) {
@@ -138,7 +164,7 @@ function countMessageArrayTokens(messages: ChatMessage[]): number {
 }
 
 /**
- * Optimize message ordering for maximum provider-side prompt cache hits.
+ * Reorder messages to maximize provider-side prompt cache hits.
  *
  * The output message array is ordered:
  * 1. System prompts (position 0+)
@@ -147,6 +173,20 @@ function countMessageArrayTokens(messages: ChatMessage[]): number {
  * 4. Recent conversation (volatile, changes each turn)
  *
  * Items 1-3 form the stable prefix. Providers cache this automatically.
+ * For Anthropic, `cache_control` breakpoints are inserted at optimal positions.
+ *
+ * @param messages - The array of chat messages to reorder
+ * @param modelId - The model identifier (used to auto-detect provider when config.provider is "auto")
+ * @param inputPricePerMillion - The input token price per million (USD) for savings calculation
+ * @param config - Optional partial configuration overriding {@link PrefixOptimizerConfig} defaults
+ * @returns An {@link OptimizedResult} with reordered messages, prefix/volatile token counts, caching eligibility, and estimated savings
+ * @example
+ * ```ts
+ * const result = optimizePrefix(messages, "gpt-4o", 2.5)
+ * // result.prefixEligibleForCaching === true
+ * // result.estimatedPrefixSavings === 0.0012
+ * // result.messages — reordered with stable prefix first
+ * ```
  */
 export function optimizePrefix(
   messages: ChatMessage[],
@@ -204,11 +244,25 @@ export function optimizePrefix(
 }
 
 /**
- * Utility: calculate how much money stable prefix ordering saves
- * over N requests, assuming the provider cache stays warm.
+ * Project the total dollar savings from stable prefix caching over a time period.
  *
- * Provider caches have ~5-10 minute TTL. If requests come faster
- * than that, every request after the first gets the discount.
+ * Assumes the provider cache stays warm (~5-10 minute TTL). Conservatively
+ * estimates that 80% of requests after the first hit the cache. Multiply
+ * that by the per-request savings to get total savings.
+ *
+ * @param prefixTokens - Number of tokens in the stable prefix section
+ * @param inputPricePerMillion - Input token price per million (USD)
+ * @param provider - The provider for discount rate lookup ("openai", "anthropic", or "google")
+ * @param requestsPerHour - Average number of API requests per hour
+ * @param hours - Number of hours to project over
+ * @returns An object with total requests, cached requests, per-request savings, and total savings in USD
+ * @example
+ * ```ts
+ * const proj = projectPrefixSavings(2000, 2.5, "openai", 60, 24)
+ * // proj.totalRequests === 1440
+ * // proj.cachedRequests === 1152
+ * // proj.totalSavings === 0.00288
+ * ```
  */
 export function projectPrefixSavings(
   prefixTokens: number,
