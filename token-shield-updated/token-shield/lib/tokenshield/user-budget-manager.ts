@@ -352,8 +352,12 @@ export class UserBudgetManager {
       }
     }
 
-    // Skip creating a record for zero-cost responses
-    if (cost === 0) return
+    // Skip creating a record for zero-cost responses, but still notify
+    // so that React subscribers see the inflight release
+    if (cost === 0) {
+      this.notify()
+      return
+    }
 
     const record: UserSpendRecord = {
       timestamp: Date.now(),

@@ -121,7 +121,9 @@ export function fitToBudget(
   }
 
   const finalMessages = [...pinned, ...kept]
-  const totalTokens = inputBudget - remainingBudget + chatOverhead
+  // remainingBudget already has chatOverhead subtracted from its initial value,
+  // so (inputBudget - remainingBudget) = pinnedTokens + chatOverhead + keptTokens
+  const totalTokens = inputBudget - remainingBudget
 
   return {
     messages: finalMessages,
@@ -154,10 +156,11 @@ export function slidingWindow(
   messages: Message[],
   maxMessages: number
 ): ContextResult {
+  const safeMax = Math.max(0, Math.floor(maxMessages))
   const system = messages.filter((m) => m.role === "system")
   const nonSystem = messages.filter((m) => m.role !== "system")
-  const kept = maxMessages > 0 ? nonSystem.slice(-maxMessages) : []
-  const evicted = maxMessages > 0 ? nonSystem.slice(0, -maxMessages) : nonSystem
+  const kept = safeMax > 0 ? nonSystem.slice(-safeMax) : []
+  const evicted = safeMax > 0 ? nonSystem.slice(0, -safeMax) : nonSystem
   const finalMessages = [...system, ...kept]
 
   let totalTokens = 3 // chat overhead

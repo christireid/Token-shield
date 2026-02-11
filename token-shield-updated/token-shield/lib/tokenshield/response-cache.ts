@@ -94,7 +94,7 @@ export function textSimilarity(a: string, b: string): number {
     bigramsB.add(bNorm.slice(i, i + 2))
   }
 
-  if (bigramsA.size === 0 && bigramsB.size === 0) return 1
+  if (bigramsA.size === 0 && bigramsB.size === 0) return aNorm.length === bNorm.length ? 1 : 0
   if (bigramsA.size === 0 || bigramsB.size === 0) return 0
 
   let intersection = 0
@@ -206,9 +206,11 @@ export class ResponseCache {
       if (this.holoEngine) {
         const holoResult = this.holoEngine.find(prompt, model)
         if (holoResult) {
-          // Find the corresponding cache entry by prompt
+          // Find the corresponding cache entry by prompt, with TTL check
           for (const entry of this.memoryCache.values()) {
             if (entry.prompt === holoResult.prompt && (!model || entry.model === model)) {
+              // TTL check — skip expired entries
+              if (Date.now() - entry.createdAt >= this.config.ttlMs) continue
               entry.accessCount++
               entry.lastAccessed = Date.now()
               return {
@@ -293,7 +295,14 @@ export class ResponseCache {
           oldestKey = k
         }
       }
-      if (oldestKey) this.memoryCache.delete(oldestKey)
+      if (oldestKey) {
+        this.memoryCache.delete(oldestKey)
+        // Evict from IDB to keep stores coherent
+        try {
+          const store = this.getStore()
+          if (store) del(oldestKey, store).catch(() => {})
+        } catch { /* IDB not available */ }
+      }
     }
 
     // Persist to IDB
@@ -319,6 +328,10 @@ export class ResponseCache {
         const entry = await get<CacheEntry>(key, store)
         if (entry && Date.now() - entry.createdAt < this.config.ttlMs) {
           this.memoryCache.set(key, entry)
+          // Populate holographic engine so fuzzy matching works after reload
+          if (this.holoEngine) {
+            this.holoEngine.learn(entry.prompt, entry.response, entry.model, entry.inputTokens, entry.outputTokens).catch(() => {})
+          }
           loaded++
         } else if (entry) {
           await del(key, store) // clean expired

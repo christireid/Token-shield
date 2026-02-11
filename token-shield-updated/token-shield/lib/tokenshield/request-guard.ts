@@ -237,6 +237,10 @@ export class RequestGuard {
     // Allowed - record this request
     this.lastRequestTime = now
     this.requestTimestamps.push(now)
+    // Hard cap: keep only last 200 timestamps to prevent growth during bursts
+    if (this.requestTimestamps.length > 200) {
+      this.requestTimestamps = this.requestTimestamps.slice(-200)
+    }
     this.blockedCount = 0
 
     // Record this prompt for time-based deduplication
@@ -277,6 +281,17 @@ export class RequestGuard {
       startedAt: Date.now(),
     })
 
+    // Evict stale in-flight entries older than 5 minutes (never completed)
+    if (this.inFlight.size > 50) {
+      const staleThreshold = Date.now() - 300_000
+      for (const [key, req] of this.inFlight) {
+        if (req.startedAt < staleThreshold) {
+          req.controller.abort()
+          this.inFlight.delete(key)
+        }
+      }
+    }
+
     return controller
   }
 
@@ -301,6 +316,10 @@ export class RequestGuard {
       actualOutputTokens
     )
     this.costLog.push({ timestamp: Date.now(), cost: cost.totalCost })
+    // Hard cap: keep only last 500 entries to prevent growth in high-throughput
+    if (this.costLog.length > 500) {
+      this.costLog = this.costLog.slice(-500)
+    }
   }
 
   /**

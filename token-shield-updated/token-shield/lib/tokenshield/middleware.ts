@@ -44,8 +44,7 @@ import { StreamTokenTracker } from "./stream-tracker"
 import { UserBudgetManager, type UserBudgetConfig, type BudgetExceededEvent, type BudgetWarningEvent } from "./user-budget-manager"
 import type { ChatMessage } from "./token-counter"
 import { TokenShieldConfigSchema } from "./config-schemas"
-import { TokenShieldConfigError } from "./errors"
-import { TokenShieldBlockedError } from "./errors"
+import { TokenShieldConfigError, TokenShieldBlockedError, ERROR_CODES } from "./errors"
 import * as v from "valibot"
 import { shieldEvents } from "./event-bus"
 import { TokenShieldLogger, createLogger, type LogEntry, type LoggerConfig } from "./logger"
@@ -330,8 +329,10 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
         : null
 
   // Auto-connect logger to the event bus for structured observability
+  // Store cleanup function to prevent listener leaks
+  let disconnectLogger: (() => void) | null = null
   if (log) {
-    log.connectEventBus(shieldEvents)
+    disconnectLogger = log.connectEventBus(shieldEvents)
   }
 
   // Initialize provider adapter if configured
@@ -404,7 +405,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
             const estCost = safeCost(modelId, estimatedInput, expectedOut)
             try { shieldEvents.emit('request:blocked', { reason: breakCheck.reason ?? "Budget exceeded", estimatedCost: estCost }) } catch { /* non-fatal */ }
             config.onBlocked?.(breakCheck.reason ?? "Budget exceeded")
-            throw new TokenShieldBlockedError(breakCheck.reason ?? "Request blocked by TokenShield breaker")
+            throw new TokenShieldBlockedError(breakCheck.reason ?? "Request blocked by TokenShield breaker", ERROR_CODES.BREAKER_SESSION_LIMIT)
           }
         }
 
@@ -415,10 +416,10 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
             userId = config.userBudget.getUserId()
           } catch (err) {
             const msg = err instanceof Error ? err.message : "Unknown error"
-            throw new TokenShieldBlockedError(`Failed to resolve user ID: ${msg}`)
+            throw new TokenShieldBlockedError(`Failed to resolve user ID: ${msg}`, ERROR_CODES.BUDGET_USER_ID_INVALID)
           }
           if (!userId || typeof userId !== "string") {
-            throw new TokenShieldBlockedError("getUserId() must return a non-empty string")
+            throw new TokenShieldBlockedError("getUserId() must return a non-empty string", ERROR_CODES.BUDGET_USER_ID_INVALID)
           }
           meta.userId = userId
           const modelId = String(params.modelId ?? "")
@@ -426,16 +427,15 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
           const expectedOut = config.context?.reserveForOutput ?? 500
           const budgetCheck = userBudgetManager.check(userId, modelId, estimatedInput, expectedOut)
           if (!budgetCheck.allowed) {
-            try {
-              shieldEvents.emit('userBudget:exceeded', {
-                userId,
-                limitType: 'budget',
-                currentSpend: 0,
-                limit: 0,
-              })
-            } catch { /* non-fatal */ }
+            // budgetCheck.status already has real spend/limit data — the exceeded event
+            // was already emitted by userBudgetManager.check() with correct data
             config.onBlocked?.(budgetCheck.reason ?? "User budget exceeded")
-            throw new TokenShieldBlockedError(budgetCheck.reason ?? "Request blocked by user budget limit")
+            throw new TokenShieldBlockedError(
+              budgetCheck.reason ?? "Request blocked by user budget limit",
+              budgetCheck.status.spend.daily >= (budgetCheck.status.limits?.daily ?? Infinity)
+                ? ERROR_CODES.BUDGET_DAILY_EXCEEDED
+                : ERROR_CODES.BUDGET_MONTHLY_EXCEEDED
+            )
           }
 
           // Store the estimated cost that was reserved as in-flight
@@ -485,7 +485,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
               const estCost = safeCost(guardModelId, countTokens(lastUserText), config.context?.reserveForOutput ?? 500)
               try { shieldEvents.emit('request:blocked', { reason: check.reason ?? "Request blocked", estimatedCost: estCost }) } catch { /* non-fatal */ }
               config.onBlocked?.(check.reason ?? "Request blocked")
-              throw new TokenShieldBlockedError(check.reason ?? "Request blocked by TokenShield guard")
+              throw new TokenShieldBlockedError(check.reason ?? "Request blocked by TokenShield guard", ERROR_CODES.GUARD_RATE_LIMIT)
             }
             // Guard passed
             try { shieldEvents.emit('request:allowed', { prompt: lastUserText, model: guardModelId }) } catch { /* non-fatal */ }
@@ -663,13 +663,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
         // Compute dollar savings for the cache hit (consistent units: dollars)
         const cacheHitSavedDollars = safeCost(modelId, meta.cacheHit.inputTokens, meta.cacheHit.outputTokens)
 
-        try {
-          shieldEvents.emit('cache:hit', {
-            matchType: 'exact',
-            similarity: 1,
-            savedCost: cacheHitSavedDollars,
-          })
-        } catch { /* non-fatal */ }
+        // cache:hit event already emitted by transformParams — no duplicate here
 
         config.onUsage?.({
           model: modelId,
@@ -792,11 +786,10 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
 
       // Record spending in per-user budget manager
       // (recordSpend handles cost=0 correctly: releases inflight, skips record creation)
+      // Note: recordSpend() internally emits userBudget:spend — no duplicate here
       if (userBudgetManager && meta?.userId) {
         await userBudgetManager.recordSpend(meta.userId, perRequestCost, modelId, meta.userBudgetInflight)
           .catch(() => { /* IDB write failed — inflight already released synchronously */ })
-
-        try { shieldEvents.emit('userBudget:spend', { userId: meta.userId, cost: perRequestCost, model: modelId }) } catch { /* non-fatal */ }
       }
 
       return result
@@ -833,13 +826,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
         // Compute dollar savings for the cache hit (consistent units: dollars)
         const streamCacheHitSavedDollars = safeCost(modelId, meta.cacheHit.inputTokens, meta.cacheHit.outputTokens)
 
-        try {
-          shieldEvents.emit('cache:hit', {
-            matchType: 'exact',
-            similarity: 1,
-            savedCost: streamCacheHitSavedDollars,
-          })
-        } catch { /* non-fatal */ }
+        // cache:hit event already emitted by transformParams — no duplicate here
 
         config.onUsage?.({
           model: modelId,
@@ -979,11 +966,10 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
 
         // Record spending in per-user budget manager (fire-and-forget with .catch)
         // (recordSpend handles cost=0 correctly: releases inflight, skips record creation)
+        // Note: recordSpend() internally emits userBudget:spend — no duplicate here
         if (userBudgetManager && meta?.userId) {
           userBudgetManager.recordSpend(meta.userId, streamPerRequestCost, modelId, meta.userBudgetInflight)
             .catch(() => { /* IDB write failed — inflight already released synchronously */ })
-
-          try { shieldEvents.emit('userBudget:spend', { userId: meta.userId, cost: streamPerRequestCost, model: modelId }) } catch { /* non-fatal */ }
         }
       }
 
@@ -994,7 +980,11 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
       const recordStreamUsageOnce = (usage: { inputTokens: number; outputTokens: number }) => {
         if (usageRecorded) return
         usageRecorded = true
-        recordStreamUsage(usage)
+        try {
+          recordStreamUsage(usage)
+        } catch {
+          // recordStreamUsage threw — swallow to prevent stream corruption
+        }
       }
 
       // Create a ReadableStream that reads from the original, pipes chunks

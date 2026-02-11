@@ -68,9 +68,11 @@ function createSavingsStore() {
       return () => listeners.delete(listener)
     },
     addEvent: (event: SavingsEvent) => {
+      const MAX_EVENTS = 500
+      const newEvents = [...state.events, event]
       state = {
         ...state,
-        events: [...state.events, event],
+        events: newEvents.length > MAX_EVENTS ? newEvents.slice(-MAX_EVENTS) : newEvents,
         totalTokensSaved: state.totalTokensSaved + event.tokensSaved,
         totalDollarsSaved: state.totalDollarsSaved + event.dollarsSaved,
         totalCacheHits:

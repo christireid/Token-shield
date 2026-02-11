@@ -57,16 +57,27 @@ export class ShieldWorker {
    * @param workerUrl - Optional URL to the worker script. If provided and Workers are available, uses worker mode.
    */
   async init(config: NeuroElasticConfig = {}, workerUrl?: string | URL): Promise<void> {
+    // Guard against double-init: terminate old worker first
+    if (this.worker) {
+      this.worker.terminate()
+      this.worker = null
+    }
+    this.ready = false
+
     // Try worker mode first
     if (workerUrl && typeof Worker !== "undefined") {
       try {
         this.worker = new Worker(workerUrl, { type: "module" })
         this.worker.onmessage = (e: MessageEvent<WorkerResponse>) => this.handleMessage(e.data)
         this.worker.onerror = () => {
-          // Worker failed to load — fall back to inline
+          // Worker failed to load — reject all pending promises then fall back to inline
           this.worker?.terminate()
           this.worker = null
-          this.initInline(config)
+          for (const [, { reject }] of this.pending) {
+            reject(new Error("Worker failed to load"))
+          }
+          this.pending.clear()
+          this.initInline(config).catch(() => {})
         }
         this.mode = "worker"
         await this.post<void>({ type: "INIT", id: nextId(), payload: config })
@@ -155,15 +166,17 @@ export class ShieldWorker {
   private post<T>(command: WorkerCommand): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const id = command.id
-      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject })
-      this.worker!.postMessage(command)
-      // Timeout after 10 seconds
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         if (this.pending.has(id)) {
           this.pending.delete(id)
           reject(new Error(`ShieldWorker timeout for ${command.type}`))
         }
       }, 10_000)
+      this.pending.set(id, {
+        resolve: (value: unknown) => { clearTimeout(timer); resolve(value as T) },
+        reject: (reason: unknown) => { clearTimeout(timer); reject(reason) },
+      })
+      this.worker!.postMessage(command)
     })
   }
 

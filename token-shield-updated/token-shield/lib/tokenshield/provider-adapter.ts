@@ -71,6 +71,8 @@ export class ProviderAdapter {
   private onFallback?: AdapterConfig["onFallback"]
   private onHealthChange?: AdapterConfig["onHealthChange"]
   private rrIndex = 0
+  /** Track recovery timers so they can be cleared on resetHealth */
+  private recoveryTimers = new Map<ProviderName, ReturnType<typeof setTimeout>>()
 
   constructor(config: AdapterConfig) {
     this.unhealthyThreshold = config.unhealthyThreshold ?? 5
@@ -133,10 +135,15 @@ export class ProviderAdapter {
     if (h.consecutiveFailures >= this.unhealthyThreshold && h.healthy) {
       h.healthy = false
       this.onHealthChange?.(h)
-      setTimeout(() => {
+      // Clear any existing recovery timer before setting a new one
+      const existingTimer = this.recoveryTimers.get(provider)
+      if (existingTimer) clearTimeout(existingTimer)
+      const timer = setTimeout(() => {
+        this.recoveryTimers.delete(provider)
         const cur = this.healthMap.get(provider)
         if (cur && !cur.healthy) { cur.healthy = true; this.onHealthChange?.(cur) }
       }, this.recoveryMs)
+      this.recoveryTimers.set(provider, timer)
     }
   }
 
@@ -145,6 +152,9 @@ export class ProviderAdapter {
   getProviderHealth(name: ProviderName): ProviderHealth | undefined { return this.healthMap.get(name) }
 
   resetHealth(): void {
+    // Clear all recovery timers to prevent stale callbacks
+    for (const timer of this.recoveryTimers.values()) clearTimeout(timer)
+    this.recoveryTimers.clear()
     Array.from(this.healthMap.values()).forEach((h) => {
       h.healthy = true; h.consecutiveFailures = 0; h.totalRequests = 0
       h.totalFailures = 0; h.avgLatencyMs = 0; h.lastError = undefined; h.lastErrorTime = undefined
@@ -171,7 +181,7 @@ export class ProviderAdapter {
   }
 
   private cost(modelId: string, inp: number, out: number): number {
-    try { return estimateCost(modelId, inp, out).totalCost } catch { return 0 }
+    try { return estimateCost(modelId, inp, out).totalCost } catch { return Infinity }
   }
 
   private orderProviders(inp: number, out: number): { provider: ProviderName; model: string; estimatedCost: number }[] {

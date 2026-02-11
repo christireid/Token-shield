@@ -144,11 +144,15 @@ export class NeuroElasticEngine {
   async learn(prompt: string, response: string, model: string, inputTokens: number, outputTokens: number): Promise<void> {
     const hologram = this.encode(prompt)
 
-    // LRU eviction if at capacity
+    // LRU eviction if at capacity — O(n) linear scan for oldest
     if (this.memory.length >= this.config.maxMemories) {
-      // Sort by timestamp descending, remove oldest
-      this.memory.sort((a, b) => b.timestamp - a.timestamp)
-      this.memory.pop()
+      let oldestIdx = 0
+      for (let i = 1; i < this.memory.length; i++) {
+        if (this.memory[i].timestamp < this.memory[oldestIdx].timestamp) {
+          oldestIdx = i
+        }
+      }
+      this.memory.splice(oldestIdx, 1)
     }
 
     this.memory.push({
@@ -210,17 +214,23 @@ export class NeuroElasticEngine {
     const tokens = normalized.split(/\s+/).filter(t => t.length > 0)
 
     for (const token of tokens) {
-      if (token.length < 3) continue
-
-      // 1. Morphological encoding: extract all trigrams
-      for (let i = 0; i <= token.length - 3; i++) {
-        this.superimpose(vec, token.substring(i, i + 3))
+      // Short tokens (1-2 chars): use the token itself as a single "trigram"
+      // so short terms like "AI", "ML", "US" still get encoded
+      if (token.length < 3) {
+        this.superimpose(vec, token)
+      } else {
+        // 1. Morphological encoding: extract all trigrams
+        for (let i = 0; i <= token.length - 3; i++) {
+          this.superimpose(vec, token.substring(i, i + 3))
+        }
       }
 
       // 2. Semantic seeding: inject domain vocabulary angles
       if (this.config.seeds && this.config.seeds[token] != null) {
         const seed = this.config.seeds[token]
-        vec[seed % DIMENSIONS] |= (1 << (seed % 32))
+        if (seed >= 0) {
+          vec[seed % DIMENSIONS] |= (1 << (seed % 32))
+        }
       }
 
       // 3. Temporal encoding: rotate vector to encode word order
@@ -319,9 +329,9 @@ export class NeuroElasticEngine {
     this.noiseDirty = false
   }
 
-  /** Fire-and-forget persist to IDB. */
-  private persistAsync(): void {
-    set(DB_KEY, this.memory).catch(() => { /* IDB not available */ })
+  /** Persist to IDB. Returns a promise so callers can await if needed. */
+  private persistAsync(): Promise<void> {
+    return set(DB_KEY, this.memory).catch(() => { /* IDB not available */ })
   }
 }
 

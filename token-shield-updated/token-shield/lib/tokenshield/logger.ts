@@ -86,9 +86,14 @@ const EVENT_LOG_LEVELS: Record<keyof TokenShieldEvents, LogLevel> = {
 
 // --- Logger class ---
 
+/** Maximum spans retained before FIFO eviction */
+const MAX_SPANS = 1000
+
 export class TokenShieldLogger {
   private config: Required<Pick<LoggerConfig, 'level' | 'timestamps'>> & Pick<LoggerConfig, 'handler' | 'enableSpans'>
   private spans: CompletedSpan[] = []
+  /** Guard against double-connecting to the event bus */
+  private eventBusConnected = false
 
   constructor(config?: LoggerConfig) {
     this.config = {
@@ -158,6 +163,10 @@ export class TokenShieldLogger {
     }
 
     this.spans.push(span)
+    // FIFO eviction to prevent unbounded growth
+    if (this.spans.length > MAX_SPANS) {
+      this.spans = this.spans.slice(-MAX_SPANS)
+    }
     if (this.config.enableSpans) {
       this.emit('debug', 'span', `${name} started`, { spanId, traceId, ...span.attributes })
     }
@@ -173,6 +182,11 @@ export class TokenShieldLogger {
   }
 
   connectEventBus(events: { on: <K extends keyof TokenShieldEvents>(type: K, handler: (event: TokenShieldEvents[K]) => void) => void; off: <K extends keyof TokenShieldEvents>(type: K, handler: (event: TokenShieldEvents[K]) => void) => void }): () => void {
+    // Prevent double-connecting which would accumulate duplicate handlers
+    if (this.eventBusConnected) {
+      return () => {} // no-op cleanup
+    }
+    this.eventBusConnected = true
     const handlers: Array<() => void> = []
 
     for (const key of Object.keys(EVENT_LOG_LEVELS) as Array<keyof TokenShieldEvents>) {
@@ -184,7 +198,10 @@ export class TokenShieldLogger {
       handlers.push(() => events.off(key, handler))
     }
 
-    return () => handlers.forEach((unsub) => unsub())
+    return () => {
+      handlers.forEach((unsub) => unsub())
+      this.eventBusConnected = false
+    }
   }
 }
 

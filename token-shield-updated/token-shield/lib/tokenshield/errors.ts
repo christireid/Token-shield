@@ -44,6 +44,8 @@ export class TokenShieldError extends Error {
     super(message)
     this.name = "TokenShieldError"
     this.code = code
+    // Fix instanceof in ES5 transpilation (TypeScript's downlevelIteration)
+    Object.setPrototypeOf(this, new.target.prototype)
   }
 }
 
@@ -52,6 +54,7 @@ export class TokenShieldBlockedError extends TokenShieldError {
   constructor(message: string, code: ErrorCode = ERROR_CODES.GUARD_MIN_LENGTH) {
     super(message, code)
     this.name = "TokenShieldBlockedError"
+    Object.setPrototypeOf(this, new.target.prototype)
   }
 }
 
@@ -63,6 +66,7 @@ export class TokenShieldConfigError extends TokenShieldError {
     super(message, ERROR_CODES.CONFIG_INVALID)
     this.name = "TokenShieldConfigError"
     this.path = path
+    Object.setPrototypeOf(this, new.target.prototype)
   }
 }
 
@@ -81,6 +85,7 @@ export class TokenShieldBudgetError extends TokenShieldBlockedError {
     this.limitType = limitType
     this.currentSpend = currentSpend
     this.limit = limit
+    Object.setPrototypeOf(this, new.target.prototype)
   }
 }
 
@@ -89,5 +94,6 @@ export class TokenShieldCryptoError extends TokenShieldError {
   constructor(message: string, code: ErrorCode = ERROR_CODES.CRYPTO_ENCRYPTION_FAILED) {
     super(message, code)
     this.name = "TokenShieldCryptoError"
+    Object.setPrototypeOf(this, new.target.prototype)
   }
 }

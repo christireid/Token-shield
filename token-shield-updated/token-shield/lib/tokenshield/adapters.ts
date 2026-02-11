@@ -342,7 +342,10 @@ export function createAnthropicAdapter(
           | undefined
 
         return {
-          text: content?.[0]?.text ?? "",
+          text: content
+            ?.filter((b) => b.type === "text" || b.type === undefined)
+            .map((b) => b.text ?? "")
+            .join("") ?? "",
           usage: {
             promptTokens: usage?.input_tokens ?? 0,
             completionTokens: usage?.output_tokens ?? 0,
