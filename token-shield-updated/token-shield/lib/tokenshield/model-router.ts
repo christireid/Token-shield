@@ -127,9 +127,23 @@ const MAX_CACHEABLE_PROMPT_LENGTH = 10_000
 const complexityCache = new Map<string, ComplexityScore>()
 
 /**
- * Analyze a prompt and return measurable complexity signals.
- * Every signal is computed from the actual text - no guessing.
- * Results are cached (FIFO, max 100 entries) for repeated prompts.
+ * Analyze a prompt and return measurable complexity signals with a composite score.
+ *
+ * Every signal is computed from the actual text -- no guessing. The composite
+ * score (0-100) is a weighted sum of token count, reasoning keywords, constraint
+ * keywords, code signals, lexical diversity, structured output requirements,
+ * sub-task count, and context dependency. Results are cached (FIFO, max 100
+ * entries) for prompts under 10,000 characters.
+ *
+ * @param prompt - The user prompt text to analyze
+ * @returns A {@link ComplexityScore} with the 0-100 score, tier, individual signals, and recommended model tier
+ * @example
+ * ```ts
+ * const cx = analyzeComplexity("What is the capital of France?")
+ * // cx.score === 12
+ * // cx.tier === "trivial"
+ * // cx.recommendedTier === "budget"
+ * ```
  */
 export function analyzeComplexity(prompt: string): ComplexityScore {
   const cached = complexityCache.get(prompt)
@@ -228,8 +242,25 @@ export function analyzeComplexity(prompt: string): ComplexityScore {
 }
 
 /**
- * Route a prompt to the cheapest appropriate model.
- * Takes a default model (what you'd normally use) and finds a cheaper one.
+ * Route a prompt to the cheapest model that meets its complexity requirements.
+ *
+ * Analyzes the prompt's complexity, determines the minimum model tier needed,
+ * filters available models by provider and tier, and selects the cheapest
+ * candidate. Also reports how much money is saved compared to the default model.
+ *
+ * @param prompt - The user prompt text to route
+ * @param defaultModelId - The model you would normally use (for savings comparison)
+ * @param options - Optional routing constraints
+ * @param options.allowedProviders - Only consider models from these providers (e.g., ["openai", "anthropic"])
+ * @param options.minTier - Override the minimum model tier (defaults to the complexity-recommended tier)
+ * @param options.expectedOutputTokens - Expected output tokens for cost comparison (defaults to 500)
+ * @returns A {@link RoutingDecision} with the selected model, fallback, estimated cost, and savings
+ * @example
+ * ```ts
+ * const decision = routeToModel("What is 2+2?", "gpt-4o")
+ * // decision.selectedModel.name === "GPT-4.1 Nano"
+ * // decision.savingsVsDefault === 0.0024
+ * ```
  */
 export function routeToModel(
   prompt: string,
@@ -307,7 +338,21 @@ export function routeToModel(
 }
 
 /**
- * Get all available models sorted by cost for a given prompt.
+ * Rank all available models by total cost for a given token usage.
+ *
+ * Returns every model in {@link MODEL_PRICING} paired with its cost estimate,
+ * sorted from cheapest to most expensive. Useful for displaying model
+ * comparison tables or picking a model within a budget.
+ *
+ * @param inputTokens - Number of input (prompt) tokens
+ * @param outputTokens - Number of output (completion) tokens
+ * @returns An array of objects with `model` and `cost` fields, sorted by ascending total cost
+ * @example
+ * ```ts
+ * const ranked = rankModels(2000, 500)
+ * console.log(ranked[0].model.name)    // cheapest model name
+ * console.log(ranked[0].cost.totalCost) // its cost in USD
+ * ```
  */
 export function rankModels(
   inputTokens: number,

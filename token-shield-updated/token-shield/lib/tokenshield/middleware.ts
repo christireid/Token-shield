@@ -1,21 +1,30 @@
 /**
- * TokenShield - Vercel AI SDK Middleware
+ * TokenShield - AI SDK Middleware (Framework-Agnostic)
  *
- * Implements LanguageModelV3Middleware to intercept every LLM call
- * made through the AI SDK (streamText, generateText, etc.) and
- * apply all TokenShield optimizations automatically.
+ * Core middleware pipeline that intercepts LLM calls and applies all
+ * TokenShield optimizations automatically. Compatible with:
  *
- * Usage:
+ *   - Vercel AI SDK (via wrapLanguageModel)
+ *   - Plain OpenAI SDK (via createOpenAIAdapter)
+ *   - Anthropic SDK (via createAnthropicAdapter)
+ *   - Any framework (via createGenericAdapter)
+ *
+ * Vercel AI SDK usage:
  *   import { wrapLanguageModel } from 'ai'
- *   import { tokenShieldMiddleware } from '@tokenshield/ai-sdk'
+ *   import { tokenShieldMiddleware } from 'tokenshield'
  *
  *   const model = wrapLanguageModel({
  *     model: openai('gpt-4o'),
  *     middleware: tokenShieldMiddleware({ ... }),
  *   })
- *
- *   // Use exactly like before -- all optimizations are automatic
  *   const result = await streamText({ model, messages })
+ *
+ * Generic adapter usage:
+ *   import { tokenShieldMiddleware, createGenericAdapter } from 'tokenshield'
+ *
+ *   const shield = tokenShieldMiddleware({ ... })
+ *   const protectedCall = createGenericAdapter(shield, myModelCallFn)
+ *   const result = await protectedCall({ model: 'gpt-4o', messages: [...] })
  *
  * The middleware pipeline:
  *   1. transformParams: breaker -> user budget -> guard -> cache lookup -> context trim -> route -> prefix optimize
@@ -39,7 +48,7 @@ import { TokenShieldConfigError } from "./errors"
 import { TokenShieldBlockedError } from "./errors"
 import * as v from "valibot"
 import { shieldEvents } from "./event-bus"
-import { TokenShieldLogger, createLogger } from "./logger"
+import { TokenShieldLogger, createLogger, type LogEntry, type LoggerConfig } from "./logger"
 import { ProviderAdapter, type AdapterConfig } from "./provider-adapter"
 
 // -------------------------------------------------------
@@ -128,10 +137,42 @@ export interface TokenShieldMiddlewareConfig {
   onUsage?: (entry: { model: string; inputTokens: number; outputTokens: number; cost: number; saved: number }) => void
 
   /** Optional logger for structured observability */
-  logger?: TokenShieldLogger | { level?: 'debug' | 'info' | 'warn' | 'error'; handler?: (entry: any) => void; enableSpans?: boolean }
+  logger?: TokenShieldLogger | { level?: 'debug' | 'info' | 'warn' | 'error'; handler?: (entry: LogEntry) => void; enableSpans?: boolean }
 
   /** Optional multi-provider adapter for routing, retries, and health tracking */
   providerAdapter?: ProviderAdapter | AdapterConfig
+}
+
+// -------------------------------------------------------
+// Return type
+// -------------------------------------------------------
+
+/**
+ * The shape returned by tokenShieldMiddleware().
+ * Compatible with Vercel AI SDK's LanguageModelV3Middleware, but also
+ * usable standalone via the framework adapters or pipeline API.
+ */
+export interface TokenShieldMiddleware {
+  /** Access the cost ledger for reading savings data */
+  ledger: CostLedger | null
+  /** Access the response cache for stats */
+  cache: ResponseCache | null
+  /** Access the request guard for stats */
+  guard: RequestGuard | null
+  /** Access the per-user budget manager */
+  userBudgetManager: UserBudgetManager | null
+  /** Access the event bus for subscribing to events */
+  events: typeof shieldEvents
+  /** Access the logger for span/event data */
+  logger: TokenShieldLogger | null
+  /** Access the provider adapter for health data */
+  providerAdapter: ProviderAdapter | null
+  /** Pre-model transform — runs breaker, budget, guard, cache, context, router, prefix */
+  transformParams: (args: { params: Record<string, unknown> }) => Promise<Record<string, unknown>>
+  /** Wraps non-streaming model calls with caching, ledger, budget tracking */
+  wrapGenerate: (args: { doGenerate: () => Promise<Record<string, unknown>>; params: Record<string, unknown> }) => Promise<Record<string, unknown>>
+  /** Wraps streaming model calls with token tracking, caching, budget accounting */
+  wrapStream: (args: { doStream: () => Promise<Record<string, unknown>>; params: Record<string, unknown> }) => Promise<Record<string, unknown>>
 }
 
 // -------------------------------------------------------
@@ -204,7 +245,7 @@ function safeCost(modelId: string, inputTokens: number, outputTokens: number): n
  * Returns a LanguageModelV3Middleware-compatible object that can be
  * passed directly to wrapLanguageModel().
  */
-export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) {
+export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}): TokenShieldMiddleware {
   // Validate config against valibot schema (catches typos, wrong types, out-of-range values)
   try {
     // Extract the schema-validatable subset (excludes functions like getUserId, onBlocked, onUsage)
@@ -285,7 +326,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}) 
     config.logger instanceof TokenShieldLogger
       ? config.logger
       : config.logger
-        ? createLogger(config.logger as { level?: 'debug' | 'info' | 'warn' | 'error'; handler?: (entry: any) => void; enableSpans?: boolean })
+        ? createLogger(config.logger as { level?: 'debug' | 'info' | 'warn' | 'error'; handler?: (entry: LogEntry) => void; enableSpans?: boolean })
         : null
 
   // Auto-connect logger to the event bus for structured observability

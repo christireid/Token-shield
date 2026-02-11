@@ -59,9 +59,24 @@ function messageTokens(msg: Message): number {
 }
 
 /**
- * Apply a token budget to a conversation. Keeps system messages pinned,
- * then fills from newest to oldest until the budget is exhausted.
- * This is exact - every token is counted.
+ * Apply a token budget to a conversation, keeping as many recent messages as possible.
+ *
+ * System and pinned messages are always retained. Remaining messages are
+ * added from newest to oldest until the token budget is exhausted. Uses
+ * exact BPE token counting for every message.
+ *
+ * @param messages - The full array of conversation messages
+ * @param budget - The token budget configuration (max context tokens, reserved output tokens)
+ * @returns A {@link ContextResult} with the trimmed messages, token counts, and eviction stats
+ * @example
+ * ```ts
+ * const result = fitToBudget(messages, {
+ *   maxContextTokens: 4096,
+ *   reservedForOutput: 1024,
+ * })
+ * // result.messages — messages that fit within the budget
+ * // result.evictedCount — number of messages dropped
+ * ```
  */
 export function fitToBudget(
   messages: Message[],
@@ -119,8 +134,21 @@ export function fitToBudget(
 }
 
 /**
- * Sliding window: keep only the last N messages (plus system messages).
- * Returns exact token count of what's kept.
+ * Keep only the last N non-system messages plus all system messages.
+ *
+ * A simple sliding-window strategy that always retains system messages
+ * and keeps the most recent `maxMessages` conversation turns. Returns
+ * exact token counts for both kept and evicted messages.
+ *
+ * @param messages - The full array of conversation messages
+ * @param maxMessages - Maximum number of non-system messages to retain
+ * @returns A {@link ContextResult} with the windowed messages and eviction stats
+ * @example
+ * ```ts
+ * const result = slidingWindow(messages, 10)
+ * // result.messages — system msgs + last 10 conversation messages
+ * // result.evictedCount — messages dropped from the front
+ * ```
  */
 export function slidingWindow(
   messages: Message[],
@@ -153,8 +181,24 @@ export function slidingWindow(
 }
 
 /**
- * Priority-based context: sort by priority, then fill by budget.
- * System messages are always included. Highest priority first.
+ * Fill the token budget by message priority, keeping the highest-priority messages first.
+ *
+ * System messages are always included. Non-system messages are sorted by
+ * descending priority (then by newest timestamp) and greedily packed into
+ * the remaining budget. Kept messages are re-sorted into chronological
+ * order before being returned.
+ *
+ * @param messages - The full array of conversation messages (with optional `priority` and `timestamp` fields)
+ * @param budget - The token budget configuration (max context tokens, reserved output tokens)
+ * @returns A {@link ContextResult} with priority-selected messages and eviction stats
+ * @example
+ * ```ts
+ * const result = priorityFit(messages, {
+ *   maxContextTokens: 4096,
+ *   reservedForOutput: 1024,
+ * })
+ * // High-priority messages are kept even if older
+ * ```
  */
 export function priorityFit(
   messages: Message[],
@@ -209,8 +253,20 @@ export function priorityFit(
 }
 
 /**
- * Generate a summary of evicted messages to preserve context.
- * Returns a compact system message that can be injected.
+ * Generate a pinned system message summarizing evicted messages.
+ *
+ * Builds a compact text representation of each evicted message (role + first
+ * 100 characters) and wraps it in a system message. The result can be injected
+ * into the conversation to preserve context that was dropped by budget fitting.
+ *
+ * @param evictedMessages - Array of messages that were evicted from the context
+ * @returns A pinned system {@link Message} containing the summary text
+ * @example
+ * ```ts
+ * const summary = createSummaryMessage(evictedMsgs)
+ * // summary.role === "system"
+ * // summary.content starts with "Previous conversation summary:\n"
+ * ```
  */
 export function createSummaryMessage(
   evictedMessages: Message[]
@@ -236,8 +292,26 @@ export function createSummaryMessage(
 }
 
 /**
- * Smart context management: combines budget fitting with automatic
- * summarization of evicted messages.
+ * Fit messages to a token budget and automatically summarize evicted messages.
+ *
+ * Combines {@link fitToBudget} with {@link createSummaryMessage}. After
+ * trimming messages to fit the budget, any evicted messages are condensed
+ * into a summary system message that is inserted after the system prompt
+ * (if it fits in the remaining budget).
+ *
+ * @param messages - The full array of conversation messages
+ * @param budget - The token budget configuration (max context tokens, reserved output tokens)
+ * @returns A {@link ContextResult} with trimmed messages, eviction stats, and an optional `summary` field
+ * @example
+ * ```ts
+ * const result = smartFit(messages, {
+ *   maxContextTokens: 4096,
+ *   reservedForOutput: 1024,
+ * })
+ * if (result.summary) {
+ *   console.log("Evicted context summarized:", result.summary)
+ * }
+ * ```
  */
 export function smartFit(
   messages: Message[],

@@ -20,7 +20,7 @@
  * 12. user-budget-manager - Per-user daily/monthly token budget assignment (Team tier)
  *
  * Plus:
- * - AI SDK Middleware    - Drop-in LanguageModelV3Middleware for Vercel AI SDK
+ * - AI SDK Middleware    - Drop-in middleware for Vercel AI SDK + framework adapters
  * - React Integration    - Provider, hooks, and real-time cost tracking
  * - Typed Error Hierarchy - Structured, catchable errors with machine-readable codes
  * - Composable Pipeline  - Pick-and-choose middleware stages with hooks
@@ -160,6 +160,7 @@ export {
 export {
   tokenShieldMiddleware,
   getLedger,
+  type TokenShieldMiddleware,
   type TokenShieldMiddlewareConfig,
 } from "./middleware"
 
@@ -278,6 +279,18 @@ export {
   type ProviderHealth,
   type AdapterConfig,
 } from "./provider-adapter"
+
+// Framework-Agnostic Adapters
+export {
+  createGenericAdapter,
+  createOpenAIAdapter,
+  createAnthropicAdapter,
+  createStreamAdapter,
+  type AdapterMessage,
+  type GenericAdapterOptions,
+  type OpenAIAdapterOptions,
+  type AnthropicAdapterOptions,
+} from "./adapters"
 
 // Performance Benchmarks
 export {
