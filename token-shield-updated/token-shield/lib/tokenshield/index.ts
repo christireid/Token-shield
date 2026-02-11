@@ -182,9 +182,11 @@ export {
   useEventLog,
   useProviderHealth,
   usePipelineMetrics,
+  useShieldedCall,
   type TokenShieldProviderProps,
   type EventLogEntry,
   type PipelineMetrics,
+  type ShieldedCallMetrics,
 } from "./react"
 
 // Dashboard Component
@@ -291,6 +293,23 @@ export {
   type OpenAIAdapterOptions,
   type AnthropicAdapterOptions,
 } from "./adapters"
+
+// NeuroElastic Engine (Holographic Encoding)
+export {
+  NeuroElasticEngine,
+  createNeuroElasticEngine,
+  type NeuroElasticConfig,
+  type MemorySlot,
+  type FindResult,
+} from "./neuro-elastic"
+
+// Worker Communication Layer
+export {
+  ShieldWorker,
+  createShieldWorker,
+  type WorkerCommand,
+  type WorkerResponse,
+} from "./shield-worker"
 
 // Performance Benchmarks
 export {

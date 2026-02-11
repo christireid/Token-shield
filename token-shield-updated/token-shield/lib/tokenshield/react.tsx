@@ -889,3 +889,101 @@ export function usePipelineMetrics(): PipelineMetrics {
 
   return metrics
 }
+
+// -------------------------------------------------------
+// High-level useShieldedCall hook
+// -------------------------------------------------------
+
+export interface ShieldedCallMetrics {
+  /** Where the response came from */
+  source: "cache" | "api" | "none"
+  /** Similarity/resonance score (0-1, only for cache hits) */
+  confidence: number
+  /** Response latency in ms */
+  latencyMs: number
+}
+
+/**
+ * High-level hook that wraps any API call with the full TokenShield pipeline.
+ * Checks the response cache first (bigram or holographic), calls the API on miss,
+ * and teaches the cache on new responses. Exposes source/confidence/latency metrics.
+ *
+ * @example
+ * ```tsx
+ * const { call, metrics, isReady } = useShieldedCall()
+ *
+ * const response = await call(
+ *   "Explain React hooks",
+ *   async (prompt) => {
+ *     const res = await fetch("/api/chat", { method: "POST", body: JSON.stringify({ prompt }) })
+ *     const data = await res.json()
+ *     return { response: data.text, inputTokens: data.usage.input, outputTokens: data.usage.output }
+ *   },
+ *   "gpt-4o"
+ * )
+ * ```
+ */
+export function useShieldedCall() {
+  const { cache, savingsStore, defaultModelId } = useTokenShield()
+  const [metrics, setMetrics] = useState<ShieldedCallMetrics>({
+    source: "none",
+    confidence: 0,
+    latencyMs: 0,
+  })
+
+  const call = useCallback(
+    async (
+      prompt: string,
+      apiFn: (prompt: string) => Promise<{ response: string; inputTokens: number; outputTokens: number }>,
+      model?: string
+    ): Promise<string> => {
+      const modelId = model ?? defaultModelId
+      const start = performance.now()
+
+      // Check cache first
+      const cacheResult = await cache.lookup(prompt, modelId)
+      if (cacheResult.hit && cacheResult.entry) {
+        const latencyMs = performance.now() - start
+        setMetrics({
+          source: "cache",
+          confidence: cacheResult.similarity ?? 1,
+          latencyMs,
+        })
+
+        const cost = estimateCost(
+          modelId,
+          cacheResult.entry.inputTokens,
+          cacheResult.entry.outputTokens
+        )
+        savingsStore.addEvent({
+          timestamp: Date.now(),
+          type: "cache_hit",
+          tokensSaved: cacheResult.entry.inputTokens + cacheResult.entry.outputTokens,
+          dollarsSaved: cost.totalCost,
+          details: `Shield ${cacheResult.matchType} (${((cacheResult.similarity ?? 1) * 100).toFixed(0)}% confidence)`,
+        })
+
+        return cacheResult.entry.response
+      }
+
+      // Cache miss — call the API
+      savingsStore.incrementRequests()
+      const result = await apiFn(prompt)
+      const latencyMs = performance.now() - start
+
+      // Teach the cache
+      await cache.store(prompt, result.response, modelId, result.inputTokens, result.outputTokens)
+
+      setMetrics({
+        source: "api",
+        confidence: 0,
+        latencyMs,
+      })
+
+      return result.response
+    },
+    [cache, savingsStore, defaultModelId]
+  )
+
+  return { call, metrics, isReady: true }
+}

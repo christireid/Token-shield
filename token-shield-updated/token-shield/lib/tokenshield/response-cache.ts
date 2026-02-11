@@ -12,6 +12,7 @@
  */
 
 import { get, set, del, keys, createStore } from "idb-keyval"
+import { NeuroElasticEngine, type NeuroElasticConfig } from "./neuro-elastic"
 
 export interface CacheEntry {
   key: string
@@ -35,6 +36,19 @@ export interface CacheConfig {
   similarityThreshold: number
   /** IndexedDB store name */
   storeName: string
+  /**
+   * Similarity encoding strategy:
+   * - "bigram" (default): Fast bigram Dice coefficient — good for near-duplicates
+   * - "holographic": Trigram-based holographic encoding with semantic seeding — better for paraphrases
+   */
+  encodingStrategy?: "bigram" | "holographic"
+  /**
+   * Semantic seeds for holographic encoding. Maps domain terms to seed angles.
+   * Terms sharing the same seed value will be encoded closer together.
+   * Only used when encodingStrategy is "holographic".
+   * @example { cost: 10, price: 10, billing: 10, budget: 10 }
+   */
+  semanticSeeds?: Record<string, number>
 }
 
 const DEFAULT_CONFIG: CacheConfig = {
@@ -110,9 +124,22 @@ export class ResponseCache {
   private memoryCache = new Map<string, CacheEntry>()
   /** Per-instance IDB store (lazy-initialized on first access) */
   private idbStore: ReturnType<typeof createStore> | null = null
+  /** Optional holographic encoding engine for enhanced fuzzy matching */
+  private holoEngine: NeuroElasticEngine | null = null
 
   constructor(config: Partial<CacheConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
+
+    // Initialize holographic engine if strategy is set
+    if (this.config.encodingStrategy === "holographic") {
+      this.holoEngine = new NeuroElasticEngine({
+        threshold: this.config.similarityThreshold,
+        seeds: this.config.semanticSeeds,
+        maxMemories: this.config.maxEntries,
+        enableInhibition: true,
+        persist: false, // Persistence handled by ResponseCache's own IDB
+      })
+    }
   }
 
   private getStore(): ReturnType<typeof createStore> | null {
@@ -175,6 +202,27 @@ export class ResponseCache {
 
     // 3. Fuzzy match against memory cache
     if (this.config.similarityThreshold < 1) {
+      // 3a. Holographic encoding (enhanced paraphrase detection)
+      if (this.holoEngine) {
+        const holoResult = this.holoEngine.find(prompt, model)
+        if (holoResult) {
+          // Find the corresponding cache entry by prompt
+          for (const entry of this.memoryCache.values()) {
+            if (entry.prompt === holoResult.prompt && (!model || entry.model === model)) {
+              entry.accessCount++
+              entry.lastAccessed = Date.now()
+              return {
+                hit: true,
+                entry,
+                matchType: "fuzzy",
+                similarity: holoResult.score,
+              }
+            }
+          }
+        }
+      }
+
+      // 3b. Bigram fallback (original algorithm)
       let bestMatch: CacheEntry | undefined
       let bestSimilarity = 0
 
@@ -229,6 +277,11 @@ export class ResponseCache {
     }
 
     this.memoryCache.set(key, entry)
+
+    // Teach the holographic engine about this entry
+    if (this.holoEngine) {
+      this.holoEngine.learn(prompt, response, model, inputTokens, outputTokens).catch(() => {})
+    }
 
     // Evict LRU if over capacity
     if (this.memoryCache.size > this.config.maxEntries) {
@@ -304,6 +357,9 @@ export class ResponseCache {
    */
   async clear(): Promise<void> {
     this.memoryCache.clear()
+    if (this.holoEngine) {
+      await this.holoEngine.clear()
+    }
     try {
       const store = this.getStore()
       if (!store) return
