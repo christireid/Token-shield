@@ -311,6 +311,18 @@ export {
   type WorkerResponse,
 } from "./shield-worker"
 
+// LLM API Client (multi-provider call helpers)
+export {
+  callOpenAI,
+  callAnthropic,
+  callGoogle,
+  callLLM,
+  calculateRealCost,
+  detectModelProvider,
+  type LLMResult,
+  type LLMMessage,
+} from "./api-client"
+
 // Performance Benchmarks
 export {
   bench,
