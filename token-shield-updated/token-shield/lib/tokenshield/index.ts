@@ -178,7 +178,12 @@ export {
   useCostLedger,
   useFeatureCost,
   useUserBudget,
+  useEventLog,
+  useProviderHealth,
+  usePipelineMetrics,
   type TokenShieldProviderProps,
+  type EventLogEntry,
+  type PipelineMetrics,
 } from "./react"
 
 // Dashboard Component
