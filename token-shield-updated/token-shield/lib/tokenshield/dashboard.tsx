@@ -103,12 +103,12 @@ export function TokenShieldDashboard({
   )
 
   return (
-    <div className={className} style={containerStyle}>
+    <div className={className} style={containerStyle} role="region" aria-label="TokenShield Dashboard">
       <h2 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 700 }}>
         TokenShield Dashboard
       </h2>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }} aria-live="polite">
         <SavingsSection />
 
         {showLedger && <OptionalSection><LedgerSection /></OptionalSection>}

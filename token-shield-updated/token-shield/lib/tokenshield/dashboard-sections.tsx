@@ -67,7 +67,14 @@ export function Gauge({
         <span>{label}</span>
         <span>{formatDollars(value)} / {formatDollars(max)}</span>
       </div>
-      <div style={{ background: "#e5e7eb", borderRadius: 4, height: 8, overflow: "hidden" }}>
+      <div
+        role="progressbar"
+        aria-valuenow={Math.round(pct)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`${label}: ${formatDollars(value)} of ${formatDollars(max)}`}
+        style={{ background: "#e5e7eb", borderRadius: 4, height: 8, overflow: "hidden" }}
+      >
         <div
           style={{
             width: `${pct}%`,
@@ -310,9 +317,9 @@ export function EventLogSection() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #e5e7eb", background: "#f3f4f6" }}>
-                <th style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#374151" }}>Time</th>
-                <th style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#374151" }}>Event</th>
-                <th style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#374151" }}>Details</th>
+                <th scope="col" style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#374151" }}>Time</th>
+                <th scope="col" style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#374151" }}>Event</th>
+                <th scope="col" style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#374151" }}>Details</th>
               </tr>
             </thead>
             <tbody>
@@ -370,11 +377,11 @@ export function ProviderHealthSection({ adapter }: { adapter: ProviderAdapter })
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
           <thead>
             <tr style={{ borderBottom: "1px solid #e5e7eb", background: "#f3f4f6" }}>
-              <th style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#374151" }}>Provider</th>
-              <th style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#374151" }}>Status</th>
-              <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "#374151" }}>Latency</th>
-              <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "#374151" }}>Failures</th>
-              <th style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "#374151" }}>Requests</th>
+              <th scope="col" style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#374151" }}>Provider</th>
+              <th scope="col" style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#374151" }}>Status</th>
+              <th scope="col" style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "#374151" }}>Latency</th>
+              <th scope="col" style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "#374151" }}>Failures</th>
+              <th scope="col" style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "#374151" }}>Requests</th>
             </tr>
           </thead>
           <tbody>
