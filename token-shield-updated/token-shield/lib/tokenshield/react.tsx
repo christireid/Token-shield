@@ -27,7 +27,7 @@ import { routeToModel, type RoutingDecision } from "./model-router"
 import { RequestGuard, type GuardConfig, type GuardResult } from "./request-guard"
 import { CostCircuitBreaker } from "./circuit-breaker"
 import { UserBudgetManager, type UserBudgetStatus } from "./user-budget-manager"
-import { shieldEvents, type TokenShieldEvents } from "./event-bus"
+import { shieldEvents, createEventBus, type TokenShieldEvents } from "./event-bus"
 import type { ProviderAdapter, ProviderHealth } from "./provider-adapter"
 
 // ---------------------
@@ -111,6 +111,8 @@ interface TokenShieldContextValue {
   defaultModelId: string
   /** Global CostLedger instance. Optional: only present when ledgerConfig is provided */
   ledger?: CostLedger
+  /** Per-instance event bus. Falls back to global shieldEvents when not provided via props. */
+  eventBus: ReturnType<typeof createEventBus>
 }
 
 const TokenShieldContext = createContext<TokenShieldContextValue | null>(null)
@@ -135,6 +137,12 @@ export interface TokenShieldProviderProps {
     /** Optional default feature tag applied to all ledger entries */
     feature?: string
   }
+
+  /**
+   * Optional per-instance event bus. Pass middleware.events to connect hooks
+   * to a specific middleware instance. Falls back to global shieldEvents.
+   */
+  eventBus?: ReturnType<typeof createEventBus>
 }
 
 /**
@@ -147,7 +155,9 @@ export function TokenShieldProvider({
   guardConfig,
   cacheConfig,
   ledgerConfig,
+  eventBus: eventBusProp,
 }: TokenShieldProviderProps) {
+  const eventBus = eventBusProp ?? shieldEvents
   const cacheRef = useRef<ResponseCache | null>(null)
   const guardRef = useRef<RequestGuard | null>(null)
   const storeRef = useRef<ReturnType<typeof createSavingsStore> | null>(null)
@@ -176,8 +186,9 @@ export function TokenShieldProvider({
       savingsStore: storeRef.current!,
       defaultModelId,
       ledger: ledgerRef.current ?? undefined,
+      eventBus,
     }),
-    [defaultModelId]
+    [defaultModelId, eventBus]
   )
 
   return (
@@ -700,6 +711,7 @@ let _eventIdCounter = 0
  * unbounded memory growth.
  */
 export function useEventLog(maxEntries = 50): EventLogEntry[] {
+  const { eventBus } = useTokenShield()
   const [log, setLog] = useState<EventLogEntry[]>([])
 
   useEffect(() => {
@@ -737,14 +749,14 @@ export function useEventLog(maxEntries = 50): EventLogEntry[] {
           return next.length > maxEntries ? next.slice(0, maxEntries) : next
         })
       }
-      shieldEvents.on(eventType, handler as any)
-      handlers.push(() => shieldEvents.off(eventType, handler as any))
+      eventBus.on(eventType, handler as any)
+      handlers.push(() => eventBus.off(eventType, handler as any))
     }
 
     return () => {
       for (const unsub of handlers) unsub()
     }
-  }, [maxEntries])
+  }, [maxEntries, eventBus])
 
   return log
 }
@@ -805,6 +817,7 @@ const EMPTY_PIPELINE_METRICS: PipelineMetrics = {
  * and ledger:entry events to maintain running statistics.
  */
 export function usePipelineMetrics(): PipelineMetrics {
+  const { eventBus } = useTokenShield()
   const [metrics, setMetrics] = useState<PipelineMetrics>(EMPTY_PIPELINE_METRICS)
 
   // Use refs for running counters so we don't close over stale state
@@ -880,16 +893,61 @@ export function usePipelineMetrics(): PipelineMetrics {
 
         updateMetrics()
       }
-      shieldEvents.on(eventType, handler as any)
-      handlers.push(() => shieldEvents.off(eventType, handler as any))
+      eventBus.on(eventType, handler as any)
+      handlers.push(() => eventBus.off(eventType, handler as any))
     }
 
     return () => {
       for (const unsub of handlers) unsub()
     }
-  }, [])
+  }, [eventBus])
 
   return metrics
+}
+
+// -------------------------------------------------------
+// Session Savings Hook
+// -------------------------------------------------------
+
+export interface SessionSavingsState {
+  /** Cumulative dollars spent this session */
+  totalSpent: number
+  /** Cumulative dollars saved this session */
+  totalSaved: number
+  /** Net cost (totalSpent - totalSaved) */
+  netCost: number
+  /** Number of requests recorded */
+  requestCount: number
+}
+
+/**
+ * Track real-time running dollar totals for the current session.
+ * Subscribes to ledger:entry events on the per-instance event bus
+ * and accumulates spend/savings as they arrive.
+ */
+export function useSessionSavings(): SessionSavingsState {
+  const { eventBus } = useTokenShield()
+  const [state, setState] = useState<SessionSavingsState>({
+    totalSpent: 0,
+    totalSaved: 0,
+    netCost: 0,
+    requestCount: 0,
+  })
+
+  useEffect(() => {
+    const handler = (data: { cost: number; saved: number }) => {
+      setState((prev) => ({
+        totalSpent: prev.totalSpent + data.cost,
+        totalSaved: prev.totalSaved + data.saved,
+        netCost: prev.netCost + data.cost - data.saved,
+        requestCount: prev.requestCount + 1,
+      }))
+    }
+    eventBus.on("ledger:entry", handler as any)
+    return () => eventBus.off("ledger:entry", handler as any)
+  }, [eventBus])
+
+  return state
 }
 
 // -------------------------------------------------------

@@ -183,10 +183,12 @@ export {
   useEventLog,
   useProviderHealth,
   usePipelineMetrics,
+  useSessionSavings,
   useShieldedCall,
   type TokenShieldProviderProps,
   type EventLogEntry,
   type PipelineMetrics,
+  type SessionSavingsState,
   type ShieldedCallMetrics,
 } from "./react"
 

@@ -161,7 +161,7 @@ export class ResponseCache {
    */
   peek(
     prompt: string,
-    model?: string
+    model: string
   ): { hit: boolean; matchType?: "exact" | "fuzzy"; similarity?: number; entry?: CacheEntry } {
     const key = hashKey(prompt, model)
 
@@ -197,7 +197,7 @@ export class ResponseCache {
    */
   async lookup(
     prompt: string,
-    model?: string
+    model: string
   ): Promise<{
     hit: boolean
     entry?: CacheEntry
