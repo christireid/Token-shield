@@ -366,10 +366,10 @@ export class ResponseCache {
     try {
       const store = this.getStore()
       if (!store) return 0
-      const allKeys = await keys<string>(store)
+      const allKeys = (await keys(store)) as string[]
       let loaded = 0
       for (const key of allKeys) {
-        const entry = await get<CacheEntry>(key, store)
+        const entry = (await get(key, store)) as CacheEntry | undefined
         if (entry && Date.now() - entry.createdAt < this.config.ttlMs) {
           this.memoryCache.set(key, entry)
           // Populate holographic engine so fuzzy matching works after reload
@@ -420,7 +420,7 @@ export class ResponseCache {
     try {
       const store = this.getStore()
       if (!store) return
-      const allKeys = await keys<string>(store)
+      const allKeys = (await keys(store)) as string[]
       for (const key of allKeys) {
         await del(key, store)
       }

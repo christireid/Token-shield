@@ -204,7 +204,7 @@ export class EncryptedStore {
    * Get all keys in the store.
    */
   async getAllKeys(): Promise<string[]> {
-    return keys<string>(this.idbStore)
+    return (await keys(this.idbStore)) as string[]
   }
 }
 

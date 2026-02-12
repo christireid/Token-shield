@@ -307,7 +307,7 @@ export class CostLedger {
     if (!this.persistEnabled || !this.idbStore || this.hydrated) return 0
     this.hydrated = true
     try {
-      const allKeys = await keys<string>(this.idbStore)
+      const allKeys = (await keys(this.idbStore)) as string[]
       const existingIds = new Set(this.entries.map((e) => e.id))
       let loaded = 0
       for (const key of allKeys) {
