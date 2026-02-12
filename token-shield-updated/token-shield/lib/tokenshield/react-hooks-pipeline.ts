@@ -174,6 +174,11 @@ export interface EventLogEntry {
   data: Record<string, unknown>
 }
 
+/**
+ * Module-scoped counter for generating unique event IDs.
+ * Safe for client-side only (React hooks require browser).
+ * SSR-safe because hooks never run during server rendering.
+ */
 let _eventIdCounter = 0
 
 /**

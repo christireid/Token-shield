@@ -57,6 +57,7 @@ export {
   MODEL_PRICING,
   type ModelPricing,
   type CostEstimate,
+  type KnownModelId,
 } from "./cost-estimator"
 
 // 3. Context Manager
@@ -164,6 +165,12 @@ export {
   type TokenShieldMiddleware,
   type TokenShieldMiddlewareConfig,
 } from "./middleware"
+
+// Middleware Health Check
+export { type HealthCheckResult } from "./middleware-types"
+
+// Quick-Start Factory
+export { createTokenShield } from "./create-token-shield"
 
 // React Integration
 export {

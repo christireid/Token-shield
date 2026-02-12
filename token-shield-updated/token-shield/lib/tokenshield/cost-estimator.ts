@@ -146,6 +146,13 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   },
 }
 
+/**
+ * Union of all model IDs with built-in pricing data.
+ * Provides IDE autocomplete for model selection while still
+ * accepting arbitrary strings for custom/fine-tuned models.
+ */
+export type KnownModelId = keyof typeof MODEL_PRICING
+
 export interface CostEstimate {
   model: ModelPricing
   inputTokens: number

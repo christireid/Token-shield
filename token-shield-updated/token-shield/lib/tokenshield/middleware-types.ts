@@ -201,8 +201,37 @@ export interface TokenShieldMiddleware {
   wrapGenerate: (args: { doGenerate: () => Promise<Record<string, unknown>>; params: Record<string, unknown> }) => Promise<Record<string, unknown>>
   /** Wraps streaming model calls with token tracking, caching, budget accounting */
   wrapStream: (args: { doStream: () => Promise<Record<string, unknown>>; params: Record<string, unknown> }) => Promise<Record<string, unknown>>
+  /** Returns a snapshot of all module health indicators */
+  healthCheck: () => HealthCheckResult
   /** Clean up event forwarding listeners. Call when disposing a middleware instance. */
   dispose: () => void
+}
+
+/** Health check result for operational monitoring */
+export interface HealthCheckResult {
+  /** Whether the middleware is operational */
+  healthy: boolean
+  /** Active modules */
+  modules: {
+    guard: boolean
+    cache: boolean
+    context: boolean
+    router: boolean
+    prefix: boolean
+    ledger: boolean
+    breaker: boolean
+    userBudget: boolean
+  }
+  /** Cache hit rate (0-1), null if cache disabled */
+  cacheHitRate: number | null
+  /** Guard blocked request rate (0-1), null if guard disabled */
+  guardBlockedRate: number | null
+  /** Whether circuit breaker is tripped */
+  breakerTripped: boolean | null
+  /** Ledger total spend, null if ledger disabled */
+  totalSpent: number | null
+  /** Ledger total saved, null if ledger disabled */
+  totalSaved: number | null
 }
 
 // -------------------------------------------------------

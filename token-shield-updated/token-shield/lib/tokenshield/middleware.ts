@@ -47,12 +47,13 @@ import type {
   TokenShieldMiddlewareConfig,
   TokenShieldMiddleware,
   MiddlewareContext,
+  HealthCheckResult,
 } from "./middleware-types"
 import { buildTransformParams } from "./middleware-transform"
 import { buildWrapGenerate, buildWrapStream } from "./middleware-wrap"
 
 // Re-export types from middleware-types so existing import paths continue to work
-export type { TokenShieldMiddlewareConfig, TokenShieldMiddleware } from "./middleware-types"
+export type { TokenShieldMiddlewareConfig, TokenShieldMiddleware, HealthCheckResult } from "./middleware-types"
 
 /**
  * Create the TokenShield middleware.
@@ -202,6 +203,31 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
     transformParams: buildTransformParams(ctx),
     wrapGenerate: buildWrapGenerate(ctx),
     wrapStream: buildWrapStream(ctx),
+    healthCheck(): HealthCheckResult {
+      const cacheStats = cache?.stats() ?? null
+      const guardStats = guard?.stats() ?? null
+      const breakerStatus = breaker?.getStatus() ?? null
+      const ledgerSummary = ledger?.getSummary() ?? null
+
+      return {
+        healthy: true,
+        modules: {
+          guard: modules.guard,
+          cache: modules.cache,
+          context: modules.context,
+          router: modules.router,
+          prefix: modules.prefix,
+          ledger: modules.ledger,
+          breaker: breaker !== null,
+          userBudget: userBudgetManager !== null,
+        },
+        cacheHitRate: cacheStats ? (cacheStats.entries > 0 ? cacheStats.totalHits / Math.max(1, cacheStats.entries + cacheStats.totalHits) : 0) : null,
+        guardBlockedRate: guardStats ? guardStats.totalBlocked : null,
+        breakerTripped: breakerStatus ? breakerStatus.tripped : null,
+        totalSpent: ledgerSummary ? ledgerSummary.totalSpent : null,
+        totalSaved: ledgerSummary ? ledgerSummary.totalSaved : null,
+      }
+    },
     dispose() {
       for (const { name, handler } of forwardingHandlers) {
         instanceEvents.off(name, handler as any)
