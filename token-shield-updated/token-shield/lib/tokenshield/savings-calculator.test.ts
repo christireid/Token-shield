@@ -1,52 +1,74 @@
 /**
  * Savings Calculator Tests
  *
- * Tests the estimateSavings() utility function that estimates
- * potential monthly savings from Token Shield optimization modules.
+ * Tests for the estimateSavings() pure utility function.
+ * Does NOT test the React component (requires React Testing Library).
  */
 
 import { describe, it, expect } from "vitest"
-import { estimateSavings, type SavingsEstimateInput } from "./savings-calculator"
+import { estimateSavings } from "./savings-calculator"
 
 describe("estimateSavings", () => {
-  it("returns all required fields", () => {
+  it("returns correct structure with all modules", () => {
     const result = estimateSavings({ monthlySpend: 10000 })
+
     expect(result).toHaveProperty("totalSavings")
     expect(result).toHaveProperty("savingsPercent")
-    expect(result).toHaveProperty("byModule")
+    expect(result).toHaveProperty("byModule.cache")
+    expect(result).toHaveProperty("byModule.router")
+    expect(result).toHaveProperty("byModule.prefix")
+    expect(result).toHaveProperty("byModule.context")
+    expect(result).toHaveProperty("byModule.guard")
     expect(result).toHaveProperty("tokenShieldCost")
     expect(result).toHaveProperty("netSavings")
     expect(result).toHaveProperty("roi")
     expect(result).toHaveProperty("recommendedTier")
-    expect(result.byModule).toHaveProperty("cache")
-    expect(result.byModule).toHaveProperty("router")
-    expect(result.byModule).toHaveProperty("prefix")
-    expect(result.byModule).toHaveProperty("context")
-    expect(result.byModule).toHaveProperty("guard")
   })
 
-  it("returns zero savings for zero spend", () => {
-    const result = estimateSavings({ monthlySpend: 0 })
-    expect(result.totalSavings).toBe(0)
-    expect(result.savingsPercent).toBe(0)
-    expect(result.byModule.cache.savings).toBe(0)
-    expect(result.byModule.router.savings).toBe(0)
-  })
-
-  it("calculates cache savings based on duplicate rate", () => {
+  it("calculates cache savings from duplicateRate", () => {
     const result = estimateSavings({ monthlySpend: 10000, duplicateRate: 0.2 })
-    // 20% of $10k = $2000 cache savings
     expect(result.byModule.cache.savings).toBe(2000)
     expect(result.byModule.cache.percent).toBe(20)
   })
 
-  it("calculates router savings based on simple request rate", () => {
-    const result = estimateSavings({ monthlySpend: 10000, simpleRequestRate: 0.5 })
-    // 50% * 60% cost reduction * $10k = $3000
-    expect(result.byModule.router.savings).toBe(3000)
+  it("uses default duplicateRate of 15%", () => {
+    const result = estimateSavings({ monthlySpend: 10000 })
+    expect(result.byModule.cache.savings).toBe(1500)
   })
 
-  it("disables prefix savings when no steady system prompt", () => {
+  it("calculates router savings from simpleRequestRate", () => {
+    const result = estimateSavings({ monthlySpend: 10000, simpleRequestRate: 0.3 })
+    expect(result.byModule.router.savings).toBe(1800)
+  })
+
+  it("calculates prefix savings with OpenAI discount (50%)", () => {
+    const result = estimateSavings({
+      monthlySpend: 10000,
+      provider: "openai",
+      hasSteadySystemPrompt: true,
+    })
+    expect(result.byModule.prefix.savings).toBe(800)
+  })
+
+  it("calculates prefix savings with Anthropic discount (90%)", () => {
+    const result = estimateSavings({
+      monthlySpend: 10000,
+      provider: "anthropic",
+      hasSteadySystemPrompt: true,
+    })
+    expect(result.byModule.prefix.savings).toBe(1440)
+  })
+
+  it("calculates prefix savings with Google discount (75%)", () => {
+    const result = estimateSavings({
+      monthlySpend: 10000,
+      provider: "google",
+      hasSteadySystemPrompt: true,
+    })
+    expect(result.byModule.prefix.savings).toBe(1200)
+  })
+
+  it("returns zero prefix savings when no system prompt", () => {
     const result = estimateSavings({
       monthlySpend: 10000,
       hasSteadySystemPrompt: false,
@@ -55,77 +77,105 @@ describe("estimateSavings", () => {
     expect(result.byModule.prefix.percent).toBe(0)
   })
 
-  it("applies Anthropic prefix discount (90%)", () => {
-    const anthropic = estimateSavings({ monthlySpend: 10000, provider: "anthropic" })
-    const openai = estimateSavings({ monthlySpend: 10000, provider: "openai" })
-    // Anthropic has 90% discount vs OpenAI 50%, so prefix savings should be higher
-    expect(anthropic.byModule.prefix.savings).toBeGreaterThan(openai.byModule.prefix.savings)
+  it("calculates context savings for long conversations", () => {
+    const result = estimateSavings({
+      monthlySpend: 10000,
+      avgConversationLength: 20,
+    })
+    expect(result.byModule.context.savings).toBe(1500)
   })
 
-  it("applies Google prefix discount (75%)", () => {
-    const google = estimateSavings({ monthlySpend: 10000, provider: "google" })
-    const openai = estimateSavings({ monthlySpend: 10000, provider: "openai" })
-    expect(google.byModule.prefix.savings).toBeGreaterThan(openai.byModule.prefix.savings)
+  it("returns zero context savings for short conversations", () => {
+    const result = estimateSavings({
+      monthlySpend: 10000,
+      avgConversationLength: 5,
+    })
+    expect(result.byModule.context.savings).toBe(0)
   })
 
-  it("calculates context savings only for long conversations", () => {
-    const short = estimateSavings({ monthlySpend: 10000, avgConversationLength: 5 })
-    const long = estimateSavings({ monthlySpend: 10000, avgConversationLength: 20 })
-    expect(short.byModule.context.savings).toBe(0)
-    expect(long.byModule.context.savings).toBeGreaterThan(0)
-  })
-
-  it("guard savings are always 3% of spend", () => {
+  it("guard savings are 3% of spend", () => {
     const result = estimateSavings({ monthlySpend: 10000 })
     expect(result.byModule.guard.savings).toBe(300)
     expect(result.byModule.guard.percent).toBe(3)
   })
 
-  it("total savings equals sum of all module savings", () => {
-    const result = estimateSavings({ monthlySpend: 10000 })
+  it("totalSavings is sum of all modules", () => {
+    const result = estimateSavings({
+      monthlySpend: 10000,
+      duplicateRate: 0.15,
+      simpleRequestRate: 0.25,
+      avgConversationLength: 10,
+      hasSteadySystemPrompt: true,
+      provider: "openai",
+    })
+
     const moduleSum =
       result.byModule.cache.savings +
       result.byModule.router.savings +
       result.byModule.prefix.savings +
       result.byModule.context.savings +
       result.byModule.guard.savings
+
     expect(result.totalSavings).toBeCloseTo(moduleSum, 1)
   })
 
-  it("net savings = total savings - TokenShield cost", () => {
+  it("savingsPercent is totalSavings / monthlySpend * 100", () => {
     const result = estimateSavings({ monthlySpend: 10000 })
-    expect(result.netSavings).toBeCloseTo(result.totalSavings - result.tokenShieldCost, 1)
+    const expectedPercent = (result.totalSavings / 10000) * 100
+    expect(result.savingsPercent).toBeCloseTo(expectedPercent, 0)
   })
 
-  it("recommends pro tier for small spend", () => {
+  it("recommends pro tier for spend under $5000", () => {
     const result = estimateSavings({ monthlySpend: 1000 })
     expect(result.recommendedTier).toBe("pro")
     expect(result.tokenShieldCost).toBe(29)
   })
 
-  it("recommends team tier for medium spend", () => {
+  it("recommends team tier for spend $5000-$49999", () => {
     const result = estimateSavings({ monthlySpend: 10000 })
     expect(result.recommendedTier).toBe("team")
     expect(result.tokenShieldCost).toBe(99)
   })
 
-  it("recommends enterprise tier for large spend", () => {
+  it("recommends enterprise tier for spend >= $50000", () => {
     const result = estimateSavings({ monthlySpend: 100000 })
     expect(result.recommendedTier).toBe("enterprise")
     expect(result.tokenShieldCost).toBe(499)
   })
 
-  it("ROI is net savings divided by cost", () => {
+  it("calculates netSavings as totalSavings - tokenShieldCost", () => {
     const result = estimateSavings({ monthlySpend: 10000 })
-    const expectedRoi = Math.round(result.netSavings / result.tokenShieldCost * 10) / 10
-    expect(result.roi).toBe(expectedRoi)
+    expect(result.netSavings).toBeCloseTo(result.totalSavings - result.tokenShieldCost, 1)
   })
 
-  it("uses sensible defaults when no options provided", () => {
-    const result = estimateSavings({ monthlySpend: 5000 })
-    // Default: 15% cache, 25% routing, steady prefix, 10 msg conversations
-    expect(result.totalSavings).toBeGreaterThan(0)
-    expect(result.savingsPercent).toBeGreaterThan(20) // should be > 20% total
-    expect(result.savingsPercent).toBeLessThan(80) // but not unreasonably high
+  it("calculates ROI correctly", () => {
+    const result = estimateSavings({ monthlySpend: 10000 })
+    const expectedRoi = result.netSavings / result.tokenShieldCost
+    expect(result.roi).toBeCloseTo(expectedRoi, 0)
+  })
+
+  it("handles zero spend", () => {
+    const result = estimateSavings({ monthlySpend: 0 })
+    expect(result.totalSavings).toBe(0)
+    expect(result.savingsPercent).toBe(0)
+    expect(result.byModule.cache.savings).toBe(0)
+    expect(result.byModule.router.savings).toBe(0)
+  })
+
+  it("handles very small spend", () => {
+    const result = estimateSavings({ monthlySpend: 1 })
+    expect(result.totalSavings).toBeGreaterThanOrEqual(0)
+    expect(result.netSavings).toBeLessThan(0)
+  })
+
+  it("rounds savings to 2 decimal places", () => {
+    const result = estimateSavings({ monthlySpend: 333 })
+    const checkRounding = (v: number) => {
+      const rounded = Math.round(v * 100) / 100
+      expect(v).toBe(rounded)
+    }
+    checkRounding(result.totalSavings)
+    checkRounding(result.netSavings)
+    checkRounding(result.byModule.cache.savings)
   })
 })
