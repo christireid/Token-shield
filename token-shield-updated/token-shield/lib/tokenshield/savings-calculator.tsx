@@ -168,16 +168,18 @@ export function SavingsCalculator({ initialSpend = 5000, className }: SavingsCal
   )
 
   return (
-    <div className={className} style={{ fontFamily: "system-ui, sans-serif", maxWidth: 600 }}>
-      <h3 style={{ margin: "0 0 16px" }}>Token Shield Savings Calculator</h3>
+    <div className={className} role="region" aria-label="Token Shield Savings Calculator" style={{ fontFamily: "system-ui, sans-serif", maxWidth: 600 }}>
+      <h3 id="savings-calc-heading" style={{ margin: "0 0 16px" }}>Token Shield Savings Calculator</h3>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+      <div style={{ display: "flex", gap: 12, marginBottom: 16 }} role="group" aria-labelledby="savings-calc-heading">
         <label style={{ flex: 1 }}>
           <span style={{ display: "block", fontSize: 14, marginBottom: 4 }}>Monthly LLM Spend ($)</span>
           <input
             type="number"
             value={monthlySpend}
             onChange={(e) => setMonthlySpend(Math.max(0, Number(e.target.value)))}
+            aria-label="Monthly LLM spend in dollars"
+            min={0}
             style={{ width: "100%", padding: "8px 12px", border: "1px solid #ccc", borderRadius: 6, fontSize: 16 }}
           />
         </label>
@@ -186,6 +188,7 @@ export function SavingsCalculator({ initialSpend = 5000, className }: SavingsCal
           <select
             value={provider}
             onChange={(e) => setProvider(e.target.value as typeof provider)}
+            aria-label="Primary LLM provider"
             style={{ width: "100%", padding: "8px 12px", border: "1px solid #ccc", borderRadius: 6, fontSize: 16 }}
           >
             <option value="openai">OpenAI</option>
@@ -196,9 +199,9 @@ export function SavingsCalculator({ initialSpend = 5000, className }: SavingsCal
         </label>
       </div>
 
-      <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: 16, marginBottom: 16 }}>
+      <div aria-live="polite" role="status" style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: 16, marginBottom: 16 }}>
         <div style={{ fontSize: 14, color: "#166534" }}>Estimated Monthly Savings</div>
-        <div style={{ fontSize: 32, fontWeight: 700, color: "#15803d" }}>
+        <div style={{ fontSize: 32, fontWeight: 700, color: "#15803d" }} aria-label={`Estimated savings: $${estimate.totalSavings.toLocaleString()} per month, ${estimate.savingsPercent}% of spend`}>
           ${estimate.totalSavings.toLocaleString()} <span style={{ fontSize: 16, fontWeight: 400 }}>/ mo ({estimate.savingsPercent}%)</span>
         </div>
         <div style={{ fontSize: 14, color: "#166534", marginTop: 4 }}>
@@ -206,12 +209,12 @@ export function SavingsCalculator({ initialSpend = 5000, className }: SavingsCal
         </div>
       </div>
 
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+      <table role="table" aria-label="Savings breakdown by module" style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
         <thead>
           <tr style={{ borderBottom: "2px solid #e5e7eb" }}>
-            <th style={{ textAlign: "left", padding: "8px 4px" }}>Module</th>
-            <th style={{ textAlign: "right", padding: "8px 4px" }}>Savings</th>
-            <th style={{ textAlign: "left", padding: "8px 4px" }}>How</th>
+            <th scope="col" style={{ textAlign: "left", padding: "8px 4px" }}>Module</th>
+            <th scope="col" style={{ textAlign: "right", padding: "8px 4px" }}>Savings</th>
+            <th scope="col" style={{ textAlign: "left", padding: "8px 4px" }}>How</th>
           </tr>
         </thead>
         <tbody>

@@ -1,20 +1,20 @@
 {
   "name": "@tokenshield/ai-sdk",
-  "version": "0.1.0",
-  "description": "Frontend-only React/TypeScript toolkit for reducing AI/LLM token expenses",
+  "version": "0.2.0",
+  "description": "Cut LLM API costs 30-60% with 3 lines of code. TypeScript middleware for caching, routing, budget enforcement, and token optimization.",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.js"
     },
     "./react": {
+      "types": "./dist/react.d.ts",
       "import": "./dist/react.mjs",
-      "require": "./dist/react.js",
-      "types": "./dist/react.d.ts"
+      "require": "./dist/react.js"
     }
   },
   "files": [
@@ -31,6 +31,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "prepublishOnly": "npm run build && npm run test"
   },
   "keywords": [
@@ -42,7 +43,14 @@
     "openai",
     "anthropic",
     "vercel-ai-sdk",
-    "react"
+    "react",
+    "middleware",
+    "caching",
+    "budget",
+    "token-management",
+    "gpt",
+    "claude",
+    "gemini"
   ],
   "license": "MIT",
   "repository": {
