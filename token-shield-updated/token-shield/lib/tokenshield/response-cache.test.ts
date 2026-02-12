@@ -52,7 +52,7 @@ describe("response-cache", () => {
 
     it("returns miss for unknown prompts", async () => {
       const cache = new ResponseCache()
-      const result = await cache.lookup("Never seen before")
+      const result = await cache.lookup("Never seen before", "gpt-4o-mini")
       expect(result.hit).toBe(false)
     })
 
@@ -63,7 +63,7 @@ describe("response-cache", () => {
         similarityThreshold: 0.8,
       })
       await cache.store("What is React JS?", "React is a UI library.", "gpt-4o-mini", 10, 20)
-      const result = await cache.lookup("What is React?")
+      const result = await cache.lookup("What is React?", "gpt-4o-mini")
       // May be exact (after normalization) or fuzzy depending on hash
       expect(result.hit).toBe(true)
     })
@@ -80,7 +80,7 @@ describe("response-cache", () => {
     it("reports stats correctly", async () => {
       const cache = new ResponseCache({ maxEntries: 10, ttlMs: 60_000 })
       await cache.store("test", "response", "gpt-4o-mini", 10, 20)
-      await cache.lookup("test") // hit
+      await cache.lookup("test", "gpt-4o-mini") // hit
       const stats = cache.stats()
       expect(stats.entries).toBe(1)
       expect(stats.totalHits).toBe(1)

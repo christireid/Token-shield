@@ -762,8 +762,8 @@ describe("Middleware Budget Integration — Battle Tests", () => {
           getUserId: () => "tracked-user",
           budgets: {
             users: { "tracked-user": { daily: 10, monthly: 100 } },
-            onBudgetWarning: onWarning,
           },
+          onBudgetWarning: onWarning,
         },
         onUsage,
       })

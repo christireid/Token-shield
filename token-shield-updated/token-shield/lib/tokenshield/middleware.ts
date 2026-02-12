@@ -139,10 +139,14 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
     'breaker:warning', 'breaker:tripped', 'userBudget:warning', 'userBudget:exceeded',
     'userBudget:spend', 'stream:chunk', 'stream:abort', 'stream:complete',
   ]
+  // Track forwarding handlers so dispose() can remove them
+  const forwardingHandlers: Array<{ name: keyof TokenShieldEvents; handler: (data: unknown) => void }> = []
   for (const name of EVENT_NAMES) {
-    instanceEvents.on(name, ((data: unknown) => {
+    const handler = (data: unknown) => {
       try { (shieldEvents.emit as (type: string, data: unknown) => void)(name, data) } catch { /* non-fatal */ }
-    }) as never)
+    }
+    instanceEvents.on(name, handler as any)
+    forwardingHandlers.push({ name, handler })
   }
 
   // Hydrate persisted budget data from IndexedDB
@@ -198,6 +202,12 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
     transformParams: buildTransformParams(ctx),
     wrapGenerate: buildWrapGenerate(ctx),
     wrapStream: buildWrapStream(ctx),
+    dispose() {
+      for (const { name, handler } of forwardingHandlers) {
+        instanceEvents.off(name, handler as any)
+      }
+      forwardingHandlers.length = 0
+    },
   }
 }
 

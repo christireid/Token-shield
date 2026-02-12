@@ -243,7 +243,7 @@ export function buildTransformParams(ctx: MiddlewareContext) {
         if (!config.context.reserveForOutput && lastUserText) {
           try {
             const prediction = predictOutputTokens(lastUserText)
-            if (prediction.confidence >= 0.5) {
+            if (prediction.confidence !== "low") {
               reserveForOutput = prediction.suggestedMaxTokens
             }
           } catch { /* non-fatal: fall back to default */ }
@@ -364,7 +364,7 @@ export function buildTransformParams(ctx: MiddlewareContext) {
                 savedTokens: 0,
               })
             } catch { /* non-fatal */ }
-            log?.warn('Prefix optimizer: total tokens exceed context window', {
+            log?.warn('prefix', 'Total tokens exceed context window', {
               total: optimized.prefixTokens + optimized.volatileTokens,
               contextWindow: pricing.contextWindow,
               overflow: optimized.overflowTokens,

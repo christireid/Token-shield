@@ -201,6 +201,8 @@ export interface TokenShieldMiddleware {
   wrapGenerate: (args: { doGenerate: () => Promise<Record<string, unknown>>; params: Record<string, unknown> }) => Promise<Record<string, unknown>>
   /** Wraps streaming model calls with token tracking, caching, budget accounting */
   wrapStream: (args: { doStream: () => Promise<Record<string, unknown>>; params: Record<string, unknown> }) => Promise<Record<string, unknown>>
+  /** Clean up event forwarding listeners. Call when disposing a middleware instance. */
+  dispose: () => void
 }
 
 // -------------------------------------------------------
