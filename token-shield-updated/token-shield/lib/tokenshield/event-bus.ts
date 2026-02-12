@@ -8,6 +8,7 @@ export type TokenShieldEvents = {
   'cache:store': { prompt: string; model: string };
   'context:trimmed': { originalTokens: number; trimmedTokens: number; savedTokens: number };
   'router:downgraded': { originalModel: string; selectedModel: string; complexity: number; savedCost: number };
+  'router:holdback': { model: string; holdbackRate: number };
   'ledger:entry': { model: string; inputTokens: number; outputTokens: number; cost: number; saved: number };
   'breaker:warning': { limitType: string; currentSpend: number; limit: number; percentUsed: number };
   'breaker:tripped': { limitType: string; currentSpend: number; limit: number; action: string };

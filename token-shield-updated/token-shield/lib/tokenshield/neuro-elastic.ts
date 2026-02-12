@@ -5,7 +5,7 @@
  * Jaccard resonance with dynamic thresholding for robust approximate matching.
  */
 
-import { get, set } from "idb-keyval"
+import { get, set } from "./storage-adapter"
 
 /** Encoding dimensions: 64 × 32 = 2048-bit hologram */
 const DIMENSIONS = 64

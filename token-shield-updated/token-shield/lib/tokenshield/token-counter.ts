@@ -230,10 +230,40 @@ export function truncateToTokenBudget(
 }
 
 /**
+ * Detect the tokenizer accuracy level for a given model.
+ *
+ * gpt-tokenizer uses cl100k_base (OpenAI). This is exact for OpenAI models,
+ * approximate for other providers. Returns an accuracy descriptor and an
+ * optional margin of error so consumers can decide whether to trust the count
+ * or fall back to the provider's usage response.
+ *
+ * @param modelId - The model identifier
+ * @returns Accuracy info: "exact" for OpenAI, "approximate" for others, with error margin
+ */
+export function getTokenizerAccuracy(modelId: string): {
+  accuracy: "exact" | "approximate"
+  provider: string
+  marginOfError: number
+  note: string
+} {
+  const lower = modelId.toLowerCase()
+  if (lower.includes("claude") || lower.includes("anthropic")) {
+    return { accuracy: "approximate", provider: "anthropic", marginOfError: 0.15, note: "Anthropic uses a different BPE vocabulary. Counts may differ by ~15%. Use usage.input_tokens from the API response for billing accuracy." }
+  }
+  if (lower.includes("gemini") || lower.includes("google")) {
+    return { accuracy: "approximate", provider: "google", marginOfError: 0.20, note: "Google uses SentencePiece tokenization. Counts may differ by ~20%. Use usageMetadata from the API response for billing accuracy." }
+  }
+  if (lower.includes("llama") || lower.includes("mistral") || lower.includes("mixtral")) {
+    return { accuracy: "approximate", provider: "open-source", marginOfError: 0.15, note: "Open-source models use various tokenizers. Counts may differ by ~15%." }
+  }
+  return { accuracy: "exact", provider: "openai", marginOfError: 0, note: "gpt-tokenizer uses the same BPE encoding as OpenAI. Counts are exact." }
+}
+
+/**
  * Count tokens for a specific model using BPE encoding.
  *
  * Uses gpt-tokenizer (BPE) for all providers. This is 100% accurate for
- * OpenAI models and approximately 90% accurate for Anthropic/Google.
+ * OpenAI models and approximately 85-90% accurate for Anthropic/Google.
  * For billing-accurate counts on non-OpenAI models, use the `usage`
  * object from the API response instead.
  *

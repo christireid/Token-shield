@@ -18,6 +18,16 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - **CHANGELOG.md**: This file, for tracking changes across releases
 - **COMMERCIAL-READINESS-REVIEW.md**: Comprehensive 5-persona stakeholder analysis
 - **Deduplication window in middleware config**: The `guard.deduplicateWindow` option is now exposed through `tokenShieldMiddleware()` config, enabling time-based deduplication of identical prompts
+- **Tool token overhead in context budget**: Middleware now subtracts tool/function definition token overhead from context budgets before trimming, preventing over-allocation that leads to 400 errors
+- **Dry-run mode**: New `dryRun` config option simulates the full middleware pipeline without modifying behavior, emitting descriptions of each optimization via `onDryRun` callback for pre-production evaluation
+- **Per-request router override**: New `routerOverride` config function lets callers force a specific model for individual requests, bypassing complexity-based routing
+- **Tool definitions in stable prefix**: Prefix optimizer now classifies tool/function messages as stable content, improving provider prompt cache hit rates for tool-heavy applications
+- **Model-specific tokenizer accuracy**: New `getTokenizerAccuracy()` function reports whether token counts are exact (OpenAI cl100k_base) or approximate (Anthropic, Google) with margin-of-error estimates
+- **Savings calculator**: New `estimateSavings()` utility and `SavingsCalculator` React component for estimating per-module ROI on landing pages and onboarding flows
+- **Holographic cache encoding**: New `cache.encodingStrategy: "holographic"` option for trigram-based semantic similarity matching that catches paraphrased prompts better than bigram Dice coefficient
+- **A/B test holdback for router**: New `router.abTestHoldback` config (0-1) skips routing for a random fraction of requests, enabling quality comparison between routed and unrouted calls
+- **Edge Runtime compatibility**: New storage adapter layer auto-detects IndexedDB availability and falls back to in-memory `Map` storage for Vercel Edge Runtime, Cloudflare Workers, and other environments without IndexedDB. New `isPersistent()` export indicates whether data survives page reload
+- **`router:holdback` event**: Event bus emits `router:holdback` when A/B test holdback skips routing
 
 ## [0.1.0] - 2026-01-01
 

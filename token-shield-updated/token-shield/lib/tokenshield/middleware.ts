@@ -42,6 +42,7 @@ import { MODEL_PRICING, estimateCost } from "./cost-estimator"
 import { CostCircuitBreaker, type BreakerConfig } from "./circuit-breaker"
 import { StreamTokenTracker } from "./stream-tracker"
 import { UserBudgetManager, type UserBudgetConfig, type BudgetExceededEvent, type BudgetWarningEvent } from "./user-budget-manager"
+import { countToolTokens, type ToolDefinition } from "./tool-token-counter"
 import type { ChatMessage } from "./token-counter"
 import { TokenShieldConfigSchema } from "./config-schemas"
 import { TokenShieldConfigError, TokenShieldBlockedError, ERROR_CODES } from "./errors"
@@ -80,6 +81,15 @@ export interface TokenShieldMiddlewareConfig {
     ttlMs?: number
     similarityThreshold?: number
     persist?: boolean
+    /**
+     * Similarity matching strategy:
+     * - "bigram" (default): Fast bigram Dice coefficient. Good for near-duplicate detection.
+     * - "holographic": Trigram-based holographic encoding with semantic seeding.
+     *   Better for catching paraphrased prompts at the cost of slightly higher memory.
+     */
+    encodingStrategy?: "bigram" | "holographic"
+    /** Semantic seeds for holographic encoding (maps domain terms to seed angles) */
+    semanticSeeds?: Record<string, number>
   }
 
   /** Context manager config */
@@ -94,6 +104,13 @@ export interface TokenShieldMiddlewareConfig {
     tiers?: { modelId: string; maxComplexity: number }[]
     /** Complexity threshold above which to keep the default model */
     complexityThreshold?: number
+    /**
+     * A/B test holdback percentage (0-1). When set, this fraction of requests
+     * will skip routing and use the default model, enabling quality comparison
+     * between routed and unrouted calls. Set to 0.1 for a 10% holdback.
+     * Default: 0 (all requests are routed).
+     */
+    abTestHoldback?: number
   }
 
   /** Prefix optimizer config */
@@ -131,6 +148,30 @@ export interface TokenShieldMiddlewareConfig {
     /** Called when a user approaches their budget (80%) */
     onBudgetWarning?: (userId: string, event: BudgetWarningEvent) => void
   }
+
+  /**
+   * Dry-run mode: log what TokenShield WOULD do without modifying behavior.
+   * When enabled, the middleware passes params through unchanged but emits
+   * events and calls onDryRun with a description of each optimization that
+   * would have been applied. Useful for evaluating Token Shield before
+   * committing to production use.
+   */
+  dryRun?: boolean
+
+  /** Called in dry-run mode with a description of each optimization that would be applied */
+  onDryRun?: (action: { module: string; description: string; estimatedSavings?: number }) => void
+
+  /**
+   * Per-request router override. When set, the model router is skipped for
+   * requests where this function returns a non-null model ID.
+   * Use this to force specific models for particular prompts.
+   *
+   * @example
+   * ```ts
+   * routerOverride: (prompt) => prompt.includes('[IMPORTANT]') ? 'gpt-4o' : null
+   * ```
+   */
+  routerOverride?: (prompt: string) => string | null
 
   /** Called when a request is blocked by the guard */
   onBlocked?: (reason: string) => void
@@ -207,6 +248,8 @@ interface ShieldMeta {
   userBudgetInflight?: number
   /** True when user budget tier routing was applied — prevents complexity router from overriding */
   tierRouted?: boolean
+  /** True when this request was held back from routing for A/B quality comparison */
+  abTestHoldout?: boolean
   /** Cached last user text to avoid redundant extraction in wrapGenerate/wrapStream */
   lastUserText?: string
 }
@@ -307,6 +350,8 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
         maxEntries: config.cache?.maxEntries ?? 500,
         ttlMs: config.cache?.ttlMs ?? 3600000,
         similarityThreshold: config.cache?.similarityThreshold ?? 0.85,
+        encodingStrategy: config.cache?.encodingStrategy,
+        semanticSeeds: config.cache?.semanticSeeds,
       })
     : null
 
@@ -406,6 +451,41 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
         const lastUserMessage = messages.filter((m) => m.role === "user").pop()
         const lastUserText = lastUserMessage?.content ?? ""
         meta.lastUserText = lastUserText
+
+        // -- DRY-RUN MODE: simulate pipeline without modifying params --
+        if (config.dryRun) {
+          const modelId = String(params.modelId ?? "")
+          const inputTokens = messages.reduce((sum, m) => sum + countTokens(m.content) + MSG_OVERHEAD_TOKENS, 0)
+
+          if (guard && lastUserText) {
+            const guardModelId = modelId
+            const check = guard.check(lastUserText, undefined, guardModelId || undefined)
+            config.onDryRun?.({ module: 'guard', description: check.allowed ? 'Request would pass guard' : `Request would be blocked: ${check.reason}` })
+          }
+          if (cache && lastUserText) {
+            const lookup = await cache.lookup(lastUserText, modelId)
+            config.onDryRun?.({ module: 'cache', description: lookup.hit ? `Cache ${lookup.matchType} hit (similarity: ${lookup.similarity?.toFixed(2)})` : 'Cache miss', estimatedSavings: lookup.hit ? safeCost(modelId, lookup.entry!.inputTokens, lookup.entry!.outputTokens) : 0 })
+          }
+          if (modules.context && config.context?.maxInputTokens) {
+            const overBudget = inputTokens > config.context.maxInputTokens
+            config.onDryRun?.({ module: 'context', description: overBudget ? `Would trim ${inputTokens - config.context.maxInputTokens} tokens` : `Within budget (${inputTokens}/${config.context.maxInputTokens})` })
+          }
+          if (modules.router && config.router?.tiers && lastUserText) {
+            const complexity = analyzeComplexity(lastUserText)
+            config.onDryRun?.({ module: 'router', description: `Complexity: ${complexity.score}/100 (${complexity.tier}). Recommended tier: ${complexity.recommendedTier}` })
+          }
+          if (modules.prefix) {
+            const pricing = MODEL_PRICING[modelId]
+            if (pricing) {
+              const optimized = optimizePrefix(messages, modelId, pricing.inputPerMillion, { provider: config.prefix?.provider ?? "auto" })
+              config.onDryRun?.({ module: 'prefix', description: `Prefix: ${optimized.prefixTokens} tokens (${optimized.prefixEligibleForCaching ? 'eligible' : 'not eligible'} for caching)`, estimatedSavings: optimized.estimatedPrefixSavings })
+            }
+          }
+
+          span?.end({ dryRun: true })
+          ;(params as Record<string | symbol, unknown>)[SHIELD_META] = meta
+          return params // Pass through unchanged
+        }
 
         // -- 0. BREAKER CHECK --
         if (breaker && lastUserText) {
@@ -548,8 +628,18 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
 
         // -- 3. CONTEXT TRIM --
         if (modules.context && config.context?.maxInputTokens) {
+          // Account for tool definition token overhead — these hidden tokens
+          // count against the context window but are invisible in messages
+          let toolTokenOverhead = 0
+          const tools = (params as Record<string, unknown>).tools as ToolDefinition[] | undefined
+          if (tools && Array.isArray(tools) && tools.length > 0) {
+            try {
+              toolTokenOverhead = countToolTokens(tools).totalTokens
+            } catch { /* non-fatal: tool counting failed, proceed without overhead */ }
+          }
+
           const budget = {
-            maxContextTokens: config.context.maxInputTokens + (config.context.reserveForOutput ?? 1000),
+            maxContextTokens: config.context.maxInputTokens + (config.context.reserveForOutput ?? 1000) - toolTokenOverhead,
             reservedForOutput: config.context.reserveForOutput ?? 1000,
           }
           const trimResult = fitToBudget(
@@ -573,7 +663,33 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
         }
 
         // -- 4. MODEL ROUTER (skipped when tier routing already applied a budget-enforced model) --
-        if (modules.router && !meta.tierRouted && config.router?.tiers && config.router.tiers.length > 0 && lastUserText) {
+        // Check for per-request router override first
+        if (config.routerOverride && lastUserText) {
+          const overrideModel = config.routerOverride(lastUserText)
+          if (overrideModel && overrideModel !== params.modelId) {
+            if (!meta.originalModel) meta.originalModel = String(params.modelId)
+            params = { ...params, modelId: overrideModel }
+            try {
+              shieldEvents.emit('router:downgraded', {
+                originalModel: meta.originalModel,
+                selectedModel: overrideModel,
+                complexity: 0,
+                savedCost: 0,
+              })
+            } catch { /* non-fatal */ }
+          }
+        } else if (modules.router && !meta.tierRouted && config.router?.tiers && config.router.tiers.length > 0 && lastUserText) {
+          // A/B test holdback: skip routing for a fraction of requests to enable quality comparison
+          const holdback = config.router.abTestHoldback ?? 0
+          if (holdback > 0 && Math.random() < holdback) {
+            meta.abTestHoldout = true
+            try {
+              shieldEvents.emit('router:holdback', {
+                model: String(params.modelId),
+                holdbackRate: holdback,
+              })
+            } catch { /* non-fatal */ }
+          } else {
           const complexity = analyzeComplexity(lastUserText)
           meta.complexity = complexity
           const threshold = config.router.complexityThreshold ?? 50
@@ -614,6 +730,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
               } catch { /* non-fatal */ }
             }
           }
+          } // end holdback else
         }
 
         // -- 5. PREFIX OPTIMIZE --

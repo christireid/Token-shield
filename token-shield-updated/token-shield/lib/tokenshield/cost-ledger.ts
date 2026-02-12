@@ -15,7 +15,7 @@
  * Pro tier: persists to IndexedDB via idb-keyval, export to JSON.
  */
 
-import { get, set, keys, createStore, type UseStore } from "idb-keyval"
+import { get, set, keys, createStore, type UseStore } from "./storage-adapter"
 import { estimateCost, MODEL_PRICING } from "./cost-estimator"
 
 // ----------------------------

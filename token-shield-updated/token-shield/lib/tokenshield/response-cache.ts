@@ -11,7 +11,7 @@
  * npm dependencies: idb-keyval
  */
 
-import { get, set, del, keys, createStore } from "idb-keyval"
+import { get, set, del, keys, createStore } from "./storage-adapter"
 import { NeuroElasticEngine, type NeuroElasticConfig } from "./neuro-elastic"
 
 export interface CacheEntry {

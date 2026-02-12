@@ -15,7 +15,7 @@
  * Team tier feature ($99/month).
  */
 
-import { get, set, createStore, type UseStore } from "idb-keyval"
+import { get, set, createStore, type UseStore } from "./storage-adapter"
 import { estimateCost } from "./cost-estimator"
 import { shieldEvents } from "./event-bus"
 

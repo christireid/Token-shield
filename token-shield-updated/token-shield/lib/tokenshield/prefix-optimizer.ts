@@ -145,6 +145,13 @@ function classifyMessages(
       continue
     }
 
+    // Tool/function definition messages are stable (they rarely change between
+    // requests and belong in the cacheable prefix for maximum provider cache hits)
+    if (msg.role === "tool" || (msg as ChatMessage & { tool_call_id?: string }).tool_call_id) {
+      stable.push(msg)
+      continue
+    }
+
     // Everything else is volatile
     volatile.push(msg)
   }

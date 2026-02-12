@@ -41,6 +41,7 @@ export {
   decodeTokens,
   truncateToTokenBudget,
   countModelTokens,
+  getTokenizerAccuracy,
   type ChatMessage,
   type TokenCount,
   type ChatTokenCount,
@@ -243,6 +244,11 @@ export {
   type EncryptedStoreConfig,
 } from "./crypto-store"
 
+// Storage Adapter (Edge Runtime compatible)
+export {
+  isPersistent,
+} from "./storage-adapter"
+
 // Composable Pipeline
 export {
   Pipeline,
@@ -322,6 +328,15 @@ export {
   type LLMResult,
   type LLMMessage,
 } from "./api-client"
+
+// Savings Calculator
+export {
+  estimateSavings,
+  SavingsCalculator,
+  type SavingsEstimateInput,
+  type SavingsEstimate,
+  type SavingsCalculatorProps,
+} from "./savings-calculator"
 
 // Performance Benchmarks
 export {
