@@ -108,12 +108,16 @@ export function textSimilarity(a: string, b: string): number {
 /**
  * Generate a hash key for exact-match lookups.
  * Uses a fast djb2 hash - no crypto needed for cache keys.
+ * Includes the model ID so that different models produce different cache keys,
+ * preventing cross-model contamination (e.g. a gpt-4o response being served
+ * for a gpt-4o-mini request).
  */
-function hashKey(text: string): string {
+function hashKey(text: string, model?: string): string {
   const normalized = normalizeText(text)
+  const input = model ? `${normalized}|model:${model}` : normalized
   let hash = 5381
-  for (let i = 0; i < normalized.length; i++) {
-    hash = ((hash << 5) + hash + normalized.charCodeAt(i)) | 0
+  for (let i = 0; i < input.length; i++) {
+    hash = ((hash << 5) + hash + input.charCodeAt(i)) | 0
   }
   return `ts_${(hash >>> 0).toString(36)}`
 }
@@ -162,15 +166,17 @@ export class ResponseCache {
     matchType?: "exact" | "fuzzy"
     similarity?: number
   }> {
-    const key = hashKey(prompt)
+    const key = hashKey(prompt, model)
 
-    // 1. Exact match from memory
+    // 1. Exact match from memory (key is already model-scoped)
     const memHit = this.memoryCache.get(key)
-    if (memHit && (!model || memHit.model === model)) {
+    if (memHit) {
       if (Date.now() - memHit.createdAt < this.config.ttlMs) {
-        memHit.accessCount++
-        memHit.lastAccessed = Date.now()
-        return { hit: true, entry: memHit, matchType: "exact", similarity: 1 }
+        // Copy-on-read: create a new object to avoid shared mutable state
+        // across concurrent lookups that could cause inconsistent IDB writes
+        const updated: CacheEntry = { ...memHit, accessCount: memHit.accessCount + 1, lastAccessed: Date.now() }
+        this.memoryCache.set(key, updated)
+        return { hit: true, entry: updated, matchType: "exact", similarity: 1 }
       }
       // Expired
       this.memoryCache.delete(key)
@@ -181,15 +187,15 @@ export class ResponseCache {
       const store = this.getStore()
       if (!store) throw new Error("no idb")
       const idbHit = await get<CacheEntry>(key, store)
-      if (idbHit && (!model || idbHit.model === model)) {
+      if (idbHit) {
         if (Date.now() - idbHit.createdAt < this.config.ttlMs) {
-          idbHit.accessCount++
-          idbHit.lastAccessed = Date.now()
-          this.memoryCache.set(key, idbHit)
-          await set(key, idbHit, store)
+          // Copy-on-read: create a fresh object before mutating and storing
+          const updated: CacheEntry = { ...idbHit, accessCount: idbHit.accessCount + 1, lastAccessed: Date.now() }
+          this.memoryCache.set(key, updated)
+          await set(key, updated, store)
           return {
             hit: true,
-            entry: idbHit,
+            entry: updated,
             matchType: "exact",
             similarity: 1,
           }
@@ -207,15 +213,15 @@ export class ResponseCache {
         const holoResult = this.holoEngine.find(prompt, model)
         if (holoResult) {
           // Find the corresponding cache entry by prompt, with TTL check
-          for (const entry of this.memoryCache.values()) {
+          for (const [entryKey, entry] of this.memoryCache.entries()) {
             if (entry.prompt === holoResult.prompt && (!model || entry.model === model)) {
               // TTL check — skip expired entries
               if (Date.now() - entry.createdAt >= this.config.ttlMs) continue
-              entry.accessCount++
-              entry.lastAccessed = Date.now()
+              const updated: CacheEntry = { ...entry, accessCount: entry.accessCount + 1, lastAccessed: Date.now() }
+              this.memoryCache.set(entryKey, updated)
               return {
                 hit: true,
-                entry,
+                entry: updated,
                 matchType: "fuzzy",
                 similarity: holoResult.score,
               }
@@ -240,11 +246,11 @@ export class ResponseCache {
       }
 
       if (bestMatch) {
-        bestMatch.accessCount++
-        bestMatch.lastAccessed = Date.now()
+        const updated: CacheEntry = { ...bestMatch, accessCount: bestMatch.accessCount + 1, lastAccessed: Date.now() }
+        this.memoryCache.set(updated.key, updated)
         return {
           hit: true,
-          entry: bestMatch,
+          entry: updated,
           matchType: "fuzzy",
           similarity: bestSimilarity,
         }
@@ -264,7 +270,7 @@ export class ResponseCache {
     inputTokens: number,
     outputTokens: number
   ): Promise<void> {
-    const key = hashKey(prompt)
+    const key = hashKey(prompt, model)
     const entry: CacheEntry = {
       key,
       normalizedKey: normalizeText(prompt),

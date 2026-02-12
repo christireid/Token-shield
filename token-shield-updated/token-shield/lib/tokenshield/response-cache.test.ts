@@ -44,7 +44,7 @@ describe("response-cache", () => {
     it("stores and retrieves exact matches", async () => {
       const cache = new ResponseCache({ maxEntries: 10, ttlMs: 60_000 })
       await cache.store("What is React?", "React is a UI library.", "gpt-4o-mini", 10, 20)
-      const result = await cache.lookup("What is React?")
+      const result = await cache.lookup("What is React?", "gpt-4o-mini")
       expect(result.hit).toBe(true)
       expect(result.matchType).toBe("exact")
       expect(result.entry?.response).toBe("React is a UI library.")

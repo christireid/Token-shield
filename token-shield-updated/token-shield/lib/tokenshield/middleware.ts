@@ -70,6 +70,8 @@ export interface TokenShieldMiddlewareConfig {
     debounceMs?: number
     maxRequestsPerMinute?: number
     maxCostPerHour?: number
+    /** Window in ms during which identical prompts are deduplicated even after completion (default: 0 = off) */
+    deduplicateWindow?: number
   }
 
   /** Response cache config */
@@ -228,13 +230,25 @@ function extractLastUserText(params: Record<string, unknown>): string {
 }
 
 /**
- * Safe cost estimation helper. Returns 0 if the model is unknown.
+ * Fallback pricing used when a model is not in MODEL_PRICING.
+ * Uses GPT-4o-mini rates as a conservative middle-ground estimate
+ * so that budget enforcement and cost tracking still function.
+ */
+const FALLBACK_INPUT_PER_MILLION = 0.15
+const FALLBACK_OUTPUT_PER_MILLION = 0.60
+
+/**
+ * Safe cost estimation helper. Falls back to conservative average pricing
+ * for unknown models instead of returning 0, which would silently bypass
+ * budget enforcement and produce incorrect savings calculations.
  */
 function safeCost(modelId: string, inputTokens: number, outputTokens: number): number {
   try {
     return estimateCost(modelId, inputTokens, outputTokens).totalCost
   } catch {
-    return 0
+    // Unknown model — use fallback pricing to keep budget checks functional
+    return (inputTokens / 1_000_000) * FALLBACK_INPUT_PER_MILLION +
+           (outputTokens / 1_000_000) * FALLBACK_OUTPUT_PER_MILLION
   }
 }
 
@@ -283,6 +297,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
         debounceMs: config.guard?.debounceMs ?? 300,
         maxRequestsPerMinute: config.guard?.maxRequestsPerMinute ?? 60,
         maxCostPerHour: config.guard?.maxCostPerHour ?? 10,
+        deduplicateWindow: config.guard?.deduplicateWindow ?? 0,
         modelId: "gpt-4o-mini",
       })
     : null
@@ -979,11 +994,13 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
       let usageRecorded = false
       const recordStreamUsageOnce = (usage: { inputTokens: number; outputTokens: number }) => {
         if (usageRecorded) return
-        usageRecorded = true
         try {
           recordStreamUsage(usage)
+          // Only mark as recorded after successful write — if it throws,
+          // a subsequent call (e.g. from cancel()) can retry
+          usageRecorded = true
         } catch {
-          // recordStreamUsage threw — swallow to prevent stream corruption
+          // recordStreamUsage threw — leave usageRecorded false so retry is possible
         }
       }
 
