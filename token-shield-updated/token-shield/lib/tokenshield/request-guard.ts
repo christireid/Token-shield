@@ -406,6 +406,23 @@ export class RequestGuard {
   }
 
   /**
+   * Read-only snapshot of guard state for dry-run simulation.
+   * Does NOT mutate any internal state (debounce timers, timestamps, etc.).
+   */
+  getStats(): {
+    lastRequestTime: number
+    requestsLastMinute: number
+    currentHourlySpend: number
+  } {
+    const oneMinuteAgo = Date.now() - 60_000
+    return {
+      lastRequestTime: this.lastRequestTime,
+      requestsLastMinute: this.requestTimestamps.filter((t) => t > oneMinuteAgo).length,
+      currentHourlySpend: this.getCurrentHourlySpend(),
+    }
+  }
+
+  /**
    * Update configuration at runtime.
    */
   updateConfig(config: Partial<GuardConfig>): void {

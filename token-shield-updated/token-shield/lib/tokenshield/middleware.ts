@@ -42,12 +42,12 @@ import { MODEL_PRICING, estimateCost } from "./cost-estimator"
 import { CostCircuitBreaker, type BreakerConfig } from "./circuit-breaker"
 import { StreamTokenTracker } from "./stream-tracker"
 import { UserBudgetManager, type UserBudgetConfig, type BudgetExceededEvent, type BudgetWarningEvent } from "./user-budget-manager"
-import { countToolTokens, type ToolDefinition } from "./tool-token-counter"
+import { countToolTokens, predictOutputTokens, type ToolDefinition } from "./tool-token-counter"
 import type { ChatMessage } from "./token-counter"
 import { TokenShieldConfigSchema } from "./config-schemas"
 import { TokenShieldConfigError, TokenShieldBlockedError, ERROR_CODES } from "./errors"
 import * as v from "valibot"
-import { shieldEvents } from "./event-bus"
+import { shieldEvents, createEventBus, type TokenShieldEvents } from "./event-bus"
 import { TokenShieldLogger, createLogger, type LogEntry, type LoggerConfig } from "./logger"
 import { ProviderAdapter, type AdapterConfig } from "./provider-adapter"
 
@@ -203,8 +203,8 @@ export interface TokenShieldMiddleware {
   guard: RequestGuard | null
   /** Access the per-user budget manager */
   userBudgetManager: UserBudgetManager | null
-  /** Access the event bus for subscribing to events */
-  events: typeof shieldEvents
+  /** Per-instance event bus. Events are also forwarded to the global shieldEvents. */
+  events: ReturnType<typeof createEventBus>
   /** Access the logger for span/event data */
   logger: TokenShieldLogger | null
   /** Access the provider adapter for health data */
@@ -373,6 +373,22 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
       })
     : null
 
+  // Create a per-instance event bus so that multiple middleware instances
+  // don't mix events. Forward all events to the global shieldEvents singleton
+  // for backward compatibility with listeners on the module-level bus.
+  const instanceEvents = createEventBus()
+  const EVENT_NAMES: (keyof TokenShieldEvents)[] = [
+    'request:blocked', 'request:allowed', 'cache:hit', 'cache:miss', 'cache:store',
+    'context:trimmed', 'router:downgraded', 'router:holdback', 'ledger:entry',
+    'breaker:warning', 'breaker:tripped', 'userBudget:warning', 'userBudget:exceeded',
+    'userBudget:spend', 'stream:chunk', 'stream:abort', 'stream:complete',
+  ]
+  for (const name of EVENT_NAMES) {
+    instanceEvents.on(name, ((data: unknown) => {
+      try { (shieldEvents.emit as (type: string, data: unknown) => void)(name, data) } catch { /* non-fatal */ }
+    }) as never)
+  }
+
   // Hydrate persisted budget data from IndexedDB
   if (userBudgetManager && config.userBudget?.budgets.persist) {
     userBudgetManager.hydrate().catch(() => {
@@ -392,7 +408,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
   // Store cleanup function to prevent listener leaks
   let disconnectLogger: (() => void) | null = null
   if (log) {
-    disconnectLogger = log.connectEventBus(shieldEvents)
+    disconnectLogger = log.connectEventBus(instanceEvents)
   }
 
   // Initialize provider adapter if configured
@@ -414,7 +430,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
     /** Access the per-user budget manager */
     userBudgetManager,
     /** Access the event bus for subscribing to events */
-    events: shieldEvents,
+    events: instanceEvents,
     /** Access the logger for span/event data */
     logger: log,
     /** Access the provider adapter for health data */
@@ -453,18 +469,24 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
         meta.lastUserText = lastUserText
 
         // -- DRY-RUN MODE: simulate pipeline without modifying params --
+        // Uses side-effect-free read-only probes (cache.peek, guard.stats)
+        // so that dry-run doesn't pollute rate-limit state or cache access counts.
         if (config.dryRun) {
           const modelId = String(params.modelId ?? "")
           const inputTokens = messages.reduce((sum, m) => sum + countTokens(m.content) + MSG_OVERHEAD_TOKENS, 0)
 
           if (guard && lastUserText) {
-            const guardModelId = modelId
-            const check = guard.check(lastUserText, undefined, guardModelId || undefined)
-            config.onDryRun?.({ module: 'guard', description: check.allowed ? 'Request would pass guard' : `Request would be blocked: ${check.reason}` })
+            // Read-only guard simulation: report stats without mutating state
+            const stats = guard.getStats()
+            const wouldDebounce = Date.now() - (stats.lastRequestTime ?? 0) < (config.guard?.debounceMs ?? 300)
+            const wouldRateLimit = (stats.requestsLastMinute ?? 0) >= (config.guard?.maxRequestsPerMinute ?? 60)
+            const description = wouldDebounce ? 'Request would be debounced' : wouldRateLimit ? 'Request would be rate-limited' : 'Request would pass guard'
+            config.onDryRun?.({ module: 'guard', description })
           }
           if (cache && lastUserText) {
-            const lookup = await cache.lookup(lastUserText, modelId)
-            config.onDryRun?.({ module: 'cache', description: lookup.hit ? `Cache ${lookup.matchType} hit (similarity: ${lookup.similarity?.toFixed(2)})` : 'Cache miss', estimatedSavings: lookup.hit ? safeCost(modelId, lookup.entry!.inputTokens, lookup.entry!.outputTokens) : 0 })
+            // Read-only cache probe: no access count or timestamp mutations
+            const peek = cache.peek(lastUserText, modelId)
+            config.onDryRun?.({ module: 'cache', description: peek.hit ? `Cache ${peek.matchType} hit (similarity: ${peek.similarity?.toFixed(2)})` : 'Cache miss', estimatedSavings: peek.hit ? safeCost(modelId, peek.entry!.inputTokens, peek.entry!.outputTokens) : 0 })
           }
           if (modules.context && config.context?.maxInputTokens) {
             const overBudget = inputTokens > config.context.maxInputTokens
@@ -498,7 +520,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
           const breakCheck = breaker.check(modelId, estimatedInput, expectedOut)
           if (!breakCheck.allowed) {
             const estCost = safeCost(modelId, estimatedInput, expectedOut)
-            try { shieldEvents.emit('request:blocked', { reason: breakCheck.reason ?? "Budget exceeded", estimatedCost: estCost }) } catch { /* non-fatal */ }
+            try { instanceEvents.emit('request:blocked', { reason: breakCheck.reason ?? "Budget exceeded", estimatedCost: estCost }) } catch { /* non-fatal */ }
             config.onBlocked?.(breakCheck.reason ?? "Budget exceeded")
             throw new TokenShieldBlockedError(breakCheck.reason ?? "Request blocked by TokenShield breaker", ERROR_CODES.BREAKER_SESSION_LIMIT)
           }
@@ -559,7 +581,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
             meta.tierRouted = true
 
             try {
-              shieldEvents.emit('router:downgraded', {
+              instanceEvents.emit('router:downgraded', {
                 originalModel: originalModelId,
                 selectedModel: tierModel,
                 complexity: 0,
@@ -578,12 +600,12 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
             const check = guard.check(lastUserText, undefined, guardModelId || undefined)
             if (!check.allowed) {
               const estCost = safeCost(guardModelId, countTokens(lastUserText), config.context?.reserveForOutput ?? 500)
-              try { shieldEvents.emit('request:blocked', { reason: check.reason ?? "Request blocked", estimatedCost: estCost }) } catch { /* non-fatal */ }
+              try { instanceEvents.emit('request:blocked', { reason: check.reason ?? "Request blocked", estimatedCost: estCost }) } catch { /* non-fatal */ }
               config.onBlocked?.(check.reason ?? "Request blocked")
               throw new TokenShieldBlockedError(check.reason ?? "Request blocked by TokenShield guard", ERROR_CODES.GUARD_RATE_LIMIT)
             }
             // Guard passed
-            try { shieldEvents.emit('request:allowed', { prompt: lastUserText, model: guardModelId }) } catch { /* non-fatal */ }
+            try { instanceEvents.emit('request:allowed', { prompt: lastUserText, model: guardModelId }) } catch { /* non-fatal */ }
           }
 
           // -- 2. CACHE LOOKUP --
@@ -598,7 +620,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
               }
               const savedCost = safeCost(modelId, lookup.entry.inputTokens, lookup.entry.outputTokens)
               try {
-                shieldEvents.emit('cache:hit', {
+                instanceEvents.emit('cache:hit', {
                   matchType: lookup.matchType ?? 'fuzzy',
                   similarity: lookup.similarity ?? 1,
                   savedCost,
@@ -609,7 +631,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
               span?.end({ cacheHit: true, contextSaved: 0 })
               return params // wrapGenerate will short-circuit
             } else {
-              try { shieldEvents.emit('cache:miss', { prompt: lastUserText }) } catch { /* non-fatal */ }
+              try { instanceEvents.emit('cache:miss', { prompt: lastUserText }) } catch { /* non-fatal */ }
             }
           }
         } catch (err) {
@@ -638,9 +660,23 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
             } catch { /* non-fatal: tool counting failed, proceed without overhead */ }
           }
 
+          // Use output prediction to dynamically estimate reserved output tokens
+          // when the user hasn't specified an explicit reserve. This prevents
+          // over-reserving for simple prompts (e.g. 4096 for a yes/no question)
+          // or under-reserving for code generation.
+          let reserveForOutput = config.context.reserveForOutput ?? 1000
+          if (!config.context.reserveForOutput && lastUserText) {
+            try {
+              const prediction = predictOutputTokens(lastUserText)
+              if (prediction.confidence >= 0.5) {
+                reserveForOutput = prediction.suggestedMaxTokens
+              }
+            } catch { /* non-fatal: fall back to default */ }
+          }
+
           const budget = {
-            maxContextTokens: config.context.maxInputTokens + (config.context.reserveForOutput ?? 1000) - toolTokenOverhead,
-            reservedForOutput: config.context.reserveForOutput ?? 1000,
+            maxContextTokens: config.context.maxInputTokens + reserveForOutput - toolTokenOverhead,
+            reservedForOutput: reserveForOutput,
           }
           const trimResult = fitToBudget(
             workingMessages.map((m) => ({ ...m } as Message)),
@@ -653,7 +689,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
               content: m.content,
             }))
             try {
-              shieldEvents.emit('context:trimmed', {
+              instanceEvents.emit('context:trimmed', {
                 originalTokens: originalInputTokens,
                 trimmedTokens: originalInputTokens - trimResult.evictedTokens,
                 savedTokens: trimResult.evictedTokens,
@@ -670,7 +706,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
             if (!meta.originalModel) meta.originalModel = String(params.modelId)
             params = { ...params, modelId: overrideModel }
             try {
-              shieldEvents.emit('router:downgraded', {
+              instanceEvents.emit('router:downgraded', {
                 originalModel: meta.originalModel,
                 selectedModel: overrideModel,
                 complexity: 0,
@@ -684,7 +720,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
           if (holdback > 0 && Math.random() < holdback) {
             meta.abTestHoldout = true
             try {
-              shieldEvents.emit('router:holdback', {
+              instanceEvents.emit('router:holdback', {
                 model: String(params.modelId),
                 holdbackRate: holdback,
               })
@@ -721,7 +757,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
               params = { ...params, modelId: cheapestTier.modelId }
 
               try {
-                shieldEvents.emit('router:downgraded', {
+                instanceEvents.emit('router:downgraded', {
                   originalModel: beforeRoutingModel,
                   selectedModel: cheapestTier.modelId,
                   complexity: complexity.score,
@@ -742,8 +778,26 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
               workingMessages,
               modelId,
               pricing.inputPerMillion,
-              { provider: config.prefix?.provider ?? "auto" }
+              {
+                provider: config.prefix?.provider ?? "auto",
+                contextWindow: pricing.contextWindow,
+                reservedOutputTokens: config.context?.reserveForOutput ?? 500,
+              }
             )
+            if (optimized.contextWindowExceeded) {
+              try {
+                instanceEvents.emit('context:trimmed', {
+                  originalTokens: optimized.prefixTokens + optimized.volatileTokens,
+                  trimmedTokens: optimized.prefixTokens + optimized.volatileTokens,
+                  savedTokens: 0,
+                })
+              } catch { /* non-fatal */ }
+              log?.warn('Prefix optimizer: total tokens exceed context window', {
+                total: optimized.prefixTokens + optimized.volatileTokens,
+                contextWindow: pricing.contextWindow,
+                overflow: optimized.overflowTokens,
+              })
+            }
             if (optimized.estimatedPrefixSavings > 0) {
               meta.prefixSaved = optimized.estimatedPrefixSavings
               workingMessages = optimized.messages
@@ -886,7 +940,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
       const perRequestSaved = contextSavedDollars + routerSavedDollars + prefixSavedDollars
 
       try {
-        shieldEvents.emit('ledger:entry', {
+        instanceEvents.emit('ledger:entry', {
           model: modelId,
           inputTokens,
           outputTokens,
@@ -1066,7 +1120,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
         const streamPerRequestSaved = contextSavedDollars + routerSavedDollars + prefixSavedDollars
 
         try {
-          shieldEvents.emit('ledger:entry', {
+          instanceEvents.emit('ledger:entry', {
             model: modelId,
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
@@ -1136,7 +1190,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
 
               // Emit stream:complete event
               try {
-                shieldEvents.emit('stream:complete', {
+                instanceEvents.emit('stream:complete', {
                   inputTokens: usage.inputTokens,
                   outputTokens: usage.outputTokens,
                   totalCost: safeCost(modelId, usage.inputTokens, usage.outputTokens),
@@ -1155,7 +1209,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
               // Emit stream:chunk event
               try {
                 const chunkUsage = tracker.getUsage()
-                shieldEvents.emit('stream:chunk', {
+                instanceEvents.emit('stream:chunk', {
                   outputTokens: chunkUsage.outputTokens,
                   estimatedCost: chunkUsage.estimatedCost,
                 })
@@ -1170,7 +1224,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
 
             // Emit stream:abort on stream error
             try {
-              shieldEvents.emit('stream:abort', {
+              instanceEvents.emit('stream:abort', {
                 inputTokens: usage.inputTokens,
                 outputTokens: usage.outputTokens,
                 estimatedCost: safeCost(modelId, usage.inputTokens, usage.outputTokens),
@@ -1189,7 +1243,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
 
           // Emit stream:abort event
           try {
-            shieldEvents.emit('stream:abort', {
+            instanceEvents.emit('stream:abort', {
               inputTokens: usage.inputTokens,
               outputTokens: usage.outputTokens,
               estimatedCost: safeCost(modelId, usage.inputTokens, usage.outputTokens),

@@ -155,6 +155,44 @@ export class ResponseCache {
   }
 
   /**
+   * Read-only cache probe. Returns hit/miss info without mutating
+   * access counts or timestamps. Used by dry-run mode to avoid
+   * side-effects while still reporting what would happen.
+   */
+  peek(
+    prompt: string,
+    model?: string
+  ): { hit: boolean; matchType?: "exact" | "fuzzy"; similarity?: number; entry?: CacheEntry } {
+    const key = hashKey(prompt, model)
+
+    // Exact match from memory only (no IDB, no mutations)
+    const memHit = this.memoryCache.get(key)
+    if (memHit && Date.now() - memHit.createdAt < this.config.ttlMs) {
+      return { hit: true, entry: memHit, matchType: "exact", similarity: 1 }
+    }
+
+    // Fuzzy match from memory (read-only scan)
+    if (this.config.similarityThreshold < 1) {
+      let bestMatch: CacheEntry | undefined
+      let bestSimilarity = 0
+      for (const entry of this.memoryCache.values()) {
+        if (model && entry.model !== model) continue
+        if (Date.now() - entry.createdAt >= this.config.ttlMs) continue
+        const sim = textSimilarity(prompt, entry.prompt)
+        if (sim > bestSimilarity && sim >= this.config.similarityThreshold) {
+          bestSimilarity = sim
+          bestMatch = entry
+        }
+      }
+      if (bestMatch) {
+        return { hit: true, entry: bestMatch, matchType: "fuzzy", similarity: bestSimilarity }
+      }
+    }
+
+    return { hit: false }
+  }
+
+  /**
    * Look up a cached response. Checks exact match first, then fuzzy.
    */
   async lookup(
