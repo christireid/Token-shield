@@ -66,4 +66,41 @@ describe("CostLedger", () => {
     const count = await ledger.hydrate()
     expect(count).toBe(0)
   })
+
+  it("exportCSV escapes double quotes in feature names", async () => {
+    await ledger.record({
+      model: "gpt-4o-mini",
+      inputTokens: 100,
+      outputTokens: 50,
+      savings: {},
+      feature: 'my "special" feature',
+    })
+    const csv = ledger.exportCSV()
+    // RFC 4180: double quotes inside a quoted field are escaped by doubling
+    expect(csv).toContain('"my ""special"" feature"')
+  })
+
+  it("exportCSV escapes commas in feature names", async () => {
+    await ledger.record({
+      model: "gpt-4o-mini",
+      inputTokens: 100,
+      outputTokens: 50,
+      savings: {},
+      feature: "chat, assistant",
+    })
+    const csv = ledger.exportCSV()
+    expect(csv).toContain('"chat, assistant"')
+  })
+
+  it("exportCSV escapes newlines in feature names", async () => {
+    await ledger.record({
+      model: "gpt-4o-mini",
+      inputTokens: 100,
+      outputTokens: 50,
+      savings: {},
+      feature: "line1\nline2",
+    })
+    const csv = ledger.exportCSV()
+    expect(csv).toContain('"line1\nline2"')
+  })
 })

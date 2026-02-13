@@ -30,6 +30,15 @@ export interface PrefixOptimizerConfig {
   enableAnthropicCacheControl: boolean
   /** Minimum prefix tokens for OpenAI caching to activate (1024) */
   openaiMinPrefixTokens: number
+  /**
+   * Context window size for the target model (in tokens).
+   * When set, the optimizer checks that prefix + volatile tokens don't
+   * exceed this limit. If they do, `contextWindowExceeded` is set to true
+   * in the result so callers can take corrective action.
+   */
+  contextWindow?: number
+  /** Reserved output tokens to subtract from contextWindow (default 0) */
+  reservedOutputTokens?: number
 }
 
 export interface OptimizedResult {
@@ -49,6 +58,10 @@ export interface OptimizedResult {
   inputPricePerMillion: number
   /** For Anthropic: positions where cache_control breakpoints were inserted */
   cacheBreakpoints: number[]
+  /** True when prefix + volatile tokens exceed the model's context window */
+  contextWindowExceeded: boolean
+  /** How many tokens over the context window (0 if within bounds) */
+  overflowTokens: number
 }
 
 const DEFAULT_CONFIG: PrefixOptimizerConfig = {
@@ -145,6 +158,13 @@ function classifyMessages(
       continue
     }
 
+    // Tool result messages (role="tool" or with tool_call_id) are per-turn
+    // conversation data: they contain the output of tool calls from the
+    // immediately preceding assistant message. They change every turn and
+    // belong in the volatile section — NOT the stable prefix.
+    // Note: tool *definitions* (the `tools` API parameter) are separate from
+    // tool *results* (messages) and are handled by the provider automatically.
+
     // Everything else is volatile
     volatile.push(msg)
   }
@@ -231,6 +251,14 @@ export function optimizePrefix(
     }
   }
 
+  // Context window overflow check
+  const totalTokens = prefixTokens + volatileTokens
+  const effectiveWindow = cfg.contextWindow
+    ? cfg.contextWindow - (cfg.reservedOutputTokens ?? 0)
+    : 0
+  const contextWindowExceeded = effectiveWindow > 0 && totalTokens > effectiveWindow
+  const overflowTokens = contextWindowExceeded ? totalTokens - effectiveWindow : 0
+
   return {
     messages: optimized,
     prefixTokens,
@@ -240,6 +268,8 @@ export function optimizePrefix(
     estimatedPrefixSavings: savingsPerRequest,
     inputPricePerMillion,
     cacheBreakpoints,
+    contextWindowExceeded,
+    overflowTokens,
   }
 }
 

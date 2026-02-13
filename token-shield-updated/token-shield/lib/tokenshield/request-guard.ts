@@ -90,6 +90,7 @@ export class RequestGuard {
   private debounceTimer: ReturnType<typeof setTimeout> | null = null
   private blockedCount = 0
   private totalBlocked = 0
+  private totalAllowed = 0
   private totalSaved = 0
 
   /**
@@ -242,6 +243,7 @@ export class RequestGuard {
       this.requestTimestamps = this.requestTimestamps.slice(-200)
     }
     this.blockedCount = 0
+    this.totalAllowed++
 
     // Record this prompt for time-based deduplication
     if (dedupWindow) {
@@ -388,20 +390,44 @@ export class RequestGuard {
    */
   stats(): {
     totalBlocked: number
+    totalAllowed: number
+    blockedRate: number
     totalSavedDollars: number
     currentRequestsPerMinute: number
     currentHourlySpend: number
     inFlightCount: number
   } {
     const oneMinuteAgo = Date.now() - 60_000
+    const total = this.totalBlocked + this.totalAllowed
     return {
       totalBlocked: this.totalBlocked,
+      totalAllowed: this.totalAllowed,
+      blockedRate: total > 0 ? this.totalBlocked / total : 0,
       totalSavedDollars: this.totalSaved,
       currentRequestsPerMinute: this.requestTimestamps.filter(
         (t) => t > oneMinuteAgo
       ).length,
       currentHourlySpend: this.getCurrentHourlySpend(),
       inFlightCount: this.inFlight.size,
+    }
+  }
+
+  /**
+   * Read-only snapshot of guard state for dry-run simulation.
+   * Does NOT mutate any internal state (debounce timers, timestamps, etc.).
+   */
+  getStats(): {
+    lastRequestTime: number
+    requestsLastMinute: number
+    currentHourlySpend: number
+  } {
+    const oneMinuteAgo = Date.now() - 60_000
+    const oneHourAgo = Date.now() - 3_600_000
+    return {
+      lastRequestTime: this.lastRequestTime,
+      requestsLastMinute: this.requestTimestamps.filter((t) => t > oneMinuteAgo).length,
+      // Compute without mutating this.costLog (getCurrentHourlySpend filters in-place)
+      currentHourlySpend: this.costLog.filter((c) => c.timestamp > oneHourAgo).reduce((sum, c) => sum + c.cost, 0),
     }
   }
 

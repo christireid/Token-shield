@@ -14,7 +14,7 @@
  * 3. Bring your own CryptoKey (for advanced integrations)
  */
 
-import { get, set, del, keys, createStore, type UseStore } from "idb-keyval"
+import { get, set, del, keys, createStore, type UseStore } from "./storage-adapter"
 
 // -------------------------------------------------------
 // Types
@@ -204,7 +204,7 @@ export class EncryptedStore {
    * Get all keys in the store.
    */
   async getAllKeys(): Promise<string[]> {
-    return keys<string>(this.idbStore)
+    return (await keys(this.idbStore)) as string[]
   }
 }
 

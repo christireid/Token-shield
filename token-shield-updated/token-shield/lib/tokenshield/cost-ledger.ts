@@ -15,7 +15,7 @@
  * Pro tier: persists to IndexedDB via idb-keyval, export to JSON.
  */
 
-import { get, set, keys, createStore, type UseStore } from "idb-keyval"
+import { get, set, keys, createStore, type UseStore } from "./storage-adapter"
 import { estimateCost, MODEL_PRICING } from "./cost-estimator"
 
 // ----------------------------
@@ -307,7 +307,7 @@ export class CostLedger {
     if (!this.persistEnabled || !this.idbStore || this.hydrated) return 0
     this.hydrated = true
     try {
-      const allKeys = await keys<string>(this.idbStore)
+      const allKeys = (await keys(this.idbStore)) as string[]
       const existingIds = new Set(this.entries.map((e) => e.id))
       let loaded = 0
       for (const key of allKeys) {
@@ -363,7 +363,13 @@ export class CostLedger {
       e.savings.context.toFixed(6),
       e.savings.router.toFixed(6),
       e.savings.prefix.toFixed(6),
-    ].map(v => typeof v === 'string' && v.includes(',') ? `"${v}"` : String(v)).join(','))
+    ].map(v => {
+      const s = String(v)
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return `"${s.replace(/"/g, '""')}"`
+      }
+      return s
+    }).join(','))
     return [headers.join(','), ...rows].join('\n')
   }
 
@@ -387,6 +393,14 @@ export class CostLedger {
    * Exact dollar cost from token counts and model pricing.
    * Accounts for OpenAI cached token discount.
    */
+  /**
+   * Fallback pricing for unknown models (matches middleware safeCost).
+   * Uses GPT-4o-mini rates as a conservative middle-ground estimate
+   * so that cost tracking and savings calculations remain functional.
+   */
+  private static FALLBACK_INPUT_PER_MILLION = 0.15
+  private static FALLBACK_OUTPUT_PER_MILLION = 0.60
+
   private calculateCost(
     modelId: string,
     inputTokens: number,
@@ -399,7 +413,10 @@ export class CostLedger {
       try {
         return estimateCost(modelId, inputTokens, outputTokens).totalCost
       } catch {
-        return 0
+        // Unknown model — use fallback pricing instead of 0 to keep
+        // ledger entries, summaries, and exports accurate
+        return (inputTokens / 1_000_000) * CostLedger.FALLBACK_INPUT_PER_MILLION +
+               (outputTokens / 1_000_000) * CostLedger.FALLBACK_OUTPUT_PER_MILLION
       }
     }
 

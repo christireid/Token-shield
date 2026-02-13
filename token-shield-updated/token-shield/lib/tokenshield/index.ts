@@ -41,6 +41,7 @@ export {
   decodeTokens,
   truncateToTokenBudget,
   countModelTokens,
+  getTokenizerAccuracy,
   type ChatMessage,
   type TokenCount,
   type ChatTokenCount,
@@ -56,6 +57,7 @@ export {
   MODEL_PRICING,
   type ModelPricing,
   type CostEstimate,
+  type KnownModelId,
 } from "./cost-estimator"
 
 // 3. Context Manager
@@ -164,6 +166,12 @@ export {
   type TokenShieldMiddlewareConfig,
 } from "./middleware"
 
+// Middleware Health Check
+export { type HealthCheckResult } from "./middleware-types"
+
+// Quick-Start Factory
+export { createTokenShield } from "./create-token-shield"
+
 // React Integration
 export {
   TokenShieldProvider,
@@ -182,10 +190,12 @@ export {
   useEventLog,
   useProviderHealth,
   usePipelineMetrics,
+  useSessionSavings,
   useShieldedCall,
   type TokenShieldProviderProps,
   type EventLogEntry,
   type PipelineMetrics,
+  type SessionSavingsState,
   type ShieldedCallMetrics,
 } from "./react"
 
@@ -242,6 +252,11 @@ export {
   createEncryptedStore,
   type EncryptedStoreConfig,
 } from "./crypto-store"
+
+// Storage Adapter (Edge Runtime compatible)
+export {
+  isPersistent,
+} from "./storage-adapter"
 
 // Composable Pipeline
 export {
@@ -322,6 +337,15 @@ export {
   type LLMResult,
   type LLMMessage,
 } from "./api-client"
+
+// Savings Calculator
+export {
+  estimateSavings,
+  SavingsCalculator,
+  type SavingsEstimateInput,
+  type SavingsEstimate,
+  type SavingsCalculatorProps,
+} from "./savings-calculator"
 
 // Performance Benchmarks
 export {

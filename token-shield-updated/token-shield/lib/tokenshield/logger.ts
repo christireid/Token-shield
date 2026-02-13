@@ -73,6 +73,7 @@ const EVENT_LOG_LEVELS: Record<keyof TokenShieldEvents, LogLevel> = {
   'cache:store': 'debug',
   'context:trimmed': 'info',
   'router:downgraded': 'info',
+  'router:holdback': 'debug',
   'ledger:entry': 'debug',
   'breaker:warning': 'warn',
   'breaker:tripped': 'error',
