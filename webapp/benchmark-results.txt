@@ -1,0 +1,70 @@
+
+TokenShield Performance Benchmark
+----------------------------------------------------------------------------------------------------
+Benchmark                                    Ops         Ops/sec      Avg (ms)      P99 (ms)
+----------------------------------------------------------------------------------------------------
+
+  Token Counting
+  --------------
+countExactTokens (10 words)                1,000          94.58K        0.0106        0.0201
+countExactTokens (100 words)               1,000          22.29K        0.0449        0.1361
+countExactTokens (1000 words)              1,000           4.89K        0.2044        0.5420
+countChatTokens (5 messages)               1,000          25.19K        0.0397        0.0815
+countChatTokens (20 messages)              1,000           6.36K        0.1572        0.5027
+
+  Cost Estimation
+  ---------------
+estimateCost (gpt-4o)                      1,000           1.81M        <0.001        <0.001
+estimateCost (claude-sonnet-4.5)           1,000           2.68M        <0.001        <0.001
+compareCosts (all models)                  1,000         154.58K        0.0065        0.0154
+
+  Complexity Analysis & Routing
+  -----------------------------
+analyzeComplexity (simple)                 1,000           3.50M        <0.001        <0.001
+analyzeComplexity (complex)                1,000           5.25M        <0.001        <0.001
+routeToModel (simple prompt)               1,000          74.26K        0.0135        0.0441
+routeToModel (complex prompt)              1,000         372.92K        0.0027        0.0037
+
+  Response Cache
+  --------------
+cache store                                1,000          65.98K        0.0152        0.0479
+cache lookup (exact hit)                   1,000          38.32K        0.0261        0.0685
+cache lookup (miss)                        1,000          637.48        1.5687        3.4577
+cache store + lookup cycle                 1,000          62.02K        0.0161        0.0269
+
+  Context Fitting
+  ---------------
+fitToBudget (10 messages)                  1,000          12.87K        0.0777        0.3749
+fitToBudget (50 messages)                  1,000           4.08K        0.2454        0.5374
+fitToBudget (100 messages, tight)          1,000           2.05K        0.4889        1.4109
+smartFit (50 messages)                     1,000           4.09K        0.2444        0.5744
+
+  Prefix Optimizer
+  ----------------
+optimizePrefix (4 messages, openai)        1,000          15.10K        0.0662        0.1938
+optimizePrefix (4 messages, anthropic)     1,000           6.87K        0.1456        0.4792
+
+  Request Guard
+  -------------
+RequestGuard.check                         1,000         110.74K        0.0090        0.0253
+
+  Circuit Breaker
+  ---------------
+CostCircuitBreaker.check                   1,000         222.38K        0.0045        0.0095
+CostCircuitBreaker.recordSpend             1,000          26.46K        0.0378        0.1023
+
+  User Budget Manager
+  -------------------
+UserBudgetManager.check                    1,000         115.39K        0.0087        0.0286
+UserBudgetManager.getStatus                1,000           1.69M        <0.001        <0.001
+AnomalyDetector.check (normal)             1,000          88.05K        0.0114        0.0317
+AnomalyDetector.check (anomaly)            1,000         122.17K        0.0082        0.0161
+
+  Middleware Pipeline
+  -------------------
+middleware transformParams                 1,000          22.54K        0.0444        0.0941
+middleware wrapGenerate                    1,000         148.33K        0.0067        0.0160
+middleware full pipeline                   1,000          11.60K        0.0862        0.2990
+----------------------------------------------------------------------------------------------------
+  Total benchmarks: 32
+
