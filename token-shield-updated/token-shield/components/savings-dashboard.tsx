@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import { Highlight, themes } from "prism-react-renderer"
 
 interface TestResult {
   module: string
@@ -116,9 +117,26 @@ export function SavingsDashboard({ results }: { results: TestResult[] }) {
                       <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
                         Raw API response data
                       </summary>
-                      <pre className="mt-1.5 max-h-48 overflow-auto rounded-md bg-secondary p-3 font-mono text-xs leading-relaxed text-muted-foreground">
-                        {JSON.stringify(r.raw, null, 2)}
-                      </pre>
+                      <Highlight
+                        theme={themes.vsDark}
+                        code={JSON.stringify(r.raw, null, 2)}
+                        language="json"
+                      >
+                        {({ className, style, tokens, getLineProps, getTokenProps }) => (
+                          <pre
+                            className={`mt-1.5 max-h-48 overflow-auto rounded-md p-3 font-mono text-xs leading-relaxed ${className}`}
+                            style={style}
+                          >
+                            {tokens.map((line, i) => (
+                              <div key={i} {...getLineProps({ line })}>
+                                {line.map((token, key) => (
+                                  <span key={key} {...getTokenProps({ token })} />
+                                ))}
+                              </div>
+                            ))}
+                          </pre>
+                        )}
+                      </Highlight>
                     </details>
                   )}
                 </div>

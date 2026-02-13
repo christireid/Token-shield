@@ -222,6 +222,8 @@ const PROVIDER_PRICES: Record<
   { input: number; output: number; provider: Provider }
 > = {
   // OpenAI
+  "gpt-5": { input: 2.5, output: 10.0, provider: "openai" },
+  "gpt-5-mini": { input: 0.15, output: 0.6, provider: "openai" },
   "gpt-4o": { input: 2.5, output: 10.0, provider: "openai" },
   "gpt-4o-2024-11-20": { input: 2.5, output: 10.0, provider: "openai" },
   "gpt-4o-2024-08-06": { input: 2.5, output: 10.0, provider: "openai" },

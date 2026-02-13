@@ -193,7 +193,7 @@ export function Playground() {
         const clientCount = countExactTokens(prompt)
         const res = await callOpenAI(
           [{ role: "user", content: prompt }],
-          "gpt-4o-mini",
+          "gpt-5-mini",
           { max_tokens: 1 }
         )
         const chatCount = countChatTokens([
@@ -362,11 +362,11 @@ export function Playground() {
       try {
         const oaiRes = await callOpenAI(
           [{ role: "user", content: crossPrompt }],
-          "gpt-4o-mini",
+          "gpt-5-mini",
           { max_tokens: 100 }
         )
         const oaiCost = calculateRealCost(
-          "gpt-4o-mini",
+          "gpt-5-mini",
           oaiRes.usage.input_tokens,
           oaiRes.usage.output_tokens
         )
@@ -501,11 +501,11 @@ export function Playground() {
       // Simple query on expensive model vs budget models across providers
       const expensiveRes = await callOpenAI(
         [{ role: "user", content: SIMPLE_PROMPT }],
-        "gpt-4o",
+        "gpt-5",
         { max_tokens: 50 }
       )
       const expensiveCost = calculateRealCost(
-        "gpt-4o",
+        "gpt-5",
         expensiveRes.usage.input_tokens,
         expensiveRes.usage.output_tokens
       )
@@ -530,7 +530,7 @@ export function Playground() {
         model: "gpt-4o-mini",
         result: oaiBudgetRes,
         cost: calculateRealCost(
-          "gpt-4o-mini",
+          "gpt-5-mini",
           oaiBudgetRes.usage.input_tokens,
           oaiBudgetRes.usage.output_tokens
         ),
@@ -724,6 +724,11 @@ export function Playground() {
         maxEntries: 100,
         ttlMs: 60000,
         similarityThreshold: 0.82,
+        encodingStrategy: "holographic",
+        semanticSeeds: {
+          "cost": 10, "price": 10, "charge": 10, "spend": 10,
+          "closure": 20, "javascript": 30, "explain": 40
+        }
       })
       await cache.clear()
 
@@ -752,8 +757,12 @@ export function Playground() {
       )
 
       const exactLookup = await cache.lookup(cachePrompt, "gpt-4o-mini")
-      const similarity = textSimilarity(cachePrompt, rephrased)
       const fuzzyLookup = await cache.lookup(rephrased, "gpt-4o-mini")
+      
+      // Use engine similarity if available, otherwise display textSimilarity
+      const similarity = fuzzyLookup.hit && fuzzyLookup.similarity 
+        ? fuzzyLookup.similarity 
+        : textSimilarity(cachePrompt, rephrased)
 
       addResult({
         module: "cache",
@@ -774,7 +783,7 @@ export function Playground() {
           cost: firstCost.totalCost * 2,
           calls: 2,
         },
-        proof: `Call 1: API call, ${firstRes.usage.total_tokens} tokens, $${firstCost.totalCost.toFixed(6)}. Call 2: exact cache hit (match=1.0), 0 tokens, $0. Call 3: fuzzy match (similarity=${similarity.toFixed(3)}, hit=${fuzzyLookup.hit}), 0 tokens, $0. 2 out of 3 calls avoided entirely.`,
+        proof: `Call 1: API call, ${firstRes.usage.total_tokens} tokens, $${firstCost.totalCost.toFixed(6)}. Call 2: exact cache hit (match=1.0), 0 tokens, $0. Call 3: holographic fuzzy match (similarity=${similarity.toFixed(3)}, hit=${fuzzyLookup.hit}), 0 tokens, $0. 2 out of 3 calls avoided entirely.`,
         raw: {
           firstUsage: firstRes.usage,
           exactHit: exactLookup.hit,
@@ -809,7 +818,7 @@ export function Playground() {
         debounceMs: 200,
         maxRequestsPerMinute: 60,
         maxCostPerHour: 5,
-        modelId: "gpt-4o-mini",
+        modelId: "gpt-5-mini",
       })
       let allowed = 0
       let blocked = 0
@@ -1240,7 +1249,7 @@ export function Playground() {
       )
 
       const streamTracker = new StreamTokenTracker({
-        modelId: "gpt-4o-mini",
+        modelId: "gpt-5-mini",
         inputTokens: countChatTokens([
           {
             role: "user",
@@ -1273,7 +1282,7 @@ export function Playground() {
       const abortUsage = streamTracker.abort()
 
       const fullTracker = new StreamTokenTracker({
-        modelId: "gpt-4o-mini",
+        modelId: "gpt-5-mini",
         inputTokens: abortUsage.inputTokens,
       })
       for (const chunk of simulatedChunks) {

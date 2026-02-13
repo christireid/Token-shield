@@ -24,7 +24,7 @@ Your existing `streamText` and `generateText` calls work exactly as before, just
 
 | Problem | Token Shield Solution |
 |---------|----------------------|
-| Identical prompts hitting the API repeatedly | **Response Cache** — exact + fuzzy match, zero-cost cache hits |
+| Identical prompts hitting the API repeatedly | **Response Cache** — exact + holographic vector match, zero-cost cache hits |
 | Simple questions routed to expensive models | **Model Router** — 12-dimension complexity scoring, auto-routes to cheapest capable model |
 | Long conversations burning tokens | **Context Manager** — trims history to fit token budgets, preserves important context |
 | Missing provider prompt cache discounts | **Prefix Optimizer** — structures messages for OpenAI/Anthropic/Google cache hits (50-90% discount) |
@@ -183,13 +183,13 @@ No other tool does this. Everyone else either proxies your traffic (adding laten
 
 ## ROI Calculator
 
-| Your Monthly LLM Spend | Conservative Savings (25%) | Realistic Savings (45%) | Token Shield Cost |
+| Your Monthly LLM Spend | Conservative Savings (30%) | Realistic Savings (55%) | Token Shield Cost |
 |------------------------|---------------------------|------------------------|-------------------|
-| $1,000/mo | $250/mo | $450/mo | $29/mo |
-| $5,000/mo | $1,250/mo | $2,250/mo | $29/mo |
-| $10,000/mo | $2,500/mo | $4,500/mo | $99/mo |
-| $50,000/mo | $12,500/mo | $22,500/mo | $99/mo |
-| $100,000/mo | $25,000/mo | $45,000/mo | Custom |
+| $1,000/mo | $300/mo | $550/mo | $29/mo |
+| $5,000/mo | $1,500/mo | $2,750/mo | $29/mo |
+| $10,000/mo | $3,000/mo | $5,500/mo | $99/mo |
+| $50,000/mo | $15,000/mo | $27,500/mo | $99/mo |
+| $100,000/mo | $30,000/mo | $55,000/mo | Custom |
 
 ## Architecture
 

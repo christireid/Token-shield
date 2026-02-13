@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { Highlight, themes } from "prism-react-renderer"
 
 const EXAMPLES = [
   {
@@ -291,9 +292,26 @@ export function CodeExamples() {
       {/* Content */}
       <div className="p-4 sm:p-5">
         <p className="mb-3 text-sm text-muted-foreground">{active.description}</p>
-        <pre className="overflow-x-auto rounded-md bg-background p-3 font-mono text-xs leading-relaxed text-muted-foreground sm:p-4 sm:text-sm sm:leading-relaxed">
-          {active.code}
-        </pre>
+        <Highlight
+          theme={themes.vsDark}
+          code={active.code}
+          language="typescript"
+        >
+          {({ className, style, tokens, getLineProps, getTokenProps }) => (
+            <pre
+              className={`overflow-x-auto rounded-md p-3 font-mono text-xs leading-relaxed sm:p-4 sm:text-sm sm:leading-relaxed ${className}`}
+              style={style}
+            >
+              {tokens.map((line, i) => (
+                <div key={i} {...getLineProps({ line })}>
+                  {line.map((token, key) => (
+                    <span key={key} {...getTokenProps({ token })} />
+                  ))}
+                </div>
+              ))}
+            </pre>
+          )}
+        </Highlight>
       </div>
     </div>
   )
