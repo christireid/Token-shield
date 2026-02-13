@@ -112,4 +112,51 @@ describe("RequestGuard", () => {
     expect(stats.totalBlocked).toBe(1)
     expect(stats.totalSavedDollars).toBeGreaterThan(0)
   })
+
+  it("stats includes totalAllowed and blockedRate", () => {
+    const g = new RequestGuard({
+      debounceMs: 0,
+      maxRequestsPerMinute: 60,
+      maxCostPerHour: 100,
+      modelId: "gpt-4o-mini",
+      deduplicateInFlight: false,
+    })
+    g.check("request 1")
+    g.check("request 2")
+    g.check("request 3")
+    const stats = g.stats()
+    expect(stats.totalAllowed).toBe(3)
+    expect(stats.totalBlocked).toBe(0)
+    expect(stats.blockedRate).toBe(0)
+  })
+
+  it("blockedRate reflects actual block ratio", () => {
+    // debounceMs of 50 means second call within 50ms is blocked
+    guard.check("hello world") // allowed
+    guard.check("too fast 1") // blocked (debounced)
+    guard.check("too fast 2") // blocked (debounced)
+    const stats = guard.stats()
+    expect(stats.totalAllowed).toBe(1)
+    expect(stats.totalBlocked).toBe(2)
+    expect(stats.blockedRate).toBeCloseTo(2 / 3)
+  })
+
+  it("getStats() does not mutate costLog (read-only)", () => {
+    const g = new RequestGuard({
+      debounceMs: 0,
+      maxRequestsPerMinute: 60,
+      maxCostPerHour: 100,
+      modelId: "gpt-4o-mini",
+      deduplicateInFlight: false,
+    })
+    g.check("first request")
+    g.startRequest("first request")
+    g.completeRequest("first request", 100, 50)
+
+    // Call getStats() multiple times — it should not change internal state
+    const stats1 = g.getStats()
+    const stats2 = g.getStats()
+    expect(stats1.currentHourlySpend).toBe(stats2.currentHourlySpend)
+    expect(stats1.currentHourlySpend).toBeGreaterThan(0)
+  })
 })

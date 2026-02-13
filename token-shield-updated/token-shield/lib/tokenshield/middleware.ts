@@ -210,7 +210,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
       const ledgerSummary = ledger?.getSummary() ?? null
 
       return {
-        healthy: true,
+        healthy: !(breakerStatus?.tripped ?? false),
         modules: {
           guard: modules.guard,
           cache: modules.cache,
@@ -221,8 +221,8 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
           breaker: breaker !== null,
           userBudget: userBudgetManager !== null,
         },
-        cacheHitRate: cacheStats ? (cacheStats.entries > 0 ? cacheStats.totalHits / Math.max(1, cacheStats.entries + cacheStats.totalHits) : 0) : null,
-        guardBlockedRate: guardStats ? guardStats.totalBlocked : null,
+        cacheHitRate: cacheStats ? cacheStats.hitRate : null,
+        guardBlockedRate: guardStats ? guardStats.blockedRate : null,
         breakerTripped: breakerStatus ? breakerStatus.tripped : null,
         totalSpent: ledgerSummary ? ledgerSummary.totalSpent : null,
         totalSaved: ledgerSummary ? ledgerSummary.totalSaved : null,

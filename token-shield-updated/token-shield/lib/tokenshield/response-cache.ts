@@ -130,6 +130,10 @@ export class ResponseCache {
   private idbStore: ReturnType<typeof createStore> | null = null
   /** Optional holographic encoding engine for enhanced fuzzy matching */
   private holoEngine: NeuroElasticEngine | null = null
+  /** Total lookup() calls (hits + misses) for accurate hit rate calculation */
+  private totalLookups = 0
+  /** Total cache hits across all lookup() calls */
+  private totalHits = 0
 
   constructor(config: Partial<CacheConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
@@ -164,11 +168,15 @@ export class ResponseCache {
     model: string
   ): { hit: boolean; matchType?: "exact" | "fuzzy"; similarity?: number; entry?: CacheEntry } {
     const key = hashKey(prompt, model)
+    const normalized = normalizeText(prompt)
 
     // Exact match from memory only (no IDB, no mutations)
     const memHit = this.memoryCache.get(key)
     if (memHit && Date.now() - memHit.createdAt < this.config.ttlMs) {
-      return { hit: true, entry: memHit, matchType: "exact", similarity: 1 }
+      // Verify normalized prompt matches to guard against djb2 hash collisions
+      if (memHit.normalizedKey === normalized) {
+        return { hit: true, entry: memHit, matchType: "exact", similarity: 1 }
+      }
     }
 
     // Fuzzy match from memory (read-only scan)
@@ -205,19 +213,26 @@ export class ResponseCache {
     similarity?: number
   }> {
     const key = hashKey(prompt, model)
+    const normalized = normalizeText(prompt)
+    this.totalLookups++
 
     // 1. Exact match from memory (key is already model-scoped)
     const memHit = this.memoryCache.get(key)
     if (memHit) {
       if (Date.now() - memHit.createdAt < this.config.ttlMs) {
-        // Copy-on-read: create a new object to avoid shared mutable state
-        // across concurrent lookups that could cause inconsistent IDB writes
-        const updated: CacheEntry = { ...memHit, accessCount: memHit.accessCount + 1, lastAccessed: Date.now() }
-        this.memoryCache.set(key, updated)
-        return { hit: true, entry: updated, matchType: "exact", similarity: 1 }
+        // Verify normalized prompt matches to guard against djb2 hash collisions
+        if (memHit.normalizedKey === normalized) {
+          // Copy-on-read: create a new object to avoid shared mutable state
+          // across concurrent lookups that could cause inconsistent IDB writes
+          const updated: CacheEntry = { ...memHit, accessCount: memHit.accessCount + 1, lastAccessed: Date.now() }
+          this.memoryCache.set(key, updated)
+          this.totalHits++
+          return { hit: true, entry: updated, matchType: "exact", similarity: 1 }
+        }
+      } else {
+        // Expired
+        this.memoryCache.delete(key)
       }
-      // Expired
-      this.memoryCache.delete(key)
     }
 
     // 2. Exact match from IDB
@@ -227,15 +242,19 @@ export class ResponseCache {
       const idbHit = await get<CacheEntry>(key, store)
       if (idbHit) {
         if (Date.now() - idbHit.createdAt < this.config.ttlMs) {
-          // Copy-on-read: create a fresh object before mutating and storing
-          const updated: CacheEntry = { ...idbHit, accessCount: idbHit.accessCount + 1, lastAccessed: Date.now() }
-          this.memoryCache.set(key, updated)
-          await set(key, updated, store)
-          return {
-            hit: true,
-            entry: updated,
-            matchType: "exact",
-            similarity: 1,
+          // Verify normalized prompt matches to guard against hash collisions
+          if (idbHit.normalizedKey === normalized) {
+            // Copy-on-read: create a fresh object before mutating and storing
+            const updated: CacheEntry = { ...idbHit, accessCount: idbHit.accessCount + 1, lastAccessed: Date.now() }
+            this.memoryCache.set(key, updated)
+            await set(key, updated, store)
+            this.totalHits++
+            return {
+              hit: true,
+              entry: updated,
+              matchType: "exact",
+              similarity: 1,
+            }
           }
         }
         await del(key, store)
@@ -257,6 +276,7 @@ export class ResponseCache {
               if (Date.now() - entry.createdAt >= this.config.ttlMs) continue
               const updated: CacheEntry = { ...entry, accessCount: entry.accessCount + 1, lastAccessed: Date.now() }
               this.memoryCache.set(entryKey, updated)
+              this.totalHits++
               return {
                 hit: true,
                 entry: updated,
@@ -286,6 +306,7 @@ export class ResponseCache {
       if (bestMatch) {
         const updated: CacheEntry = { ...bestMatch, accessCount: bestMatch.accessCount + 1, lastAccessed: Date.now() }
         this.memoryCache.set(updated.key, updated)
+        this.totalHits++
         return {
           hit: true,
           entry: updated,
@@ -394,18 +415,20 @@ export class ResponseCache {
     entries: number
     totalSavedTokens: number
     totalHits: number
+    totalLookups: number
+    hitRate: number
   } {
     let totalSavedTokens = 0
-    let totalHits = 0
     for (const entry of this.memoryCache.values()) {
       totalSavedTokens +=
         (entry.inputTokens + entry.outputTokens) * entry.accessCount
-      totalHits += entry.accessCount
     }
     return {
       entries: this.memoryCache.size,
       totalSavedTokens,
-      totalHits,
+      totalHits: this.totalHits,
+      totalLookups: this.totalLookups,
+      hitRate: this.totalLookups > 0 ? this.totalHits / this.totalLookups : 0,
     }
   }
 
@@ -414,6 +437,8 @@ export class ResponseCache {
    */
   async clear(): Promise<void> {
     this.memoryCache.clear()
+    this.totalLookups = 0
+    this.totalHits = 0
     if (this.holoEngine) {
       await this.holoEngine.clear()
     }

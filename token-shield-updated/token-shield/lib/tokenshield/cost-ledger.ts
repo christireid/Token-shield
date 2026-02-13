@@ -363,7 +363,13 @@ export class CostLedger {
       e.savings.context.toFixed(6),
       e.savings.router.toFixed(6),
       e.savings.prefix.toFixed(6),
-    ].map(v => typeof v === 'string' && v.includes(',') ? `"${v}"` : String(v)).join(','))
+    ].map(v => {
+      const s = String(v)
+      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+        return `"${s.replace(/"/g, '""')}"`
+      }
+      return s
+    }).join(','))
     return [headers.join(','), ...rows].join('\n')
   }
 
