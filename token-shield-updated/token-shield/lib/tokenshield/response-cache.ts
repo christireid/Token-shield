@@ -56,6 +56,14 @@ const DEFAULT_CONFIG: CacheConfig = {
   ttlMs: 24 * 60 * 60 * 1000, // 24 hours
   similarityThreshold: 0.85,
   storeName: "tokenshield-cache",
+  encodingStrategy: "holographic",
+  semanticSeeds: {
+    "cost": 10, "price": 10, "charge": 10, "spend": 10,
+    "tokens": 20, "usage": 20, "count": 20,
+    "error": 30, "fail": 30, "crash": 30, "bug": 30,
+    "help": 40, "explain": 40, "what": 40, "how": 40,
+    "code": 50, "function": 50, "method": 50, "api": 50,
+  },
 }
 
 

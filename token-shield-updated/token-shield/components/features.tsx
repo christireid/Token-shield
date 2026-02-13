@@ -16,7 +16,7 @@ const MODULES = [
   },
   {
     name: "Response Cache",
-    description: "Exact + fuzzy matching via bigram similarity. Rephrased prompts hit cache. IndexedDB persistence.",
+    description: "Exact + holographic matching via vector resonance. Paraphrased prompts hit cache. IndexedDB persistence.",
     tag: "Saves 100%",
   },
   {
