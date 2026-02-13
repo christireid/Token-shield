@@ -27,7 +27,7 @@ import {
  * Captures the initialized module instances via the context object.
  */
 export function buildTransformParams(ctx: MiddlewareContext) {
-  const { config, modules, guard, cache, breaker, userBudgetManager, instanceEvents, log, adapter } = ctx
+  const { config, modules, guard, cache, breaker, userBudgetManager, instanceEvents, log, adapter: _adapter } = ctx
 
   return async ({ params }: { params: Record<string, unknown> }) => {
     const meta: ShieldMeta = {}

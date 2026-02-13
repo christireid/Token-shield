@@ -146,6 +146,7 @@ export interface OpenAIAdapterOptions {
 /**
  * Adapter for the OpenAI SDK (`client.chat.completions.create`).
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function createOpenAIAdapter<TParams extends { messages: any[]; model?: string }, TResult>(
   shield: TokenShieldMiddleware,
   createFn: (params: TParams) => Promise<TResult>,
@@ -184,16 +185,18 @@ export function createOpenAIAdapter<TParams extends { messages: any[]; model?: s
         }
         
         // Clean up TokenShield internal fields
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         delete (openAiParams as any).prompt
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         delete (openAiParams as any).modelId
 
         const raw = await createFn(openAiParams as TParams)
         
         // Helper to safely access response fields without strictly typing TResult 
         // (since it might be Stream or non-standard response)
-        const anyRaw = raw as any
-        const choices = anyRaw.choices
-        const usage = anyRaw.usage
+        const anyRaw = raw as Record<string, unknown>
+        const choices = anyRaw.choices as Array<{ message?: { content?: string }; finish_reason?: string }> | undefined
+        const usage = anyRaw.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined
 
         return {
           text: choices?.[0]?.message?.content ?? "",
@@ -225,6 +228,7 @@ export interface AnthropicAdapterOptions {
 /**
  * Adapter for the Anthropic SDK (`client.messages.create`).
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function createAnthropicAdapter<TParams extends { messages: any[]; model?: string; max_tokens?: number }, TResult>(
   shield: TokenShieldMiddleware,
   createFn: (params: TParams) => Promise<TResult>,
@@ -280,18 +284,21 @@ export function createAnthropicAdapter<TParams extends { messages: any[]; model?
         delete anthropicParams.modelId
 
         const raw = await createFn(anthropicParams as TParams)
-        const anyRaw = raw as any
+        const anyRaw = raw as Record<string, unknown>
+
+        const contentBlocks = anyRaw.content as Array<{ type?: string; text?: string }> | undefined
+        const usageData = anyRaw.usage as { input_tokens?: number; output_tokens?: number } | undefined
 
         return {
-          text: anyRaw.content
-            ?.filter((b: any) => b.type === "text" || b.type === undefined)
-            .map((b: any) => b.text ?? "")
+          text: contentBlocks
+            ?.filter((b) => b.type === "text" || b.type === undefined)
+            .map((b) => b.text ?? "")
             .join("") ?? "",
           usage: {
-            promptTokens: anyRaw.usage?.input_tokens ?? 0,
-            completionTokens: anyRaw.usage?.output_tokens ?? 0,
+            promptTokens: usageData?.input_tokens ?? 0,
+            completionTokens: usageData?.output_tokens ?? 0,
           },
-          finishReason: anyRaw.stop_reason ?? "end_turn",
+          finishReason: (anyRaw.stop_reason as string) ?? "end_turn",
           rawResponse: anyRaw,
         }
       },

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import {
   Pipeline,
   createPipeline,
@@ -9,7 +9,6 @@ import {
   createRouterStage,
   createPrefixStage,
   type PipelineContext,
-  type PipelineStage,
 } from "./pipeline"
 import { CostCircuitBreaker } from "./circuit-breaker"
 import { RequestGuard } from "./request-guard"

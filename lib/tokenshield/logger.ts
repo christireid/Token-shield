@@ -61,6 +61,7 @@ function defaultHandler(entry: LogEntry): void {
   const dataStr = entry.data ? ` ${JSON.stringify(entry.data)}` : ''
   const msg = `[TokenShield] [${entry.level}] [${entry.module}] ${entry.message}${dataStr}`
   const method = entry.level === 'debug' ? 'debug' : entry.level === 'warn' ? 'warn' : entry.level === 'error' ? 'error' : 'info'
+  // eslint-disable-next-line no-console
   console[method](msg)
 }
 

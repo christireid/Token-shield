@@ -224,7 +224,9 @@ export function useEventLog(maxEntries = 50): EventLogEntry[] {
           return next.length > maxEntries ? next.slice(0, maxEntries) : next
         })
       }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       eventBus.on(eventType, handler as any)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       handlers.push(() => eventBus.off(eventType, handler as any))
     }
 
@@ -365,7 +367,9 @@ export function usePipelineMetrics(): PipelineMetrics {
 
         updateMetrics()
       }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       eventBus.on(eventType, handler as any)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       handlers.push(() => eventBus.off(eventType, handler as any))
     }
 

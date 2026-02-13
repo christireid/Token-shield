@@ -4,7 +4,6 @@ import {
   createProviderAdapter,
   retryWithBackoff,
   type AdapterConfig,
-  type ProviderConfig,
   type ProviderName,
 } from "./provider-adapter"
 

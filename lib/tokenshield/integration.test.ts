@@ -11,10 +11,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import {
   tokenShieldMiddleware,
   type TokenShieldMiddleware,
-  type TokenShieldMiddlewareConfig,
 } from "./middleware"
 import { ResponseCache } from "./response-cache"
-import { NeuroElasticEngine } from "./neuro-elastic"
 import { ShieldWorker } from "./shield-worker"
 import {
   createGenericAdapter,
@@ -23,10 +21,8 @@ import {
   createStreamAdapter,
 } from "./adapters"
 import { shieldEvents, type TokenShieldEvents } from "./event-bus"
-import { TokenShieldLogger, createLogger } from "./logger"
 import { ProviderAdapter } from "./provider-adapter"
 import {
-  Pipeline,
   createPipeline,
   createBreakerStage,
   createGuardStage,
@@ -458,7 +454,7 @@ describe("Framework adapters", () => {
     const chat = createOpenAIAdapter(shield, mockCreateFn, { defaultModel: "gpt-4.1" })
     const result = await chat({
       messages: [{ role: "user", content: "Test the OpenAI adapter with a meaningful prompt" }],
-    })
+    }) as { choices: { message: { content: string } }[] }
 
     expect(mockCreateFn).toHaveBeenCalledTimes(1)
     // Expect raw response
@@ -478,7 +474,7 @@ describe("Framework adapters", () => {
     })
     const result = await chat({
       messages: [{ role: "user", content: "Test the Anthropic adapter with a thorough prompt" }],
-    })
+    }) as { content: { type: string; text: string }[] }
 
     expect(mockCreateFn).toHaveBeenCalledTimes(1)
     // Expect raw response

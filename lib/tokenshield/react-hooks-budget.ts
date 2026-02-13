@@ -300,7 +300,9 @@ export function useSessionSavings(): SessionSavingsState {
         requestCount: prev.requestCount + 1,
       }))
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     eventBus.on("ledger:entry", handler as any)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return () => eventBus.off("ledger:entry", handler as any)
   }, [eventBus])
 

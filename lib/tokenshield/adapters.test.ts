@@ -114,6 +114,7 @@ describe("createGenericAdapter", () => {
     // Explicitly type the generic to allow 'temperature'
     const call = createGenericAdapter<
       { messages: AdapterMessage[]; modelId?: string; temperature?: number },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       any
     >(shield, callFn, { modelId: "gpt-4o-mini" })
     
@@ -139,7 +140,7 @@ describe("createOpenAIAdapter", () => {
     const chat = createOpenAIAdapter(shield, createFn, { defaultModel: "gpt-4o-mini" })
     const result = await chat({
       messages: [{ role: "user", content: "Hello" }],
-    })
+    }) as { choices: { message: { content: string } }[] }
 
     // Expect raw OpenAI response, not normalized shape
     expect(result.choices[0].message.content).toBe("Hello from OpenAI!")
@@ -201,7 +202,7 @@ describe("createOpenAIAdapter", () => {
     const chat = createOpenAIAdapter(shield, createFn, { defaultModel: "gpt-4o-mini" })
     const result = await chat({
       messages: [{ role: "user", content: "test" }],
-    })
+    }) as { choices: { message: { content: string } }[] }
 
     expect(result.choices[0].message.content).toBe("no usage")
     shield.dispose()
@@ -223,7 +224,7 @@ describe("createAnthropicAdapter", () => {
     })
     const result = await chat({
       messages: [{ role: "user", content: "Hello" }],
-    })
+    }) as { content: { type: string; text: string }[] }
 
     // Expect raw Anthropic response
     expect(result.content[0].text).toBe("Hello from Claude!")
@@ -306,7 +307,7 @@ describe("createAnthropicAdapter", () => {
     const chat = createAnthropicAdapter(shield, createFn)
     const result = await chat({
       messages: [{ role: "user", content: "test" }],
-    })
+    }) as { content: { type: string; text: string }[] }
 
     // Expect raw result
     expect(result.content).toEqual([])

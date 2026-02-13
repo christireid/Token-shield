@@ -5,7 +5,7 @@
  * breaker -> user budget -> guard -> cache lookup -> context trim -> route -> prefix optimize
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import { tokenShieldMiddleware } from "./middleware"
 import { SHIELD_META, type ShieldMeta } from "./middleware-types"
 

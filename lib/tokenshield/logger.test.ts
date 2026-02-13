@@ -1,11 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import mitt from "mitt"
 import {
   TokenShieldLogger,
   createLogger,
   logger,
   type LogEntry,
-  type LogLevel,
 } from "./logger"
 import type { TokenShieldEvents } from "./event-bus"
 

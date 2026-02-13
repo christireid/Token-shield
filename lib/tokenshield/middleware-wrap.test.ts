@@ -7,7 +7,6 @@
 
 import { describe, it, expect, vi } from "vitest"
 import { tokenShieldMiddleware } from "./middleware"
-import { SHIELD_META, type ShieldMeta } from "./middleware-types"
 
 /** Create an AI SDK-format prompt from simple messages */
 function makePrompt(messages: Array<{ role: string; content: string }>) {
@@ -331,7 +330,7 @@ describe("wrapStream", () => {
 
       // Consume the stream to trigger completion
       const reader = ((result as Record<string, unknown>).stream as ReadableStream).getReader()
-      while (!(await reader.read()).done) {}
+      while (!(await reader.read()).done) { /* empty */ }
 
       expect(events).toContain("stream:complete")
       shield.dispose()
@@ -364,7 +363,7 @@ describe("wrapStream", () => {
       })
 
       const reader = ((result as Record<string, unknown>).stream as ReadableStream).getReader()
-      while (!(await reader.read()).done) {}
+      while (!(await reader.read()).done) { /* empty */ }
 
       expect(chunkEvents.length).toBe(2)
       shield.dispose()
@@ -396,7 +395,7 @@ describe("wrapStream", () => {
       })
 
       const reader = ((result as Record<string, unknown>).stream as ReadableStream).getReader()
-      while (!(await reader.read()).done) {}
+      while (!(await reader.read()).done) { /* empty */ }
 
       expect(onUsage).toHaveBeenCalledWith(expect.objectContaining({
         model: "gpt-4o-mini",

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import { tokenShieldMiddleware, TokenShieldBlockedError, getLedger } from "./middleware"
 
 /**
@@ -446,10 +446,8 @@ describe("tokenShieldMiddleware", () => {
       const transformed = await mw.transformParams({ params })
 
       // Create a stream that will be cancelled before completing
-      let controllerRef: ReadableStreamDefaultController | null = null
       const originalStream = new ReadableStream({
         start(controller) {
-          controllerRef = controller
           controller.enqueue({ type: "text-delta", textDelta: "Once" })
         },
         pull() {

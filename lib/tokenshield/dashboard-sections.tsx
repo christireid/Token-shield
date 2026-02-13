@@ -18,10 +18,9 @@ import {
   useProviderHealth,
   usePipelineMetrics,
 } from "./react"
-import type { EventLogEntry } from "./react"
 import type { CostCircuitBreaker } from "./circuit-breaker"
 import type { UserBudgetManager } from "./user-budget-manager"
-import type { ProviderAdapter, ProviderHealth } from "./provider-adapter"
+import type { ProviderAdapter } from "./provider-adapter"
 
 // -------------------------------------------------------
 // Utility functions

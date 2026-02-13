@@ -20,11 +20,8 @@ import { estimateCost } from "./cost-estimator"
 import { shieldEvents } from "./event-bus"
 
 import {
-  type UserBudgetTier,
   type UserBudgetLimits,
   type UserBudgetConfig,
-  type BudgetExceededEvent,
-  type BudgetWarningEvent,
   type UserBudgetStatus,
   type UserSpendRecord,
   ONE_DAY_MS,

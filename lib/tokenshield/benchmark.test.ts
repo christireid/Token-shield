@@ -31,8 +31,8 @@ describe("bench", () => {
 
   it("opsPerSec is positive for non-trivial functions", () => {
     const result = bench("work", () => {
-      let x = 0
-      for (let i = 0; i < 100; i++) x += i
+      let _x = 0
+      for (let i = 0; i < 100; i++) _x += i
     }, 100)
 
     expect(result.opsPerSec).toBeGreaterThan(0)
@@ -40,8 +40,8 @@ describe("bench", () => {
 
   it("p99Ms is >= avgMs", () => {
     const result = bench("consistent", () => {
-      let x = 0
-      for (let i = 0; i < 100; i++) x += i
+      let _x = 0
+      for (let i = 0; i < 100; i++) _x += i
     }, 100)
 
     expect(result.p99Ms).toBeGreaterThanOrEqual(result.avgMs)
@@ -56,8 +56,8 @@ describe("bench", () => {
   })
 
   it("uses default iterations when not specified", () => {
-    let count = 0
-    const result = bench("default-iters", () => { count++ })
+    let _count = 0
+    const result = bench("default-iters", () => { _count++ })
 
     expect(result.ops).toBe(1000)
   })

@@ -12,7 +12,7 @@
  * - Summarization hook: replace old messages with a summary
  */
 
-import { countTokens, encode, decode } from "gpt-tokenizer"
+import { countTokens } from "gpt-tokenizer"
 
 export interface Message {
   role: "system" | "user" | "assistant" | "tool"

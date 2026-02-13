@@ -151,6 +151,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
     const handler = (data: unknown) => {
       try { (shieldEvents.emit as (type: string, data: unknown) => void)(name, data) } catch { /* non-fatal */ }
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     instanceEvents.on(name, handler as any)
     forwardingHandlers.push({ name, handler })
   }
@@ -238,6 +239,7 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
     },
     dispose() {
       for (const { name, handler } of forwardingHandlers) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         instanceEvents.off(name, handler as any)
       }
       forwardingHandlers.length = 0

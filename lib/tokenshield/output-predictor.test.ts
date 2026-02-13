@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from "vitest"
-import { predictOutputTokens, type OutputPrediction } from "./output-predictor"
+import { predictOutputTokens } from "./output-predictor"
 
 describe("predictOutputTokens", () => {
   describe("task type detection", () => {
