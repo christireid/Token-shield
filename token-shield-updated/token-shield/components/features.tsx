@@ -37,22 +37,22 @@ const MODULES = [
   {
     name: "Tool Token Counter",
     description: "Counts the hidden tokens that JSON tool schemas inject per request. Optimizes descriptions to reduce overhead.",
-    tag: "New",
+    tag: "Saves ~20%",
   },
   {
     name: "Image Token Counter",
     description: "OpenAI's exact tile formula: 85 base + 170 per 512x512 tile. Recommends optimal resize dimensions.",
-    tag: "New",
+    tag: "Saves ~50%",
   },
   {
     name: "Stream Tracker",
     description: "Counts output tokens in real-time during streaming. Survives abort -- solves vercel/ai#7628.",
-    tag: "New",
+    tag: "Tracks Costs",
   },
   {
     name: "Circuit Breaker",
     description: "Hard spending limits per session, hour, day, month. Prevents the $847-to-$34K runaway scenario.",
-    tag: "New",
+    tag: "Caps Spend",
   },
 ]
 
@@ -76,11 +76,9 @@ export function Features() {
               <div className="flex items-start justify-between gap-2">
                 <h3 className="text-sm font-semibold text-foreground">{mod.name}</h3>
                 <span className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium ${
-                  mod.tag === "New"
-                    ? "bg-primary/15 text-primary"
-                    : mod.tag === "Core"
-                      ? "bg-secondary text-muted-foreground"
-                      : "bg-primary/10 text-primary"
+                  mod.tag === "Core"
+                    ? "bg-secondary text-muted-foreground"
+                    : "bg-primary/10 text-primary"
                 }`}>
                   {mod.tag}
                 </span>

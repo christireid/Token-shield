@@ -193,7 +193,7 @@ export function Playground() {
         const clientCount = countExactTokens(prompt)
         const res = await callOpenAI(
           [{ role: "user", content: prompt }],
-          "gpt-4o-mini",
+          "gpt-5-mini",
           { max_tokens: 1 }
         )
         const chatCount = countChatTokens([
@@ -362,11 +362,11 @@ export function Playground() {
       try {
         const oaiRes = await callOpenAI(
           [{ role: "user", content: crossPrompt }],
-          "gpt-4o-mini",
+          "gpt-5-mini",
           { max_tokens: 100 }
         )
         const oaiCost = calculateRealCost(
-          "gpt-4o-mini",
+          "gpt-5-mini",
           oaiRes.usage.input_tokens,
           oaiRes.usage.output_tokens
         )
@@ -501,11 +501,11 @@ export function Playground() {
       // Simple query on expensive model vs budget models across providers
       const expensiveRes = await callOpenAI(
         [{ role: "user", content: SIMPLE_PROMPT }],
-        "gpt-4o",
+        "gpt-5",
         { max_tokens: 50 }
       )
       const expensiveCost = calculateRealCost(
-        "gpt-4o",
+        "gpt-5",
         expensiveRes.usage.input_tokens,
         expensiveRes.usage.output_tokens
       )
@@ -530,7 +530,7 @@ export function Playground() {
         model: "gpt-4o-mini",
         result: oaiBudgetRes,
         cost: calculateRealCost(
-          "gpt-4o-mini",
+          "gpt-5-mini",
           oaiBudgetRes.usage.input_tokens,
           oaiBudgetRes.usage.output_tokens
         ),
@@ -809,7 +809,7 @@ export function Playground() {
         debounceMs: 200,
         maxRequestsPerMinute: 60,
         maxCostPerHour: 5,
-        modelId: "gpt-4o-mini",
+        modelId: "gpt-5-mini",
       })
       let allowed = 0
       let blocked = 0
@@ -1240,7 +1240,7 @@ export function Playground() {
       )
 
       const streamTracker = new StreamTokenTracker({
-        modelId: "gpt-4o-mini",
+        modelId: "gpt-5-mini",
         inputTokens: countChatTokens([
           {
             role: "user",
@@ -1273,7 +1273,7 @@ export function Playground() {
       const abortUsage = streamTracker.abort()
 
       const fullTracker = new StreamTokenTracker({
-        modelId: "gpt-4o-mini",
+        modelId: "gpt-5-mini",
         inputTokens: abortUsage.inputTokens,
       })
       for (const chunk of simulatedChunks) {

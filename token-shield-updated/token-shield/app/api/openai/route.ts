@@ -55,9 +55,10 @@ export async function POST(request: Request) {
   }
 
   const startTime = Date.now()
+  const baseUrl = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1"
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
