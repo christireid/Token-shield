@@ -724,6 +724,11 @@ export function Playground() {
         maxEntries: 100,
         ttlMs: 60000,
         similarityThreshold: 0.82,
+        encodingStrategy: "holographic",
+        semanticSeeds: {
+          "cost": 10, "price": 10, "charge": 10, "spend": 10,
+          "closure": 20, "javascript": 30, "explain": 40
+        }
       })
       await cache.clear()
 
@@ -752,8 +757,12 @@ export function Playground() {
       )
 
       const exactLookup = await cache.lookup(cachePrompt, "gpt-4o-mini")
-      const similarity = textSimilarity(cachePrompt, rephrased)
       const fuzzyLookup = await cache.lookup(rephrased, "gpt-4o-mini")
+      
+      // Use engine similarity if available, otherwise display textSimilarity
+      const similarity = fuzzyLookup.hit && fuzzyLookup.similarity 
+        ? fuzzyLookup.similarity 
+        : textSimilarity(cachePrompt, rephrased)
 
       addResult({
         module: "cache",
@@ -774,7 +783,7 @@ export function Playground() {
           cost: firstCost.totalCost * 2,
           calls: 2,
         },
-        proof: `Call 1: API call, ${firstRes.usage.total_tokens} tokens, $${firstCost.totalCost.toFixed(6)}. Call 2: exact cache hit (match=1.0), 0 tokens, $0. Call 3: fuzzy match (similarity=${similarity.toFixed(3)}, hit=${fuzzyLookup.hit}), 0 tokens, $0. 2 out of 3 calls avoided entirely.`,
+        proof: `Call 1: API call, ${firstRes.usage.total_tokens} tokens, $${firstCost.totalCost.toFixed(6)}. Call 2: exact cache hit (match=1.0), 0 tokens, $0. Call 3: holographic fuzzy match (similarity=${similarity.toFixed(3)}, hit=${fuzzyLookup.hit}), 0 tokens, $0. 2 out of 3 calls avoided entirely.`,
         raw: {
           firstUsage: firstRes.usage,
           exactHit: exactLookup.hit,

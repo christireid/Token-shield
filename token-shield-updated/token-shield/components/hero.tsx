@@ -19,7 +19,7 @@ export function Hero() {
 
         <p className="mt-4 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg sm:leading-relaxed">
           11 TypeScript modules that reduce token waste through exact BPE counting,
-          semantic caching, context trimming, smart model routing, tool overhead analysis,
+          holographic caching, context trimming, smart model routing, tool overhead analysis,
           streaming abort tracking, and hard spending limits. Works entirely client-side.
         </p>
 
