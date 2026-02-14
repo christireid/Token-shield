@@ -115,4 +115,53 @@ describe("smartFit", () => {
       expect(result.summary).toContain("Previous conversation summary")
     }
   })
+
+  it("places summary after system messages in the output", () => {
+    // Use a tight budget to force eviction
+    const result = smartFit(msgs, { maxContextTokens: 100, reservedForOutput: 10 })
+    if (result.summary) {
+      const summaryIdx = result.messages.findIndex((m) => m.content === result.summary)
+      const systemMsgs = result.messages.filter((m) => m.role === "system" && !m.pinned)
+      // Summary should appear after the original system message
+      expect(summaryIdx).toBeGreaterThanOrEqual(systemMsgs.length)
+    }
+  })
+
+  it("skips summary when it does not fit in remaining budget", () => {
+    // Very tight budget — no room for summary
+    const result = smartFit(msgs, { maxContextTokens: 40, reservedForOutput: 5 })
+    // Even if eviction happened, summary may be omitted due to budget
+    expect(result.messages.length).toBeGreaterThan(0)
+  })
+
+  it("returns ContextResult fields", () => {
+    const result = smartFit(msgs, { maxContextTokens: 200, reservedForOutput: 20 })
+    expect(typeof result.totalTokens).toBe("number")
+    expect(typeof result.budgetUsed).toBe("number")
+    expect(typeof result.budgetRemaining).toBe("number")
+    expect(typeof result.evictedCount).toBe("number")
+    expect(Array.isArray(result.messages)).toBe(true)
+  })
+})
+
+describe("fitToBudget edge cases", () => {
+  it("preserves pinned messages during eviction", () => {
+    const pinnedMsgs: Message[] = [
+      { role: "system", content: "System prompt." },
+      { role: "user", content: "This is pinned", pinned: true },
+      { role: "assistant", content: "Long response that should be evicted. ".repeat(20) },
+      { role: "user", content: "Recent question" },
+    ]
+    const result = fitToBudget(pinnedMsgs, { maxContextTokens: 80, reservedForOutput: 10 })
+    const contents = result.messages.map((m) => m.content)
+    expect(contents).toContain("This is pinned")
+  })
+
+  it("handles empty message array", () => {
+    const result = fitToBudget([], { maxContextTokens: 1000, reservedForOutput: 100 })
+    expect(result.messages.length).toBe(0)
+    expect(result.evictedCount).toBe(0)
+    // Base overhead from chat framing (3 tokens) is expected even with no messages
+    expect(result.totalTokens).toBeGreaterThanOrEqual(0)
+  })
 })

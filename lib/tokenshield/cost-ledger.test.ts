@@ -415,4 +415,158 @@ describe("CostLedger", () => {
     // Should still be 1 — listener was removed
     expect(callCount).toBe(1)
   })
+
+  // -------------------------------------------------------
+  // mergeEntry (cross-tab sync simulation)
+  // -------------------------------------------------------
+
+  it("mergeEntry adds external entries and notifies listeners", async () => {
+    let notified = false
+    ledger.subscribe(() => {
+      notified = true
+    })
+
+    const merge = (
+      ledger as unknown as { mergeEntry: (entry: Record<string, unknown>) => void }
+    ).mergeEntry.bind(ledger)
+
+    merge({
+      id: "external-001",
+      timestamp: Date.now(),
+      model: "gpt-4o-mini",
+      inputTokens: 500,
+      outputTokens: 200,
+      cachedTokens: 0,
+      actualCost: 0.0002,
+      costWithoutShield: 0.0003,
+      totalSaved: 0.0001,
+      savings: { guard: 0, cache: 0, context: 0, router: 0, prefix: 0 },
+      cacheHit: false,
+    })
+
+    expect(ledger.getSummary().totalCalls).toBe(1)
+    expect(notified).toBe(true)
+  })
+
+  it("mergeEntry deduplicates entries by ID", () => {
+    const merge = (
+      ledger as unknown as { mergeEntry: (entry: Record<string, unknown>) => void }
+    ).mergeEntry.bind(ledger)
+
+    const entry = {
+      id: "dedup-001",
+      timestamp: Date.now(),
+      model: "gpt-4o-mini",
+      inputTokens: 500,
+      outputTokens: 200,
+      cachedTokens: 0,
+      actualCost: 0.0002,
+      costWithoutShield: 0.0003,
+      totalSaved: 0.0001,
+      savings: { guard: 0, cache: 0, context: 0, router: 0, prefix: 0 },
+      cacheHit: false,
+    }
+
+    merge(entry)
+    merge(entry)
+
+    expect(ledger.getSummary().totalCalls).toBe(1)
+  })
+
+  it("mergeEntry maintains chronological order", () => {
+    const merge = (
+      ledger as unknown as { mergeEntry: (entry: Record<string, unknown>) => void }
+    ).mergeEntry.bind(ledger)
+
+    merge({
+      id: "later",
+      timestamp: 2000,
+      model: "gpt-4o-mini",
+      inputTokens: 100,
+      outputTokens: 50,
+      cachedTokens: 0,
+      actualCost: 0.0001,
+      costWithoutShield: 0.0001,
+      totalSaved: 0,
+      savings: { guard: 0, cache: 0, context: 0, router: 0, prefix: 0 },
+      cacheHit: false,
+    })
+    merge({
+      id: "earlier",
+      timestamp: 1000,
+      model: "gpt-4o-mini",
+      inputTokens: 100,
+      outputTokens: 50,
+      cachedTokens: 0,
+      actualCost: 0.0001,
+      costWithoutShield: 0.0001,
+      totalSaved: 0,
+      savings: { guard: 0, cache: 0, context: 0, router: 0, prefix: 0 },
+      cacheHit: false,
+    })
+
+    const entries = ledger.getSummary().entries
+    expect(entries[0].id).toBe("earlier")
+    expect(entries[1].id).toBe("later")
+  })
+
+  // -------------------------------------------------------
+  // pruneEntries
+  // -------------------------------------------------------
+
+  it("prunes entries when exceeding MAX_LEDGER_ENTRIES", () => {
+    const internals = ledger as unknown as {
+      entries: Array<Record<string, unknown>>
+      pruneEntries: () => void
+    }
+
+    for (let i = 0; i < 10_005; i++) {
+      internals.entries.push({
+        id: `prune-${i}`,
+        timestamp: i,
+        model: "gpt-4o-mini",
+        inputTokens: 10,
+        outputTokens: 5,
+        cachedTokens: 0,
+        actualCost: 0.00001,
+        costWithoutShield: 0.00001,
+        totalSaved: 0,
+        savings: { guard: 0, cache: 0, context: 0, router: 0, prefix: 0 },
+        cacheHit: false,
+      })
+    }
+    internals.pruneEntries()
+    expect(internals.entries.length).toBe(10_000)
+    expect(internals.entries[0].id).toBe("prune-5")
+  })
+
+  // -------------------------------------------------------
+  // record with originalModel (counterfactual savings)
+  // -------------------------------------------------------
+
+  it("calculates counterfactual savings when originalModel differs", async () => {
+    const entry = await ledger.record({
+      model: "gpt-4o-mini",
+      inputTokens: 1000,
+      outputTokens: 500,
+      savings: { router: 0 },
+      originalModel: "gpt-4o",
+      originalInputTokens: 1000,
+    })
+
+    expect(entry.costWithoutShield).toBeGreaterThan(entry.actualCost)
+    expect(entry.totalSaved).toBeGreaterThan(0)
+  })
+
+  // -------------------------------------------------------
+  // dispose safety
+  // -------------------------------------------------------
+
+  it("dispose can be called multiple times safely", () => {
+    ledger.dispose()
+    ledger.dispose()
+    expect(() =>
+      ledger.record({ model: "gpt-4o-mini", inputTokens: 10, outputTokens: 5, savings: {} }),
+    ).not.toThrow()
+  })
 })
