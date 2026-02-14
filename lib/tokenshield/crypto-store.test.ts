@@ -158,4 +158,118 @@ describe("EncryptedStore", () => {
     })
     expect(store).toBeNull()
   })
+
+  // -------------------------------------------------------
+  // Unencrypted mode ("none")
+  // -------------------------------------------------------
+
+  it("setItem and getItem roundtrip with mode: none (unencrypted)", async () => {
+    const store = new EncryptedStore({
+      dbName: "test-db-none",
+      storeName: "test",
+      encryption: { mode: "none" },
+    })
+    await store.setItem("plain-key", { data: "no encryption" })
+    const result = await store.getItem<{ data: string }>("plain-key")
+    expect(result).toEqual({ data: "no encryption" })
+  })
+
+  it("getItem returns undefined for missing key in unencrypted mode", async () => {
+    const store = new EncryptedStore({
+      dbName: "test-db-none-miss",
+      storeName: "test",
+      encryption: { mode: "none" },
+    })
+    const result = await store.getItem("nonexistent")
+    expect(result).toBeUndefined()
+  })
+
+  // -------------------------------------------------------
+  // Session mode
+  // -------------------------------------------------------
+
+  it("constructs with session mode", () => {
+    const store = new EncryptedStore({
+      dbName: "test-db-session",
+      storeName: "test",
+      encryption: { mode: "session" },
+    })
+    expect(store).toBeInstanceOf(EncryptedStore)
+  })
+
+  it("setItem and getItem roundtrip with session mode", async () => {
+    const store = new EncryptedStore({
+      dbName: "test-db-session-rt",
+      storeName: "test",
+      encryption: { mode: "session" },
+    })
+    await store.setItem("session-data", { value: 42 })
+    const result = await store.getItem<{ value: number }>("session-data")
+    expect(result).toEqual({ value: 42 })
+  })
+
+  // -------------------------------------------------------
+  // Passphrase mode - salt reuse
+  // -------------------------------------------------------
+
+  it("passphrase mode reuses existing salt from localStorage", async () => {
+    localStorageMap.set("tokenshield-crypto-salt", "0102030405060708090a0b0c0d0e0f10")
+
+    const store = new EncryptedStore({
+      dbName: "test-db-salt",
+      storeName: "test",
+      encryption: { mode: "passphrase", passphrase: "reuse-salt" },
+    })
+    await store.setItem("salted", "data")
+    const result = await store.getItem<string>("salted")
+    expect(result).toBe("data")
+
+    expect(localStorageMap.get("tokenshield-crypto-salt")).toBe("0102030405060708090a0b0c0d0e0f10")
+  })
+
+  // -------------------------------------------------------
+  // Decryption failure returns undefined
+  // -------------------------------------------------------
+
+  it("getItem returns undefined when decryption fails", async () => {
+    mockSubtle.decrypt.mockRejectedValueOnce(new Error("Decryption failed"))
+
+    const store = new EncryptedStore({
+      dbName: "test-db-decrypt-fail",
+      storeName: "test",
+      encryption: { mode: "key", key: mockKey },
+    })
+    await store.setItem("corrupt", "data")
+    const result = await store.getItem("corrupt")
+    expect(result).toBeUndefined()
+  })
+
+  // -------------------------------------------------------
+  // getAllKeys and deleteItem with encryption enabled
+  // -------------------------------------------------------
+
+  it("getAllKeys returns keys from encrypted store", async () => {
+    const store = new EncryptedStore({
+      dbName: "test-db-keys-enc",
+      storeName: "test",
+      encryption: { mode: "key", key: mockKey },
+    })
+    await store.setItem("key-a", 1)
+    await store.setItem("key-b", 2)
+    const allKeys = await store.getAllKeys()
+    expect(allKeys).toContain("key-a")
+    expect(allKeys).toContain("key-b")
+  })
+
+  it("deleteItem removes encrypted entry", async () => {
+    const store = new EncryptedStore({
+      dbName: "test-db-del-enc",
+      storeName: "test",
+      encryption: { mode: "key", key: mockKey },
+    })
+    await store.setItem("to-remove", "secret")
+    await store.deleteItem("to-remove")
+    const result = await store.getItem("to-remove")
+    expect(result).toBeUndefined()
+  })
 })
