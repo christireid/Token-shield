@@ -160,7 +160,11 @@ export class CostCircuitBreaker {
    * Check if a request should proceed given current spending.
    * Call this before every API request.
    */
-  check(modelId?: string, estimatedInputTokens?: number, estimatedOutputTokens?: number): BreakerCheckResult {
+  check(
+    modelId?: string,
+    estimatedInputTokens?: number,
+    estimatedOutputTokens?: number,
+  ): BreakerCheckResult {
     this.totalRequests++
     const status = this.getStatus()
 
@@ -199,7 +203,11 @@ export class CostCircuitBreaker {
     if (modelId && estimatedInputTokens) {
       const pricing = MODEL_PRICING[modelId]
       if (pricing) {
-        estimatedCost = estimateCost(modelId, estimatedInputTokens, estimatedOutputTokens ?? 500).totalCost
+        estimatedCost = estimateCost(
+          modelId,
+          estimatedInputTokens,
+          estimatedOutputTokens ?? 500,
+        ).totalCost
       }
     }
 
@@ -398,10 +406,7 @@ export class CostCircuitBreaker {
         sessionStart: this.sessionStart,
         totalBlocked: this.totalBlocked,
       }
-      localStorage.setItem(
-        this.config.storageKey ?? "tokenshield-breaker",
-        JSON.stringify(state)
-      )
+      localStorage.setItem(this.config.storageKey ?? "tokenshield-breaker", JSON.stringify(state))
     } catch {
       // localStorage not available or full
     }
@@ -410,9 +415,7 @@ export class CostCircuitBreaker {
   private restore(): void {
     if (typeof window === "undefined") return
     try {
-      const raw = localStorage.getItem(
-        this.config.storageKey ?? "tokenshield-breaker"
-      )
+      const raw = localStorage.getItem(this.config.storageKey ?? "tokenshield-breaker")
       if (raw) {
         const state: PersistedState = JSON.parse(raw)
         this.records = state.records ?? []

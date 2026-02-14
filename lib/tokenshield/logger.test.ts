@@ -1,11 +1,6 @@
 import { describe, it, expect, vi } from "vitest"
 import mitt from "mitt"
-import {
-  TokenShieldLogger,
-  createLogger,
-  logger,
-  type LogEntry,
-} from "./logger"
+import { TokenShieldLogger, createLogger, logger, type LogEntry } from "./logger"
 import type { TokenShieldEvents } from "./event-bus"
 
 // ---------------------------------------------------------------------------
@@ -265,7 +260,12 @@ describe("TokenShieldLogger - connectEventBus", () => {
     expect(errorEntry.level).toBe("error")
 
     // breaker:warning should be 'warn'
-    bus.emit("breaker:warning", { limitType: "session", currentSpend: 4, limit: 5, percentUsed: 80 })
+    bus.emit("breaker:warning", {
+      limitType: "session",
+      currentSpend: 4,
+      limit: 5,
+      percentUsed: 80,
+    })
     const warnEntry: LogEntry = handler.mock.calls[handler.mock.calls.length - 1][0]
     expect(warnEntry.level).toBe("warn")
 

@@ -76,7 +76,7 @@ describe("react-hooks-core", () => {
       const englishNonCjkChars = englishText.length
       const expectedEnglishTokens = Math.max(
         1,
-        Math.ceil(englishNonCjkChars / 4 + englishCjkChars / 1.5)
+        Math.ceil(englishNonCjkChars / 4 + englishCjkChars / 1.5),
       )
       expect(expectedEnglishTokens).toBe(3) // ceil(11/4) = ceil(2.75) = 3
     })
@@ -87,10 +87,7 @@ describe("react-hooks-core", () => {
       const cjkMatch = cjkText.match(/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/g)
       const cjkChars = cjkMatch ? cjkMatch.length : 0
       const nonCjkChars = cjkText.length - cjkChars
-      const expectedCjkTokens = Math.max(
-        1,
-        Math.ceil(nonCjkChars / 4 + cjkChars / 1.5)
-      )
+      const expectedCjkTokens = Math.max(1, Math.ceil(nonCjkChars / 4 + cjkChars / 1.5))
       expect(cjkChars).toBe(4)
       expect(nonCjkChars).toBe(0)
       expect(expectedCjkTokens).toBe(3) // ceil(4/1.5) = ceil(2.67) = 3
@@ -99,15 +96,10 @@ describe("react-hooks-core", () => {
     it("calculates token estimation for mixed English and CJK text", () => {
       // Test mixed text
       const mixedText = "Hello 世界 World"
-      const mixedCjkMatch = mixedText.match(
-        /[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/g
-      )
+      const mixedCjkMatch = mixedText.match(/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/g)
       const mixedCjkChars = mixedCjkMatch ? mixedCjkMatch.length : 0
       const mixedNonCjkChars = mixedText.length - mixedCjkChars
-      const expectedMixedTokens = Math.max(
-        1,
-        Math.ceil(mixedNonCjkChars / 4 + mixedCjkChars / 1.5)
-      )
+      const expectedMixedTokens = Math.max(1, Math.ceil(mixedNonCjkChars / 4 + mixedCjkChars / 1.5))
       expect(mixedCjkChars).toBe(2)
       expect(mixedNonCjkChars).toBe(12) // 14 total - 2 CJK
       // ceil(12/4 + 2/1.5) = ceil(3 + 1.33) = ceil(4.33) = 5
@@ -118,10 +110,7 @@ describe("react-hooks-core", () => {
       const _singleChar = "a"
       const nonCjkChars = 1
       const cjkChars = 0
-      const expectedTokens = Math.max(
-        1,
-        Math.ceil(nonCjkChars / 4 + cjkChars / 1.5)
-      )
+      const expectedTokens = Math.max(1, Math.ceil(nonCjkChars / 4 + cjkChars / 1.5))
       expect(expectedTokens).toBe(1) // max(1, ceil(0.25)) = max(1, 1) = 1
     })
 
@@ -136,34 +125,24 @@ describe("react-hooks-core", () => {
 
     it("validates the formula components for Japanese hiragana", () => {
       const hiraganaText = "こんにちは" // 5 hiragana characters
-      const hiraganaMatch = hiraganaText.match(
-        /[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/g
-      )
+      const hiraganaMatch = hiraganaText.match(/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/g)
       const hiraganaChars = hiraganaMatch ? hiraganaMatch.length : 0
       const nonHiraganaChars = hiraganaText.length - hiraganaChars
       expect(hiraganaChars).toBe(5)
       expect(nonHiraganaChars).toBe(0)
-      const expectedTokens = Math.max(
-        1,
-        Math.ceil(nonHiraganaChars / 4 + hiraganaChars / 1.5)
-      )
+      const expectedTokens = Math.max(1, Math.ceil(nonHiraganaChars / 4 + hiraganaChars / 1.5))
       // ceil(5/1.5) = ceil(3.33) = 4
       expect(expectedTokens).toBe(4)
     })
 
     it("validates the formula components for Korean hangul", () => {
       const koreanText = "안녕하세요" // 5 Korean characters
-      const koreanMatch = koreanText.match(
-        /[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/g
-      )
+      const koreanMatch = koreanText.match(/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/g)
       const koreanChars = koreanMatch ? koreanMatch.length : 0
       const nonKoreanChars = koreanText.length - koreanChars
       expect(koreanChars).toBe(5)
       expect(nonKoreanChars).toBe(0)
-      const expectedTokens = Math.max(
-        1,
-        Math.ceil(nonKoreanChars / 4 + koreanChars / 1.5)
-      )
+      const expectedTokens = Math.max(1, Math.ceil(nonKoreanChars / 4 + koreanChars / 1.5))
       // ceil(5/1.5) = ceil(3.33) = 4
       expect(expectedTokens).toBe(4)
     })

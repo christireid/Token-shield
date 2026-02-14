@@ -7,11 +7,7 @@
  * and the high-level useShieldedCall hook.
  */
 
-import {
-  useMemo,
-  useState,
-  useCallback,
-} from "react"
+import { useMemo, useState, useCallback } from "react"
 import { countExactTokens } from "./token-counter"
 import { estimateCost, type ModelPricing } from "./cost-estimator"
 import { routeToModel, type RoutingDecision } from "./model-router"
@@ -75,10 +71,13 @@ export function useTokenEstimate(text: string): { estimatedTokens: number } {
 /**
  * Route a prompt to the cheapest appropriate model.
  */
-export function useModelRouter(prompt: string, options?: {
-  allowedProviders?: ModelPricing["provider"][]
-  defaultModel?: string
-}) {
+export function useModelRouter(
+  prompt: string,
+  options?: {
+    allowedProviders?: ModelPricing["provider"][]
+    defaultModel?: string
+  },
+) {
   const { defaultModelId, savingsStore } = useTokenShield()
   const model = options?.defaultModel ?? defaultModelId
   // Derive a stable key from the providers array so callers don't need to memoize it
@@ -86,7 +85,9 @@ export function useModelRouter(prompt: string, options?: {
 
   const routing = useMemo((): RoutingDecision | null => {
     if (!prompt || prompt.length === 0) return null
-    const providers = providersKey ? providersKey.split(",") as ModelPricing["provider"][] : undefined
+    const providers = providersKey
+      ? (providersKey.split(",") as ModelPricing["provider"][])
+      : undefined
     return routeToModel(prompt, model, {
       allowedProviders: providers,
     })
@@ -136,8 +137,10 @@ export function useShieldedCall() {
   const call = useCallback(
     async (
       prompt: string,
-      apiFn: (prompt: string) => Promise<{ response: string; inputTokens: number; outputTokens: number }>,
-      model?: string
+      apiFn: (
+        prompt: string,
+      ) => Promise<{ response: string; inputTokens: number; outputTokens: number }>,
+      model?: string,
     ): Promise<string> => {
       const modelId = model ?? defaultModelId
       const start = performance.now()
@@ -155,7 +158,7 @@ export function useShieldedCall() {
         const cost = estimateCost(
           modelId,
           cacheResult.entry.inputTokens,
-          cacheResult.entry.outputTokens
+          cacheResult.entry.outputTokens,
         )
         savingsStore.addEvent({
           timestamp: Date.now(),
@@ -184,7 +187,7 @@ export function useShieldedCall() {
 
       return result.response
     },
-    [cache, savingsStore, defaultModelId]
+    [cache, savingsStore, defaultModelId],
   )
 
   return { call, metrics, isReady: true }

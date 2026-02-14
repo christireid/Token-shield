@@ -55,7 +55,13 @@ describe("RequestGuard", () => {
   it("accepts optional modelId for cost estimation", () => {
     // gpt-4o is more expensive than gpt-4o-mini
     const cheapResult = guard.check("Tell me a joke", 500, "gpt-4o-mini")
-    const guard2 = new RequestGuard({ debounceMs: 0, maxRequestsPerMinute: 60, maxCostPerHour: 10, modelId: "gpt-4o-mini", deduplicateInFlight: false })
+    const guard2 = new RequestGuard({
+      debounceMs: 0,
+      maxRequestsPerMinute: 60,
+      maxCostPerHour: 10,
+      modelId: "gpt-4o-mini",
+      deduplicateInFlight: false,
+    })
     const expensiveResult = guard2.check("Tell me a joke", 500, "gpt-4o")
     expect(expensiveResult.estimatedCost).toBeGreaterThan(cheapResult.estimatedCost)
   })
@@ -91,7 +97,9 @@ describe("RequestGuard", () => {
 
     it("non-abort errors reject the promise (not unhandled)", async () => {
       const error = new Error("API failure")
-      const fn = vi.fn(async () => { throw error })
+      const fn = vi.fn(async () => {
+        throw error
+      })
       const debouncedGuard = new RequestGuard({
         debounceMs: 10,
         maxRequestsPerMinute: 999,

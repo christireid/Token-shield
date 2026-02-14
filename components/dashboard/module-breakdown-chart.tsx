@@ -22,10 +22,7 @@ const MODULE_LABELS: Record<string, string> = {
 }
 
 const chartConfig = Object.fromEntries(
-  Object.entries(MODULE_LABELS).map(([key, label]) => [
-    key,
-    { label, color: MODULE_COLORS[key] },
-  ])
+  Object.entries(MODULE_LABELS).map(([key, label]) => [key, { label, color: MODULE_COLORS[key] }]),
 )
 
 export function ModuleBreakdownChart() {
@@ -52,7 +49,11 @@ export function ModuleBreakdownChart() {
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="aspect-auto h-[280px] w-full md:h-[320px]">
-          <BarChart data={chartData} layout="vertical" margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+          <BarChart
+            data={chartData}
+            layout="vertical"
+            margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
+          >
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 14%, 12%)" horizontal={false} />
             <XAxis
               type="number"

@@ -54,7 +54,12 @@ function KpiCard({ label, value, sparkline, color, accentClass, icon }: KpiCardP
           </span>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg border border-border/30", accentClass.replace("bg-", "text-"))}>
+          <div
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-lg border border-border/30",
+              accentClass.replace("bg-", "text-"),
+            )}
+          >
             {icon}
           </div>
           <MiniSparkline data={sparkline} color={color} />

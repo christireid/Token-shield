@@ -114,11 +114,7 @@ export class RequestGuard {
     const now = Date.now()
     const inputTokens = countTokens(prompt)
     const effectiveModel = modelId ?? this.config.modelId
-    const cost = estimateCost(
-      effectiveModel,
-      inputTokens,
-      expectedOutputTokens
-    )
+    const cost = estimateCost(effectiveModel, inputTokens, expectedOutputTokens)
 
     const normalized = prompt.trim().toLowerCase()
 
@@ -185,12 +181,8 @@ export class RequestGuard {
 
     // 2. Rate limit check
     const oneMinuteAgo = now - 60_000
-    this.requestTimestamps = this.requestTimestamps.filter(
-      (t) => t > oneMinuteAgo
-    )
-    if (
-      this.requestTimestamps.length >= this.config.maxRequestsPerMinute
-    ) {
+    this.requestTimestamps = this.requestTimestamps.filter((t) => t > oneMinuteAgo)
+    if (this.requestTimestamps.length >= this.config.maxRequestsPerMinute) {
       this.blockedCount++
       this.totalBlocked++
       this.totalSaved += cost.totalCost
@@ -307,16 +299,12 @@ export class RequestGuard {
     prompt: string,
     actualInputTokens: number,
     actualOutputTokens: number,
-    modelId?: string
+    modelId?: string,
   ): void {
     const normalized = prompt.trim().toLowerCase()
     this.inFlight.delete(normalized)
 
-    const cost = estimateCost(
-      modelId ?? this.config.modelId,
-      actualInputTokens,
-      actualOutputTokens
-    )
+    const cost = estimateCost(modelId ?? this.config.modelId, actualInputTokens, actualOutputTokens)
     this.costLog.push({ timestamp: Date.now(), cost: cost.totalCost })
     // Hard cap: keep only last 500 entries to prevent growth in high-throughput
     if (this.costLog.length > 500) {
@@ -332,7 +320,7 @@ export class RequestGuard {
    * resolves with null immediately (it does not hang).
    */
   debounce<T>(
-    fn: (prompt: string, signal: AbortSignal) => Promise<T>
+    fn: (prompt: string, signal: AbortSignal) => Promise<T>,
   ): (prompt: string) => Promise<T | null> {
     let pendingController: AbortController | null = null
     let pendingResolve: ((value: T | null) => void) | null = null
@@ -404,9 +392,7 @@ export class RequestGuard {
       totalAllowed: this.totalAllowed,
       blockedRate: total > 0 ? this.totalBlocked / total : 0,
       totalSavedDollars: this.totalSaved,
-      currentRequestsPerMinute: this.requestTimestamps.filter(
-        (t) => t > oneMinuteAgo
-      ).length,
+      currentRequestsPerMinute: this.requestTimestamps.filter((t) => t > oneMinuteAgo).length,
       currentHourlySpend: this.getCurrentHourlySpend(),
       inFlightCount: this.inFlight.size,
     }
@@ -427,7 +413,9 @@ export class RequestGuard {
       lastRequestTime: this.lastRequestTime,
       requestsLastMinute: this.requestTimestamps.filter((t) => t > oneMinuteAgo).length,
       // Compute without mutating this.costLog (getCurrentHourlySpend filters in-place)
-      currentHourlySpend: this.costLog.filter((c) => c.timestamp > oneHourAgo).reduce((sum, c) => sum + c.cost, 0),
+      currentHourlySpend: this.costLog
+        .filter((c) => c.timestamp > oneHourAgo)
+        .reduce((sum, c) => sum + c.cost, 0),
     }
   }
 

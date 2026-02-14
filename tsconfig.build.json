@@ -5,10 +5,7 @@
     "declarationMap": true,
     "outDir": "dist"
   },
-  "include": [
-    "lib/**/*.ts",
-    "lib/**/*.tsx"
-  ],
+  "include": ["lib/**/*.ts", "lib/**/*.tsx"],
   "exclude": [
     "node_modules",
     "dist",

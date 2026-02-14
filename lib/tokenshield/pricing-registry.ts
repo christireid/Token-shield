@@ -86,7 +86,7 @@ export const PRICING_REGISTRY: Record<string, ModelPricingEntry> = {
     supportsVision: false,
     supportsFunctions: true,
   },
-  "o1": {
+  o1: {
     id: "o1",
     provider: "openai",
     name: "o1",
@@ -110,7 +110,7 @@ export const PRICING_REGISTRY: Record<string, ModelPricingEntry> = {
     supportsVision: false,
     supportsFunctions: false,
   },
-  "o3": {
+  o3: {
     id: "o3",
     provider: "openai",
     name: "o3",
@@ -354,9 +354,7 @@ export function registerModel(entry: ModelPricingEntry): void {
  * Falls back to prefix matching when an exact key is not found,
  * returning the entry whose id is the longest prefix of the query.
  */
-export function getModelPricing(
-  modelId: string
-): ModelPricingEntry | undefined {
+export function getModelPricing(modelId: string): ModelPricingEntry | undefined {
   if (PRICING_REGISTRY[modelId]) {
     return PRICING_REGISTRY[modelId]
   }
@@ -365,10 +363,7 @@ export function getModelPricing(
   let bestLength = 0
 
   for (const entry of Object.values(PRICING_REGISTRY)) {
-    if (
-      modelId.startsWith(entry.id) &&
-      entry.id.length > bestLength
-    ) {
+    if (modelId.startsWith(entry.id) && entry.id.length > bestLength) {
       bestMatch = entry
       bestLength = entry.id.length
     }
@@ -378,10 +373,6 @@ export function getModelPricing(
 }
 
 /** Return every model entry that belongs to the given provider. */
-export function getModelsByProvider(
-  provider: string
-): ModelPricingEntry[] {
-  return Object.values(PRICING_REGISTRY).filter(
-    (entry) => entry.provider === provider
-  )
+export function getModelsByProvider(provider: string): ModelPricingEntry[] {
+  return Object.values(PRICING_REGISTRY).filter((entry) => entry.provider === provider)
 }

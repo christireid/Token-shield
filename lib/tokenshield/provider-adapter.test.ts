@@ -57,7 +57,7 @@ describe("ProviderAdapter - Constructor", () => {
           { name: "openai", models: ["gpt-4o-mini"], priority: 1, healthy: false },
           { name: "anthropic", models: ["claude-haiku-4.5"], priority: 2 },
         ],
-      })
+      }),
     )
     expect(adapter.getProviderHealth("openai")!.healthy).toBe(false)
     expect(adapter.getProviderHealth("anthropic")!.healthy).toBe(true)
@@ -98,7 +98,11 @@ describe("ProviderAdapter - selectModel", () => {
     // Make openai unhealthy
     for (let i = 0; i < 5; i++) adapter.recordFailure("openai", "err")
     adapter.selectModel("gpt-4o-mini")
-    expect(onFallback).toHaveBeenCalledWith("openai", expect.any(String), "preferred provider unhealthy")
+    expect(onFallback).toHaveBeenCalledWith(
+      "openai",
+      expect.any(String),
+      "preferred provider unhealthy",
+    )
   })
 
   it("returns first provider when all are unhealthy", () => {
@@ -165,7 +169,7 @@ describe("ProviderAdapter - recordSuccess", () => {
     adapter.recordSuccess("openai", 50)
     expect(adapter.getProviderHealth("openai")!.healthy).toBe(true)
     expect(onHealthChange).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "openai", healthy: true })
+      expect.objectContaining({ name: "openai", healthy: true }),
     )
   })
 })
@@ -192,7 +196,7 @@ describe("ProviderAdapter - recordFailure", () => {
     adapter.recordFailure("openai", "err3")
     expect(adapter.getProviderHealth("openai")!.healthy).toBe(false)
     expect(onHealthChange).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "openai", healthy: false })
+      expect.objectContaining({ name: "openai", healthy: false }),
     )
   })
 
@@ -369,7 +373,8 @@ describe("retryWithBackoff", () => {
   })
 
   it("retries on failure then succeeds", async () => {
-    const fn = vi.fn()
+    const fn = vi
+      .fn()
       .mockRejectedValueOnce(new Error("fail1"))
       .mockRejectedValueOnce(new Error("fail2"))
       .mockResolvedValue("ok")

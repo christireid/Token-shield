@@ -69,9 +69,7 @@ describe("react-hooks-budget", () => {
       }
 
       expect(negativeCostState.netCost).toBe(-0.5)
-      expect(negativeCostState.totalSaved).toBeGreaterThan(
-        negativeCostState.totalSpent
-      )
+      expect(negativeCostState.totalSaved).toBeGreaterThan(negativeCostState.totalSpent)
     })
   })
 
@@ -165,9 +163,7 @@ describe("react-hooks-budget", () => {
       }
 
       expect(overBudgetState.isOverBudget).toBe(true)
-      expect(overBudgetState.currentSpend).toBeGreaterThan(
-        overBudgetState.limit
-      )
+      expect(overBudgetState.currentSpend).toBeGreaterThan(overBudgetState.limit)
       expect(overBudgetState.percentUsed).toBeGreaterThan(100)
     })
 

@@ -34,13 +34,26 @@
     "build": "tsup",
     "start": "next start",
     "lint": "eslint lib/tokenshield/",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "clean": "rm -rf dist .next",
+    "validate": "run-s typecheck lint format:check test",
+    "clean": "rm -rf dist .next coverage",
+    "prepare": "husky",
     "prepack": "npm run build",
     "prepublishOnly": "npm run typecheck && npm run test && npm run build"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "prettier --write",
+      "eslint --fix --no-warn-ignored"
+    ],
+    "*.{json,yml,yaml,md,mjs,js}": [
+      "prettier --write"
+    ]
   },
   "keywords": [
     "ai",
@@ -127,6 +140,7 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^4.0.18",
     "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -134,11 +148,16 @@
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.5.1",
     "eslint": "^10.0.0",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
     "input-otp": "1.4.1",
+    "lint-staged": "^16.2.7",
     "lucide-react": "^0.544.0",
     "next": "16.1.6",
     "next-themes": "^0.4.6",
+    "npm-run-all2": "^8.0.4",
     "postcss": "^8.5",
+    "prettier": "^3.8.1",
     "react": ">=18.0.0",
     "react-day-picker": "8.10.1",
     "react-dom": "^19",

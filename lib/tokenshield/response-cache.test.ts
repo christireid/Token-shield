@@ -138,7 +138,13 @@ describe("response-cache", () => {
 
     it("counts fuzzy hits in totalHits", async () => {
       const cache = new ResponseCache({ maxEntries: 10, ttlMs: 60_000, similarityThreshold: 0.7 })
-      await cache.store("What is React JS framework?", "React is a UI library.", "gpt-4o-mini", 10, 20)
+      await cache.store(
+        "What is React JS framework?",
+        "React is a UI library.",
+        "gpt-4o-mini",
+        10,
+        20,
+      )
       const result = await cache.lookup("What is React JS?", "gpt-4o-mini")
       expect(result.hit).toBe(true)
       expect(result.matchType).toBe("fuzzy")

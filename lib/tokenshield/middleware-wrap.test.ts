@@ -20,7 +20,14 @@ describe("wrapGenerate", () => {
   describe("cache hit path", () => {
     it("returns cached response without calling doGenerate", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: true, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: true,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         cache: { maxEntries: 10 },
       })
 
@@ -47,7 +54,14 @@ describe("wrapGenerate", () => {
     it("calls onUsage with saved cost for cache hits", async () => {
       const onUsage = vi.fn()
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: true, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: true,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         cache: { maxEntries: 10 },
         onUsage,
       })
@@ -61,11 +75,13 @@ describe("wrapGenerate", () => {
       const transformed = await shield.transformParams({ params })
       await shield.wrapGenerate({ doGenerate: vi.fn(), params: transformed })
 
-      expect(onUsage).toHaveBeenCalledWith(expect.objectContaining({
-        inputTokens: 0,
-        outputTokens: 0,
-        cost: 0,
-      }))
+      expect(onUsage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputTokens: 0,
+          outputTokens: 0,
+          cost: 0,
+        }),
+      )
       // Should report savings
       expect(onUsage.mock.calls[0][0].saved).toBeGreaterThan(0)
       shield.dispose()
@@ -75,7 +91,14 @@ describe("wrapGenerate", () => {
   describe("normal call path", () => {
     it("calls doGenerate and returns the result", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
       })
 
       const params = {
@@ -99,7 +122,14 @@ describe("wrapGenerate", () => {
     it("calls onUsage after model call", async () => {
       const onUsage = vi.fn()
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         onUsage,
       })
 
@@ -118,17 +148,26 @@ describe("wrapGenerate", () => {
         params: transformed,
       })
 
-      expect(onUsage).toHaveBeenCalledWith(expect.objectContaining({
-        model: "gpt-4o-mini",
-        inputTokens: 10,
-        outputTokens: 5,
-      }))
+      expect(onUsage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: "gpt-4o-mini",
+          inputTokens: 10,
+          outputTokens: 5,
+        }),
+      )
       shield.dispose()
     })
 
     it("stores response in cache for future use", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: true, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: true,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         cache: { maxEntries: 10 },
       })
 
@@ -159,7 +198,14 @@ describe("wrapGenerate", () => {
 
     it("records usage in ledger", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: true },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: true,
+        },
       })
 
       const params = {
@@ -186,7 +232,14 @@ describe("wrapGenerate", () => {
     it("emits ledger:entry event", async () => {
       const events: Record<string, unknown>[] = []
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
       })
       shield.events.on("ledger:entry", (data) => events.push(data as Record<string, unknown>))
 
@@ -216,7 +269,14 @@ describe("wrapGenerate", () => {
   describe("error handling", () => {
     it("propagates doGenerate errors", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
       })
 
       const params = {
@@ -229,7 +289,7 @@ describe("wrapGenerate", () => {
         shield.wrapGenerate({
           doGenerate: vi.fn().mockRejectedValue(new Error("API failure")),
           params: transformed,
-        })
+        }),
       ).rejects.toThrow("API failure")
       shield.dispose()
     })
@@ -240,7 +300,14 @@ describe("wrapStream", () => {
   describe("cache hit path", () => {
     it("returns simulated stream for cache hits", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: true, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: true,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         cache: { maxEntries: 10 },
       })
 
@@ -265,7 +332,14 @@ describe("wrapStream", () => {
   describe("normal stream path", () => {
     it("wraps the original stream with monitoring", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
       })
 
       const params = {
@@ -306,7 +380,14 @@ describe("wrapStream", () => {
     it("emits stream:complete event when stream ends", async () => {
       const events: string[] = []
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
       })
       shield.events.on("stream:complete", () => events.push("stream:complete"))
 
@@ -330,7 +411,9 @@ describe("wrapStream", () => {
 
       // Consume the stream to trigger completion
       const reader = ((result as Record<string, unknown>).stream as ReadableStream).getReader()
-      while (!(await reader.read()).done) { /* empty */ }
+      while (!(await reader.read()).done) {
+        /* empty */
+      }
 
       expect(events).toContain("stream:complete")
       shield.dispose()
@@ -339,7 +422,14 @@ describe("wrapStream", () => {
     it("emits stream:chunk events during streaming", async () => {
       const chunkEvents: unknown[] = []
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
       })
       shield.events.on("stream:chunk", (data) => chunkEvents.push(data))
 
@@ -363,7 +453,9 @@ describe("wrapStream", () => {
       })
 
       const reader = ((result as Record<string, unknown>).stream as ReadableStream).getReader()
-      while (!(await reader.read()).done) { /* empty */ }
+      while (!(await reader.read()).done) {
+        /* empty */
+      }
 
       expect(chunkEvents.length).toBe(2)
       shield.dispose()
@@ -372,7 +464,14 @@ describe("wrapStream", () => {
     it("calls onUsage after stream completes", async () => {
       const onUsage = vi.fn()
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         onUsage,
       })
 
@@ -395,11 +494,15 @@ describe("wrapStream", () => {
       })
 
       const reader = ((result as Record<string, unknown>).stream as ReadableStream).getReader()
-      while (!(await reader.read()).done) { /* empty */ }
+      while (!(await reader.read()).done) {
+        /* empty */
+      }
 
-      expect(onUsage).toHaveBeenCalledWith(expect.objectContaining({
-        model: "gpt-4o-mini",
-      }))
+      expect(onUsage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: "gpt-4o-mini",
+        }),
+      )
       shield.dispose()
     })
   })
@@ -407,7 +510,14 @@ describe("wrapStream", () => {
   describe("error handling", () => {
     it("propagates doStream errors", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
       })
 
       const params = {
@@ -420,7 +530,7 @@ describe("wrapStream", () => {
         shield.wrapStream({
           doStream: vi.fn().mockRejectedValue(new Error("Stream failure")),
           params: transformed,
-        })
+        }),
       ).rejects.toThrow("Stream failure")
       shield.dispose()
     })

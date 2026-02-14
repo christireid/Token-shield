@@ -7,13 +7,7 @@
  * event logging, pipeline metrics, and provider health monitoring.
  */
 
-import {
-  useMemo,
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-} from "react"
+import { useMemo, useState, useEffect, useCallback, useRef } from "react"
 import { estimateCost } from "./cost-estimator"
 import { smartFit, type Message, type ContextBudget } from "./context-manager"
 import { calculateSavings } from "./cost-estimator"
@@ -30,10 +24,7 @@ import { useTokenShield } from "./react-context"
  * Manage conversation context within a token budget.
  * Returns the trimmed messages and savings data.
  */
-export function useContextManager(
-  messages: Message[],
-  budget: ContextBudget
-) {
+export function useContextManager(messages: Message[], budget: ContextBudget) {
   const { defaultModelId } = useTokenShield()
 
   return useMemo(() => {
@@ -44,7 +35,7 @@ export function useContextManager(
         defaultModelId,
         result.totalTokens + result.evictedTokens,
         result.totalTokens,
-        budget.reservedForOutput
+        budget.reservedForOutput,
       )
       return {
         ...result,
@@ -74,8 +65,10 @@ export function useResponseCache() {
   const cachedFetch = useCallback(
     async (
       prompt: string,
-      apiFn: (prompt: string) => Promise<{ response: string; inputTokens: number; outputTokens: number }>,
-      model?: string
+      apiFn: (
+        prompt: string,
+      ) => Promise<{ response: string; inputTokens: number; outputTokens: number }>,
+      model?: string,
     ) => {
       const modelId = model ?? defaultModelId
 
@@ -84,7 +77,7 @@ export function useResponseCache() {
         const cost = estimateCost(
           modelId,
           cacheResult.entry.inputTokens,
-          cacheResult.entry.outputTokens
+          cacheResult.entry.outputTokens,
         )
         savingsStore.addEvent({
           timestamp: Date.now(),
@@ -112,7 +105,7 @@ export function useResponseCache() {
         similarity: undefined,
       }
     },
-    [cache, savingsStore, defaultModelId]
+    [cache, savingsStore, defaultModelId],
   )
 
   const stats = useCallback(() => cache.stats(), [cache])
@@ -144,18 +137,15 @@ export function useRequestGuard() {
       }
       return result
     },
-    [guard, savingsStore]
+    [guard, savingsStore],
   )
 
-  const startRequest = useCallback(
-    (prompt: string) => guard.startRequest(prompt),
-    [guard]
-  )
+  const startRequest = useCallback((prompt: string) => guard.startRequest(prompt), [guard])
 
   const completeRequest = useCallback(
     (prompt: string, inputTokens: number, outputTokens: number) =>
       guard.completeRequest(prompt, inputTokens, outputTokens),
-    [guard]
+    [guard],
   )
 
   const stats = useCallback(() => guard.stats(), [guard])
@@ -319,7 +309,8 @@ export function usePipelineMetrics(): PipelineMetrics {
       const c = countersRef.current
       setMetrics({
         totalRequests: c.totalRequests,
-        avgLatencyMs: c.latencySamples > 0 ? Math.round(c.cumulativeLatencyMs / c.latencySamples) : 0,
+        avgLatencyMs:
+          c.latencySamples > 0 ? Math.round(c.cumulativeLatencyMs / c.latencySamples) : 0,
         cacheHitRate: c.totalRequests > 0 ? c.totalCacheHits / c.totalRequests : 0,
         blockedRate: c.totalRequests > 0 ? c.totalBlocked / c.totalRequests : 0,
         lastEvent: lastEventRef.current,

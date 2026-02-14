@@ -24,9 +24,11 @@ const EVENT_BADGE_COLORS: Record<DashboardEvent["type"], string> = {
   "cache:hit": "border-[hsl(190,70%,50%)]/30 bg-[hsl(190,70%,50%)]/10 text-[hsl(190,70%,65%)]",
   "cache:miss": "border-border/30 bg-secondary/30 text-muted-foreground",
   "request:blocked": "border-[hsl(0,72%,51%)]/30 bg-[hsl(0,72%,51%)]/10 text-[hsl(0,72%,65%)]",
-  "router:downgraded": "border-[hsl(270,60%,60%)]/30 bg-[hsl(270,60%,60%)]/10 text-[hsl(270,60%,75%)]",
+  "router:downgraded":
+    "border-[hsl(270,60%,60%)]/30 bg-[hsl(270,60%,60%)]/10 text-[hsl(270,60%,75%)]",
   "context:trimmed": "border-[hsl(38,92%,50%)]/30 bg-[hsl(38,92%,50%)]/10 text-[hsl(38,92%,65%)]",
-  "prefix:optimized": "border-[hsl(152,60%,52%)]/30 bg-[hsl(152,60%,52%)]/10 text-[hsl(152,60%,65%)]",
+  "prefix:optimized":
+    "border-[hsl(152,60%,52%)]/30 bg-[hsl(152,60%,52%)]/10 text-[hsl(152,60%,65%)]",
   "ledger:entry": "border-[hsl(152,60%,52%)]/30 bg-[hsl(152,60%,52%)]/10 text-[hsl(152,60%,65%)]",
   "breaker:warning": "border-[hsl(25,95%,53%)]/30 bg-[hsl(25,95%,53%)]/10 text-[hsl(25,95%,65%)]",
 }
@@ -56,7 +58,7 @@ export function EventFeed() {
     if (paused) {
       setFrozenEvents(data.events)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paused])
 
   React.useEffect(() => {
@@ -87,7 +89,7 @@ export function EventFeed() {
                 key={ev.id}
                 className={cn(
                   "flex items-start gap-3 rounded-md px-2 py-2 transition-colors hover:bg-secondary/30",
-                  ev.type === "breaker:warning" && "bg-[hsl(25,95%,53%)]/5"
+                  ev.type === "breaker:warning" && "bg-[hsl(25,95%,53%)]/5",
                 )}
               >
                 {/* Dot */}
@@ -100,13 +102,14 @@ export function EventFeed() {
                   <div className="flex items-center gap-2">
                     <Badge
                       variant="outline"
-                      className={cn("shrink-0 rounded px-1.5 py-0 text-[10px] font-medium", EVENT_BADGE_COLORS[ev.type])}
+                      className={cn(
+                        "shrink-0 rounded px-1.5 py-0 text-[10px] font-medium",
+                        EVENT_BADGE_COLORS[ev.type],
+                      )}
                     >
                       {formatType(ev.type)}
                     </Badge>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {ev.message}
-                    </span>
+                    <span className="truncate text-xs text-muted-foreground">{ev.message}</span>
                   </div>
                 </div>
 

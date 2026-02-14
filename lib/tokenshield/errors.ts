@@ -34,7 +34,7 @@ export const ERROR_CODES = {
   CRYPTO_DECRYPTION_FAILED: "CRYPTO_DECRYPTION_FAILED",
 } as const
 
-export type ErrorCode = typeof ERROR_CODES[keyof typeof ERROR_CODES]
+export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES]
 
 /** Base error for all TokenShield errors. Catch this to handle any SDK error. */
 export class TokenShieldError extends Error {
@@ -78,8 +78,14 @@ export class TokenShieldBudgetError extends TokenShieldBlockedError {
   readonly limit: number
 
   constructor(userId: string, limitType: "daily" | "monthly", currentSpend: number, limit: number) {
-    const code = limitType === "daily" ? ERROR_CODES.BUDGET_DAILY_EXCEEDED : ERROR_CODES.BUDGET_MONTHLY_EXCEEDED
-    super(`User ${userId} ${limitType} budget exceeded ($${currentSpend.toFixed(4)} / $${limit.toFixed(2)})`, code)
+    const code =
+      limitType === "daily"
+        ? ERROR_CODES.BUDGET_DAILY_EXCEEDED
+        : ERROR_CODES.BUDGET_MONTHLY_EXCEEDED
+    super(
+      `User ${userId} ${limitType} budget exceeded ($${currentSpend.toFixed(4)} / $${limit.toFixed(2)})`,
+      code,
+    )
     this.name = "TokenShieldBudgetError"
     this.userId = userId
     this.limitType = limitType

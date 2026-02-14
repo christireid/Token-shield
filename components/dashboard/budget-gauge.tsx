@@ -82,13 +82,15 @@ export function BudgetGauge() {
     <Card
       className={cn(
         "border-border/40 bg-card/50 transition-all",
-        budget.isOverBudget && "border-[hsl(0,72%,51%)]/40 shadow-[0_0_20px_hsl(0,72%,51%,0.1)]"
+        budget.isOverBudget && "border-[hsl(0,72%,51%)]/40 shadow-[0_0_20px_hsl(0,72%,51%,0.1)]",
       )}
     >
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-sm font-medium text-foreground">Budget Utilization</CardTitle>
+            <CardTitle className="text-sm font-medium text-foreground">
+              Budget Utilization
+            </CardTitle>
             <CardDescription className="text-xs">
               Overall spending against configured limits
             </CardDescription>
@@ -104,7 +106,13 @@ export function BudgetGauge() {
         <div className="flex flex-col items-center gap-4">
           {/* Arc gauge */}
           <div className="relative">
-            <svg width="180" height="130" viewBox="0 0 180 130" role="img" aria-label={`Budget gauge at ${percent.toFixed(0)}%`}>
+            <svg
+              width="180"
+              height="130"
+              viewBox="0 0 180 130"
+              role="img"
+              aria-label={`Budget gauge at ${percent.toFixed(0)}%`}
+            >
               {/* Background arc */}
               <path
                 d={describeArc(startAngle, endAngle)}
@@ -127,7 +135,12 @@ export function BudgetGauge() {
             </svg>
             {/* Center text */}
             <div className="absolute inset-0 flex flex-col items-center justify-center pt-2">
-              <span className={cn("font-mono text-2xl font-bold tabular-nums", getGaugeTextClass(percent))}>
+              <span
+                className={cn(
+                  "font-mono text-2xl font-bold tabular-nums",
+                  getGaugeTextClass(percent),
+                )}
+              >
                 {percent.toFixed(0)}%
               </span>
               <span className="font-mono text-xs tabular-nums text-muted-foreground">

@@ -90,10 +90,7 @@ export class CostLedger {
       // Setup persistence
       if (this.persistEnabled) {
         try {
-          this.idbStore = createStore(
-            options?.storeName ?? "tokenshield-ledger",
-            "entries"
-          )
+          this.idbStore = createStore(options?.storeName ?? "tokenshield-ledger", "entries")
         } catch {
           // SSR or IDB unavailable
         }
@@ -132,14 +129,14 @@ export class CostLedger {
    */
   private mergeEntry(entry: LedgerEntry) {
     // Avoid duplicates
-    if (this.entries.some(e => e.id === entry.id)) return
+    if (this.entries.some((e) => e.id === entry.id)) return
 
     this.entries.push(entry)
     this.pruneEntries()
-    
+
     // Sort to ensure chronological order despite async arrival
     this.entries.sort((a, b) => a.timestamp - b.timestamp)
-    
+
     this.notify()
   }
 
@@ -170,7 +167,7 @@ export class CostLedger {
       entry.model,
       entry.inputTokens,
       entry.outputTokens,
-      entry.cachedTokens ?? 0
+      entry.cachedTokens ?? 0,
     )
 
     // Calculate counterfactual: what would this have cost without TokenShield?
@@ -180,7 +177,7 @@ export class CostLedger {
       originalModel,
       originalInput,
       entry.outputTokens,
-      0 // no caching without prefix optimization
+      0, // no caching without prefix optimization
     )
 
     const savings: ModuleSavings = {
@@ -243,7 +240,7 @@ export class CostLedger {
       entry.model,
       entry.estimatedInputTokens,
       entry.estimatedOutputTokens,
-      0
+      0,
     )
 
     return this.record({
@@ -270,7 +267,7 @@ export class CostLedger {
       entry.model,
       entry.savedInputTokens,
       entry.savedOutputTokens,
-      0
+      0,
     )
 
     return this.record({
@@ -377,43 +374,68 @@ export class CostLedger {
    * Export all entries as JSON (for finance teams / reporting).
    */
   exportJSON(): string {
-    return JSON.stringify({
-      exportedAt: new Date().toISOString(),
-      summary: this.getSummary(),
-      entries: this.entries,
-    }, null, 2)
+    return JSON.stringify(
+      {
+        exportedAt: new Date().toISOString(),
+        summary: this.getSummary(),
+        entries: this.entries,
+      },
+      null,
+      2,
+    )
   }
 
   /**
    * Export all entries as CSV (for spreadsheet / finance tooling).
    */
   exportCSV(): string {
-    const headers = ['id','timestamp','model','inputTokens','outputTokens','cachedTokens','actualCost','costWithoutShield','totalSaved','feature','cacheHit','guard','cache','context','router','prefix']
-    const rows = this.entries.map(e => [
-      e.id,
-      new Date(e.timestamp).toISOString(),
-      e.model,
-      e.inputTokens,
-      e.outputTokens,
-      e.cachedTokens,
-      e.actualCost.toFixed(6),
-      e.costWithoutShield.toFixed(6),
-      e.totalSaved.toFixed(6),
-      e.feature ?? '',
-      e.cacheHit,
-      e.savings.guard.toFixed(6),
-      e.savings.cache.toFixed(6),
-      e.savings.context.toFixed(6),
-      e.savings.router.toFixed(6),
-      e.savings.prefix.toFixed(6),
-    ].map(v => {
-      const s = String(v)
-      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-        return `"${s.replace(/"/g, '""')}"`
-      }
-      return s
-    }).join(','))
-    return [headers.join(','), ...rows].join('\n')
+    const headers = [
+      "id",
+      "timestamp",
+      "model",
+      "inputTokens",
+      "outputTokens",
+      "cachedTokens",
+      "actualCost",
+      "costWithoutShield",
+      "totalSaved",
+      "feature",
+      "cacheHit",
+      "guard",
+      "cache",
+      "context",
+      "router",
+      "prefix",
+    ]
+    const rows = this.entries.map((e) =>
+      [
+        e.id,
+        new Date(e.timestamp).toISOString(),
+        e.model,
+        e.inputTokens,
+        e.outputTokens,
+        e.cachedTokens,
+        e.actualCost.toFixed(6),
+        e.costWithoutShield.toFixed(6),
+        e.totalSaved.toFixed(6),
+        e.feature ?? "",
+        e.cacheHit,
+        e.savings.guard.toFixed(6),
+        e.savings.cache.toFixed(6),
+        e.savings.context.toFixed(6),
+        e.savings.router.toFixed(6),
+        e.savings.prefix.toFixed(6),
+      ]
+        .map((v) => {
+          const s = String(v)
+          if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+            return `"${s.replace(/"/g, '""')}"`
+          }
+          return s
+        })
+        .join(","),
+    )
+    return [headers.join(","), ...rows].join("\n")
   }
 
   /**
@@ -453,13 +475,13 @@ export class CostLedger {
    * so that cost tracking and savings calculations remain functional.
    */
   private static FALLBACK_INPUT_PER_MILLION = 0.15
-  private static FALLBACK_OUTPUT_PER_MILLION = 0.60
+  private static FALLBACK_OUTPUT_PER_MILLION = 0.6
 
   private calculateCost(
     modelId: string,
     inputTokens: number,
     outputTokens: number,
-    cachedTokens: number
+    cachedTokens: number,
   ): number {
     const pricing = MODEL_PRICING[modelId]
     if (!pricing) {
@@ -469,8 +491,10 @@ export class CostLedger {
       } catch {
         // Unknown model — use fallback pricing instead of 0 to keep
         // ledger entries, summaries, and exports accurate
-        return (inputTokens / 1_000_000) * CostLedger.FALLBACK_INPUT_PER_MILLION +
-               (outputTokens / 1_000_000) * CostLedger.FALLBACK_OUTPUT_PER_MILLION
+        return (
+          (inputTokens / 1_000_000) * CostLedger.FALLBACK_INPUT_PER_MILLION +
+          (outputTokens / 1_000_000) * CostLedger.FALLBACK_OUTPUT_PER_MILLION
+        )
       }
     }
 

@@ -37,7 +37,7 @@ export class AnomalyDetector {
     this.windowSize = config.windowSize ?? 20
     this.sensitivity = config.sensitivity ?? 3.0
     this.minCostThreshold = config.minCostThreshold ?? 0.01
-    this.ignoreBelowCost = config.ignoreBelowCost ?? 0.10
+    this.ignoreBelowCost = config.ignoreBelowCost ?? 0.1
   }
 
   /**
@@ -52,7 +52,7 @@ export class AnomalyDetector {
       const costStats = this.calculateStats(this.costHistory)
       if (this.costHistory.length >= Math.min(5, this.windowSize) && costStats.stdDev > 0) {
         const zScore = (cost - costStats.mean) / costStats.stdDev
-        
+
         if (zScore > this.sensitivity && cost > this.ignoreBelowCost) {
           anomaly = {
             type: "cost_spike",
@@ -70,22 +70,22 @@ export class AnomalyDetector {
     // 2. Check Token Anomaly (only if cost didn't trigger, or prioritize cost?)
     // Let's report cost spike primarily.
     if (!anomaly && tokens > 0) {
-        const tokenStats = this.calculateStats(this.tokenHistory)
-        if (this.tokenHistory.length >= Math.min(5, this.windowSize) && tokenStats.stdDev > 0) {
-            const zScore = (tokens - tokenStats.mean) / tokenStats.stdDev
-            // Tokens usually correlate with cost, but maybe model changed
-            if (zScore > this.sensitivity) {
-                 anomaly = {
-                    type: "token_spike",
-                    value: tokens,
-                    mean: tokenStats.mean,
-                    deviation: tokenStats.stdDev,
-                    zScore,
-                    timestamp: Date.now(),
-                 }
-            }
+      const tokenStats = this.calculateStats(this.tokenHistory)
+      if (this.tokenHistory.length >= Math.min(5, this.windowSize) && tokenStats.stdDev > 0) {
+        const zScore = (tokens - tokenStats.mean) / tokenStats.stdDev
+        // Tokens usually correlate with cost, but maybe model changed
+        if (zScore > this.sensitivity) {
+          anomaly = {
+            type: "token_spike",
+            value: tokens,
+            mean: tokenStats.mean,
+            deviation: tokenStats.stdDev,
+            zScore,
+            timestamp: Date.now(),
+          }
         }
-        this.updateHistory(this.tokenHistory, tokens)
+      }
+      this.updateHistory(this.tokenHistory, tokens)
     }
 
     return anomaly

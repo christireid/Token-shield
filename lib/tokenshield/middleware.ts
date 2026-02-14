@@ -54,7 +54,11 @@ import { buildTransformParams } from "./middleware-transform"
 import { buildWrapGenerate, buildWrapStream } from "./middleware-wrap"
 
 // Re-export types from middleware-types so existing import paths continue to work
-export type { TokenShieldMiddlewareConfig, TokenShieldMiddleware, HealthCheckResult } from "./middleware-types"
+export type {
+  TokenShieldMiddlewareConfig,
+  TokenShieldMiddleware,
+  HealthCheckResult,
+} from "./middleware-types"
 
 /**
  * Create the TokenShield middleware.
@@ -62,7 +66,9 @@ export type { TokenShieldMiddlewareConfig, TokenShieldMiddleware, HealthCheckRes
  * Returns a LanguageModelV3Middleware-compatible object that can be
  * passed directly to wrapLanguageModel().
  */
-export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}): TokenShieldMiddleware {
+export function tokenShieldMiddleware(
+  config: TokenShieldMiddlewareConfig = {},
+): TokenShieldMiddleware {
   // Validate config against valibot schema (catches typos, wrong types, out-of-range values)
   try {
     const schemaInput: Record<string, unknown> = {}
@@ -78,7 +84,8 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
     v.parse(TokenShieldConfigSchema, schemaInput)
   } catch (err) {
     if (err instanceof v.ValiError) {
-      const path = err.issues?.[0]?.path?.map((p: { key: string | number }) => p.key).join(".") ?? "unknown"
+      const path =
+        err.issues?.[0]?.path?.map((p: { key: string | number }) => p.key).join(".") ?? "unknown"
       throw new TokenShieldConfigError(`Invalid config at "${path}": ${err.message}`, path)
     }
     throw err
@@ -139,17 +146,37 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
   // for backward compatibility with listeners on the module-level bus.
   const instanceEvents = createEventBus()
   const EVENT_NAMES: (keyof TokenShieldEvents)[] = [
-    'request:blocked', 'request:allowed', 'cache:hit', 'cache:miss', 'cache:store',
-    'context:trimmed', 'router:downgraded', 'router:holdback', 'ledger:entry',
-    'breaker:warning', 'breaker:tripped', 'userBudget:warning', 'userBudget:exceeded',
-    'userBudget:spend', 'stream:chunk', 'stream:abort', 'stream:complete',
-    'anomaly:detected'
+    "request:blocked",
+    "request:allowed",
+    "cache:hit",
+    "cache:miss",
+    "cache:store",
+    "context:trimmed",
+    "router:downgraded",
+    "router:holdback",
+    "ledger:entry",
+    "breaker:warning",
+    "breaker:tripped",
+    "userBudget:warning",
+    "userBudget:exceeded",
+    "userBudget:spend",
+    "stream:chunk",
+    "stream:abort",
+    "stream:complete",
+    "anomaly:detected",
   ]
   // Track forwarding handlers so dispose() can remove them
-  const forwardingHandlers: Array<{ name: keyof TokenShieldEvents; handler: (data: unknown) => void }> = []
+  const forwardingHandlers: Array<{
+    name: keyof TokenShieldEvents
+    handler: (data: unknown) => void
+  }> = []
   for (const name of EVENT_NAMES) {
     const handler = (data: unknown) => {
-      try { (shieldEvents.emit as (type: string, data: unknown) => void)(name, data) } catch { /* non-fatal */ }
+      try {
+        ;(shieldEvents.emit as (type: string, data: unknown) => void)(name, data)
+      } catch {
+        /* non-fatal */
+      }
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     instanceEvents.on(name, handler as any)
@@ -168,7 +195,13 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
     config.logger instanceof TokenShieldLogger
       ? config.logger
       : config.logger
-        ? createLogger(config.logger as { level?: 'debug' | 'info' | 'warn' | 'error'; handler?: (entry: LogEntry) => void; enableSpans?: boolean })
+        ? createLogger(
+            config.logger as {
+              level?: "debug" | "info" | "warn" | "error"
+              handler?: (entry: LogEntry) => void
+              enableSpans?: boolean
+            },
+          )
         : null
 
   // Auto-connect logger to the event bus for structured observability

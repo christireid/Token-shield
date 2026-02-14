@@ -53,7 +53,7 @@ export interface LLMMessage {
 export async function callOpenAI(
   messages: LLMMessage[],
   model: string,
-  options?: { max_tokens?: number; temperature?: number; signal?: AbortSignal }
+  options?: { max_tokens?: number; temperature?: number; signal?: AbortSignal },
 ): Promise<LLMResult> {
   const res = await fetch("/api/openai", {
     method: "POST",
@@ -101,7 +101,7 @@ export async function callOpenAI(
 export async function callAnthropic(
   messages: LLMMessage[],
   model: string,
-  options?: { max_tokens?: number; temperature?: number; signal?: AbortSignal }
+  options?: { max_tokens?: number; temperature?: number; signal?: AbortSignal },
 ): Promise<LLMResult> {
   // Extract system message for Anthropic (sent separately)
   const systemMessages = messages.filter((m) => m.role === "system")
@@ -153,7 +153,7 @@ export async function callAnthropic(
 export async function callGoogle(
   messages: LLMMessage[],
   model: string,
-  options?: { max_tokens?: number; temperature?: number; signal?: AbortSignal }
+  options?: { max_tokens?: number; temperature?: number; signal?: AbortSignal },
 ): Promise<LLMResult> {
   const res = await fetch("/api/google", {
     method: "POST",
@@ -201,7 +201,7 @@ export async function callLLM(
   provider: Provider,
   messages: LLMMessage[],
   model: string,
-  options?: { max_tokens?: number; temperature?: number; signal?: AbortSignal }
+  options?: { max_tokens?: number; temperature?: number; signal?: AbortSignal },
 ): Promise<LLMResult> {
   switch (provider) {
     case "openai":
@@ -217,10 +217,7 @@ export async function callLLM(
 // Accurate pricing per million tokens
 // -------------------------------------------------------
 
-const PROVIDER_PRICES: Record<
-  string,
-  { input: number; output: number; provider: Provider }
-> = {
+const PROVIDER_PRICES: Record<string, { input: number; output: number; provider: Provider }> = {
   // OpenAI
   "gpt-4o": { input: 2.5, output: 10.0, provider: "openai" },
   "gpt-4o-2024-11-20": { input: 2.5, output: 10.0, provider: "openai" },
@@ -254,7 +251,7 @@ const PROVIDER_PRICES: Record<
 export function calculateRealCost(
   model: string,
   inputTokens: number,
-  outputTokens: number
+  outputTokens: number,
 ): { inputCost: number; outputCost: number; totalCost: number; provider: Provider } {
   // Try exact match first, then prefix match
   let pricing = PROVIDER_PRICES[model]

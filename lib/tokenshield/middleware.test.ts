@@ -30,7 +30,10 @@ function makeParams(userMessage: string, modelId = "gpt-4o-mini") {
 }
 
 /** Helper: simulate doGenerate returning a successful response */
-function mockDoGenerate(text = "Hello! I'm an AI assistant.", tokens = { promptTokens: 50, completionTokens: 20 }) {
+function mockDoGenerate(
+  text = "Hello! I'm an AI assistant.",
+  tokens = { promptTokens: 50, completionTokens: 20 },
+) {
   return vi.fn(async () => ({
     text,
     usage: tokens,
@@ -42,13 +45,23 @@ describe("tokenShieldMiddleware", () => {
   describe("basic pipeline", () => {
     it("passes params through transformParams and calls doGenerate", async () => {
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: true },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: true,
+        },
       })
 
       const params = makeParams("What is TypeScript?")
       const transformed = await mw.transformParams({ params })
       const doGenerate = mockDoGenerate()
-      const result = await mw.wrapGenerate({ doGenerate, params: transformed as Record<string, unknown> })
+      const result = await mw.wrapGenerate({
+        doGenerate,
+        params: transformed as Record<string, unknown>,
+      })
 
       expect(doGenerate).toHaveBeenCalledTimes(1)
       expect(result.text).toBe("Hello! I'm an AI assistant.")
@@ -57,13 +70,23 @@ describe("tokenShieldMiddleware", () => {
     it("records usage in the ledger after wrapGenerate", async () => {
       const onUsage = vi.fn()
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: true },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: true,
+        },
         onUsage,
       })
 
       const params = makeParams("What is TypeScript?")
       const transformed = await mw.transformParams({ params })
-      await mw.wrapGenerate({ doGenerate: mockDoGenerate(), params: transformed as Record<string, unknown> })
+      await mw.wrapGenerate({
+        doGenerate: mockDoGenerate(),
+        params: transformed as Record<string, unknown>,
+      })
 
       expect(onUsage).toHaveBeenCalledTimes(1)
       expect(onUsage.mock.calls[0][0].inputTokens).toBe(50)
@@ -85,7 +108,14 @@ describe("tokenShieldMiddleware", () => {
       // Actual recorded cost (50 input + 20 output) ≈ $0.0000195
       // Set perSession=$0.00001 so first call passes (est < limit) but second is blocked
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         breaker: {
           limits: { perSession: 0.00001 },
           action: "stop",
@@ -99,12 +129,15 @@ describe("tokenShieldMiddleware", () => {
       const params = makeParams("First request")
       const transformed = await mw.transformParams({ params })
       // After doGenerate, records actual $0.0000195 in breaker (exceeds limit)
-      await mw.wrapGenerate({ doGenerate: mockDoGenerate(), params: transformed as Record<string, unknown> })
+      await mw.wrapGenerate({
+        doGenerate: mockDoGenerate(),
+        params: transformed as Record<string, unknown>,
+      })
 
       // Second call: $0.0000195 (spent) + $0.0000066 (est) > $0.00001 → blocked
-      await expect(
-        mw.transformParams({ params: makeParams("Second request") })
-      ).rejects.toThrow(TokenShieldBlockedError)
+      await expect(mw.transformParams({ params: makeParams("Second request") })).rejects.toThrow(
+        TokenShieldBlockedError,
+      )
       expect(onBlocked).toHaveBeenCalled()
     })
   })
@@ -114,7 +147,14 @@ describe("tokenShieldMiddleware", () => {
       const onBlocked = vi.fn()
       // Guard defaults: minInputLength=2. A single-char user message should be blocked.
       const mw = tokenShieldMiddleware({
-        modules: { guard: true, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: true,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         guard: { debounceMs: 0, maxRequestsPerMinute: 999, maxCostPerHour: 999 },
         onBlocked,
       })
@@ -129,7 +169,14 @@ describe("tokenShieldMiddleware", () => {
   describe("response cache", () => {
     it("returns cached response on second identical request", async () => {
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: true, context: false, router: false, prefix: false, ledger: true },
+        modules: {
+          guard: false,
+          cache: true,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: true,
+        },
         cache: { maxEntries: 100, ttlMs: 60_000, similarityThreshold: 1.0 },
       })
 
@@ -146,7 +193,10 @@ describe("tokenShieldMiddleware", () => {
       const doGenerate2 = mockDoGenerate("Should not see this.")
       const params2 = makeParams("What is TypeScript?")
       const t2 = await mw.transformParams({ params: params2 })
-      const r2 = await mw.wrapGenerate({ doGenerate: doGenerate2, params: t2 as Record<string, unknown> })
+      const r2 = await mw.wrapGenerate({
+        doGenerate: doGenerate2,
+        params: t2 as Record<string, unknown>,
+      })
       expect(doGenerate2).not.toHaveBeenCalled()
       expect(r2.text).toBe("TypeScript is a typed superset of JS.")
     })
@@ -155,15 +205,29 @@ describe("tokenShieldMiddleware", () => {
   describe("context trimming", () => {
     it("trims messages to fit token budget", async () => {
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: true, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: true,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         context: { maxInputTokens: 50, reserveForOutput: 20 },
       })
 
       // Create a long conversation that exceeds 50 tokens
       const longMessages = [
         { role: "system", content: "You are helpful." },
-        { role: "user", content: "Tell me about the history of computer science from the beginning." },
-        { role: "assistant", content: "Computer science began in the early 20th century with the work of mathematicians like Alan Turing and Alonzo Church." },
+        {
+          role: "user",
+          content: "Tell me about the history of computer science from the beginning.",
+        },
+        {
+          role: "assistant",
+          content:
+            "Computer science began in the early 20th century with the work of mathematicians like Alan Turing and Alonzo Church.",
+        },
         { role: "user", content: "What about modern developments?" },
       ]
       const params = {
@@ -175,7 +239,9 @@ describe("tokenShieldMiddleware", () => {
       }
 
       const transformed = await mw.transformParams({ params })
-      const resultPrompt = (transformed as Record<string, unknown>).prompt as Array<Record<string, unknown>>
+      const resultPrompt = (transformed as Record<string, unknown>).prompt as Array<
+        Record<string, unknown>
+      >
       // The prompt should have been trimmed (fewer messages or shorter content)
       // We just verify it doesn't throw and the prompt is still an array
       expect(Array.isArray(resultPrompt)).toBe(true)
@@ -185,7 +251,14 @@ describe("tokenShieldMiddleware", () => {
   describe("model routing", () => {
     it("routes trivial prompts to cheaper model", async () => {
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: true, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: true,
+          prefix: false,
+          ledger: false,
+        },
         router: {
           tiers: [
             { modelId: "gpt-4o-mini", maxComplexity: 40 },
@@ -200,7 +273,7 @@ describe("tokenShieldMiddleware", () => {
         prompt: makePrompt([{ role: "user", content: "Hi" }]),
       }
 
-      const transformed = await mw.transformParams({ params }) as Record<string, unknown>
+      const transformed = (await mw.transformParams({ params })) as Record<string, unknown>
       // "Hi" is trivial — should route to gpt-4o-mini
       expect(transformed.modelId).toBe("gpt-4o-mini")
     })
@@ -208,7 +281,14 @@ describe("tokenShieldMiddleware", () => {
     it("keeps expensive model for complex prompts", async () => {
       // Use a very low complexityThreshold (10) so only extremely trivial prompts route
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: true, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: true,
+          prefix: false,
+          ledger: false,
+        },
         router: {
           tiers: [
             { modelId: "gpt-4o-mini", maxComplexity: 10 },
@@ -219,13 +299,14 @@ describe("tokenShieldMiddleware", () => {
       })
 
       // This prompt has multiple sub-tasks, reasoning keywords, and structured output — high complexity
-      const complexPrompt = "Analyze the trade-offs between microservices and monolithic architectures. Compare their implications for team scalability, evaluate deployment complexity, and recommend an approach. 1. First analyze costs 2. Then analyze performance 3. Output as JSON."
+      const complexPrompt =
+        "Analyze the trade-offs between microservices and monolithic architectures. Compare their implications for team scalability, evaluate deployment complexity, and recommend an approach. 1. First analyze costs 2. Then analyze performance 3. Output as JSON."
       const params = {
         modelId: "gpt-4o",
         prompt: makePrompt([{ role: "user", content: complexPrompt }]),
       }
 
-      const transformed = await mw.transformParams({ params }) as Record<string, unknown>
+      const transformed = (await mw.transformParams({ params })) as Record<string, unknown>
       // Complex prompt (score > 10) should keep gpt-4o
       expect(transformed.modelId).toBe("gpt-4o")
     })
@@ -238,7 +319,14 @@ describe("tokenShieldMiddleware", () => {
       // estimated ≈ $0.0000063. Set daily=$0.00001 so first call passes.
       // After wrapGenerate records actual $0.0000195, second call is blocked.
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         context: { reserveForOutput: 10 },
         userBudget: {
           getUserId: () => "user-1",
@@ -257,14 +345,21 @@ describe("tokenShieldMiddleware", () => {
       await mw.wrapGenerate({ doGenerate: mockDoGenerate(), params: t1 as Record<string, unknown> })
 
       // Second request: $0.0000195 (spent) + est + inflight > $0.00001 → blocked
-      await expect(
-        mw.transformParams({ params: makeParams("Hello again") })
-      ).rejects.toThrow(TokenShieldBlockedError)
+      await expect(mw.transformParams({ params: makeParams("Hello again") })).rejects.toThrow(
+        TokenShieldBlockedError,
+      )
     })
 
     it("applies tier model routing for budget users", async () => {
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         userBudget: {
           getUserId: () => "user-1",
           budgets: {
@@ -278,27 +373,41 @@ describe("tokenShieldMiddleware", () => {
         modelId: "gpt-4o",
         prompt: makePrompt([{ role: "user", content: "Hello" }]),
       }
-      const transformed = await mw.transformParams({ params }) as Record<string, unknown>
+      const transformed = (await mw.transformParams({ params })) as Record<string, unknown>
       expect(transformed.modelId).toBe("gpt-4o-mini")
     })
 
     it("throws when getUserId returns empty string", async () => {
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         userBudget: {
           getUserId: () => "",
           budgets: {},
         },
       })
 
-      await expect(
-        mw.transformParams({ params: makeParams("Hello") })
-      ).rejects.toThrow("getUserId()")
+      await expect(mw.transformParams({ params: makeParams("Hello") })).rejects.toThrow(
+        "getUserId()",
+      )
     })
 
     it("releases inflight on doGenerate failure", async () => {
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         userBudget: {
           getUserId: () => "user-1",
           budgets: {
@@ -309,10 +418,15 @@ describe("tokenShieldMiddleware", () => {
 
       const params = makeParams("Hello")
       const transformed = await mw.transformParams({ params })
-      const failGenerate = vi.fn(async () => { throw new Error("API down") })
+      const failGenerate = vi.fn(async () => {
+        throw new Error("API down")
+      })
 
       await expect(
-        mw.wrapGenerate({ doGenerate: failGenerate, params: transformed as Record<string, unknown> })
+        mw.wrapGenerate({
+          doGenerate: failGenerate,
+          params: transformed as Record<string, unknown>,
+        }),
       ).rejects.toThrow("API down")
 
       // After failure, inflight should be released
@@ -322,7 +436,14 @@ describe("tokenShieldMiddleware", () => {
 
     it("records user budget spend after stream completes", async () => {
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         userBudget: {
           getUserId: () => "stream-user",
           budgets: {
@@ -351,11 +472,16 @@ describe("tokenShieldMiddleware", () => {
       })
       const doStream = vi.fn(async () => ({ stream: originalStream }))
 
-      const result = await mw.wrapStream({ doStream, params: transformed as Record<string, unknown> })
+      const result = await mw.wrapStream({
+        doStream,
+        params: transformed as Record<string, unknown>,
+      })
 
       // Consume the stream to trigger usage recording
       const reader = (result.stream as ReadableStream).getReader()
-      while (!(await reader.read()).done) { /* drain */ }
+      while (!(await reader.read()).done) {
+        /* drain */
+      }
 
       // After stream completes: inflight released and spend recorded
       const statusAfter = mw.userBudgetManager!.getStatus("stream-user")
@@ -365,7 +491,14 @@ describe("tokenShieldMiddleware", () => {
 
     it("releases inflight on stream init failure", async () => {
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         userBudget: {
           getUserId: () => "fail-stream-user",
           budgets: {
@@ -377,10 +510,12 @@ describe("tokenShieldMiddleware", () => {
       const params = makeParams("Hello fail")
       const transformed = await mw.transformParams({ params })
 
-      const doStream = vi.fn(async () => { throw new Error("Stream init failed") })
+      const doStream = vi.fn(async () => {
+        throw new Error("Stream init failed")
+      })
 
       await expect(
-        mw.wrapStream({ doStream, params: transformed as Record<string, unknown> })
+        mw.wrapStream({ doStream, params: transformed as Record<string, unknown> }),
       ).rejects.toThrow("Stream init failed")
 
       // Inflight should be released despite failure
@@ -392,7 +527,14 @@ describe("tokenShieldMiddleware", () => {
     it("wraps stream and records usage when stream completes", async () => {
       const onUsage = vi.fn()
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: true },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: true,
+        },
         onUsage,
       })
 
@@ -418,7 +560,10 @@ describe("tokenShieldMiddleware", () => {
         usage: Promise.resolve({ promptTokens: 30, completionTokens: 10 }),
       }))
 
-      const result = await mw.wrapStream({ doStream, params: transformed as Record<string, unknown> })
+      const result = await mw.wrapStream({
+        doStream,
+        params: transformed as Record<string, unknown>,
+      })
       expect(doStream).toHaveBeenCalledTimes(1)
 
       // Consume the stream to trigger recording
@@ -438,7 +583,14 @@ describe("tokenShieldMiddleware", () => {
     it("records usage on stream cancel (abort)", async () => {
       const onUsage = vi.fn()
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: true },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: true,
+        },
         onUsage,
       })
 
@@ -460,7 +612,10 @@ describe("tokenShieldMiddleware", () => {
         stream: originalStream,
       }))
 
-      const result = await mw.wrapStream({ doStream, params: transformed as Record<string, unknown> })
+      const result = await mw.wrapStream({
+        doStream,
+        params: transformed as Record<string, unknown>,
+      })
       const reader = (result.stream as ReadableStream).getReader()
 
       // Read one chunk

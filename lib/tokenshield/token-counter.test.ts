@@ -40,20 +40,14 @@ describe("token-counter", () => {
     })
 
     it("includes name overhead when name is present", () => {
-      const withoutName = countChatTokens([
-        { role: "user", content: "Hello!" },
-      ])
-      const withName = countChatTokens([
-        { role: "user", content: "Hello!", name: "Alice" },
-      ])
+      const withoutName = countChatTokens([{ role: "user", content: "Hello!" }])
+      const withName = countChatTokens([{ role: "user", content: "Hello!", name: "Alice" }])
       expect(withName.total).toBeGreaterThan(withoutName.total)
     })
 
     it("truncates long content in perMessage output", () => {
       const longContent = "a".repeat(200)
-      const result = countChatTokens([
-        { role: "user", content: longContent },
-      ])
+      const result = countChatTokens([{ role: "user", content: longContent }])
       expect(result.perMessage[0].content.length).toBeLessThan(200)
       expect(result.perMessage[0].content).toContain("...")
     })

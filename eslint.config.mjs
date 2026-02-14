@@ -1,5 +1,6 @@
 import js from "@eslint/js"
 import tseslint from "typescript-eslint"
+import prettier from "eslint-config-prettier"
 
 export default tseslint.config(
   // Base JS recommended rules
@@ -7,6 +8,9 @@ export default tseslint.config(
 
   // TypeScript recommended rules
   ...tseslint.configs.recommended,
+
+  // Prettier — disables ESLint rules that conflict with Prettier formatting
+  prettier,
 
   // Project-wide overrides
   {
@@ -44,5 +48,5 @@ export default tseslint.config(
       "docs/**",
       "marketing/**",
     ],
-  }
+  },
 )

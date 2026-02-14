@@ -11,9 +11,15 @@ import {
 const msgs: Message[] = [
   { role: "system", content: "You are a helpful assistant." },
   { role: "user", content: "What is machine learning?" },
-  { role: "assistant", content: "Machine learning is a subset of AI that enables systems to learn from data." },
+  {
+    role: "assistant",
+    content: "Machine learning is a subset of AI that enables systems to learn from data.",
+  },
   { role: "user", content: "Can you explain neural networks?" },
-  { role: "assistant", content: "Neural networks are computing systems inspired by biological neural networks." },
+  {
+    role: "assistant",
+    content: "Neural networks are computing systems inspired by biological neural networks.",
+  },
   { role: "user", content: "What about deep learning?" },
 ]
 
@@ -96,9 +102,7 @@ describe("createSummaryMessage", () => {
   })
 
   it("truncates long messages in the summary", () => {
-    const evicted: Message[] = [
-      { role: "user", content: "x".repeat(200) },
-    ]
+    const evicted: Message[] = [{ role: "user", content: "x".repeat(200) }]
     const summary = createSummaryMessage(evicted)
     expect(summary.content).toContain("...")
   })

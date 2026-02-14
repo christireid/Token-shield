@@ -3,12 +3,25 @@
 import * as React from "react"
 import { useDashboard, type UserBudget } from "./dashboard-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -36,14 +49,20 @@ const TIER_BADGE_CLASSES: Record<string, string> = {
 function StatusBadge({ user }: { user: UserBudget }) {
   if (user.isOverBudget) {
     return (
-      <Badge variant="outline" className="border-[hsl(0,72%,51%)]/30 bg-[hsl(0,72%,51%)]/10 text-[hsl(0,72%,65%)]">
+      <Badge
+        variant="outline"
+        className="border-[hsl(0,72%,51%)]/30 bg-[hsl(0,72%,51%)]/10 text-[hsl(0,72%,65%)]"
+      >
         Over Budget
       </Badge>
     )
   }
   if (user.percentUsed.daily >= 80 || user.percentUsed.monthly >= 80) {
     return (
-      <Badge variant="outline" className="border-[hsl(38,92%,50%)]/30 bg-[hsl(38,92%,50%)]/10 text-[hsl(38,92%,65%)]">
+      <Badge
+        variant="outline"
+        className="border-[hsl(38,92%,50%)]/30 bg-[hsl(38,92%,50%)]/10 text-[hsl(38,92%,65%)]"
+      >
         Warning
       </Badge>
     )
@@ -58,29 +77,24 @@ function StatusBadge({ user }: { user: UserBudget }) {
 function PercentBar({ percent }: { percent: number }) {
   const clamped = Math.min(100, Math.max(0, percent))
   const color =
-    clamped >= 80
-      ? "bg-[hsl(0,72%,51%)]"
-      : clamped >= 60
-        ? "bg-[hsl(38,92%,50%)]"
-        : "bg-primary"
+    clamped >= 80 ? "bg-[hsl(0,72%,51%)]" : clamped >= 60 ? "bg-[hsl(38,92%,50%)]" : "bg-primary"
   return (
     <div className="flex items-center gap-2">
       <div className="h-1.5 w-16 overflow-hidden rounded-full bg-secondary">
-        <div className={cn("h-full rounded-full transition-all", color)} style={{ width: `${clamped}%` }} />
+        <div
+          className={cn("h-full rounded-full transition-all", color)}
+          style={{ width: `${clamped}%` }}
+        />
       </div>
-      <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{clamped.toFixed(0)}%</span>
+      <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+        {clamped.toFixed(0)}%
+      </span>
     </div>
   )
 }
 
 /* ---- Inline edit cell ---- */
-function EditableLimit({
-  value,
-  onSave,
-}: {
-  value: number
-  onSave: (v: number) => void
-}) {
+function EditableLimit({ value, onSave }: { value: number; onSave: (v: number) => void }) {
   const [editing, setEditing] = React.useState(false)
   const [draft, setDraft] = React.useState(String(value))
   const inputRef = React.useRef<HTMLInputElement>(null)
@@ -176,7 +190,9 @@ function AddUserDialog() {
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="user-name" className="text-xs">Display Name</Label>
+            <Label htmlFor="user-name" className="text-xs">
+              Display Name
+            </Label>
             <Input
               id="user-name"
               value={name}
@@ -203,7 +219,9 @@ function AddUserDialog() {
 
           <div className="flex gap-3">
             <div className="flex flex-1 flex-col gap-2">
-              <Label htmlFor="daily-limit" className="text-xs">Daily Limit ($)</Label>
+              <Label htmlFor="daily-limit" className="text-xs">
+                Daily Limit ($)
+              </Label>
               <Input
                 id="daily-limit"
                 type="number"
@@ -214,7 +232,9 @@ function AddUserDialog() {
               />
             </div>
             <div className="flex flex-1 flex-col gap-2">
-              <Label htmlFor="monthly-limit" className="text-xs">Monthly Limit ($)</Label>
+              <Label htmlFor="monthly-limit" className="text-xs">
+                Monthly Limit ($)
+              </Label>
               <Input
                 id="monthly-limit"
                 type="number"
@@ -227,7 +247,12 @@ function AddUserDialog() {
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)} className="text-xs">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setOpen(false)}
+              className="text-xs"
+            >
               Cancel
             </Button>
             <Button type="submit" className="text-xs">
@@ -260,11 +285,16 @@ export function UserBudgetTable() {
 
   const getSortValue = (u: UserBudget, key: SortKey): number | string => {
     switch (key) {
-      case "displayName": return u.displayName
-      case "tier": return u.tier
-      case "dailySpend": return u.spend.daily
-      case "monthlySpend": return u.spend.monthly
-      case "percentUsed": return Math.max(u.percentUsed.daily, u.percentUsed.monthly)
+      case "displayName":
+        return u.displayName
+      case "tier":
+        return u.tier
+      case "dailySpend":
+        return u.spend.daily
+      case "monthlySpend":
+        return u.spend.monthly
+      case "percentUsed":
+        return Math.max(u.percentUsed.daily, u.percentUsed.monthly)
     }
   }
 
@@ -274,7 +304,9 @@ export function UserBudgetTable() {
     if (typeof aVal === "string" && typeof bVal === "string") {
       return sortDir === "desc" ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal)
     }
-    return sortDir === "desc" ? (bVal as number) - (aVal as number) : (aVal as number) - (bVal as number)
+    return sortDir === "desc"
+      ? (bVal as number) - (aVal as number)
+      : (aVal as number) - (bVal as number)
   })
 
   const SortHeader = ({ label, sortKeyValue }: { label: string; sortKeyValue: SortKey }) => (
@@ -284,7 +316,12 @@ export function UserBudgetTable() {
     >
       <span className="inline-flex items-center gap-1">
         {label}
-        <ArrowUpDown className={cn("h-3 w-3", sortKey === sortKeyValue ? "text-foreground" : "text-muted-foreground/40")} />
+        <ArrowUpDown
+          className={cn(
+            "h-3 w-3",
+            sortKey === sortKeyValue ? "text-foreground" : "text-muted-foreground/40",
+          )}
+        />
       </span>
     </TableHead>
   )
@@ -293,9 +330,12 @@ export function UserBudgetTable() {
     <Card className="border-border/40 bg-card/50">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <div>
-          <CardTitle className="text-sm font-medium text-foreground">User Budget Management</CardTitle>
+          <CardTitle className="text-sm font-medium text-foreground">
+            User Budget Management
+          </CardTitle>
           <CardDescription className="text-xs">
-            {data.users.length} users tracked &middot; {data.users.filter((u) => u.isOverBudget).length} over budget
+            {data.users.length} users tracked &middot;{" "}
+            {data.users.filter((u) => u.isOverBudget).length} over budget
           </CardDescription>
         </div>
         <AddUserDialog />
@@ -312,7 +352,9 @@ export function UserBudgetTable() {
               <TableHead className="text-xs">Monthly Limit</TableHead>
               <SortHeader label="Usage" sortKeyValue="percentUsed" />
               <TableHead className="text-xs">Status</TableHead>
-              <TableHead className="w-10 text-xs"><span className="sr-only">Actions</span></TableHead>
+              <TableHead className="w-10 text-xs">
+                <span className="sr-only">Actions</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -321,13 +363,15 @@ export function UserBudgetTable() {
                 key={user.userId}
                 className={cn(
                   "border-border/20 transition-colors",
-                  user.isOverBudget && "bg-[hsl(0,72%,51%)]/5"
+                  user.isOverBudget && "bg-[hsl(0,72%,51%)]/5",
                 )}
               >
                 <TableCell className="py-2">
                   <div className="flex flex-col">
                     <span className="text-xs font-medium text-foreground">{user.displayName}</span>
-                    <span className="font-mono text-[10px] text-muted-foreground/60">{user.userId}</span>
+                    <span className="font-mono text-[10px] text-muted-foreground/60">
+                      {user.userId}
+                    </span>
                   </div>
                 </TableCell>
                 <TableCell className="py-2">
@@ -344,7 +388,11 @@ export function UserBudgetTable() {
                 <TableCell className="py-2">
                   <EditableLimit
                     value={user.limits.daily}
-                    onSave={(v) => updateUserBudget(user.userId, { limits: { daily: v, monthly: user.limits.monthly } })}
+                    onSave={(v) =>
+                      updateUserBudget(user.userId, {
+                        limits: { daily: v, monthly: user.limits.monthly },
+                      })
+                    }
                   />
                 </TableCell>
                 <TableCell className="py-2 font-mono text-xs tabular-nums text-foreground">
@@ -353,11 +401,17 @@ export function UserBudgetTable() {
                 <TableCell className="py-2">
                   <EditableLimit
                     value={user.limits.monthly}
-                    onSave={(v) => updateUserBudget(user.userId, { limits: { daily: user.limits.daily, monthly: v } })}
+                    onSave={(v) =>
+                      updateUserBudget(user.userId, {
+                        limits: { daily: user.limits.daily, monthly: v },
+                      })
+                    }
                   />
                 </TableCell>
                 <TableCell className="py-2">
-                  <PercentBar percent={Math.max(user.percentUsed.daily, user.percentUsed.monthly)} />
+                  <PercentBar
+                    percent={Math.max(user.percentUsed.daily, user.percentUsed.monthly)}
+                  />
                 </TableCell>
                 <TableCell className="py-2">
                   <StatusBadge user={user} />

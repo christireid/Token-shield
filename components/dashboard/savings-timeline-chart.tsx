@@ -66,11 +66,18 @@ export function SavingsTimelineChart() {
               content={
                 <ChartTooltipContent
                   formatter={(value, name) => {
-                    const label = name === "wouldHaveSpent" ? "Without Shield" : name === "cumulativeSpent" ? "Actually Spent" : "Saved"
+                    const label =
+                      name === "wouldHaveSpent"
+                        ? "Without Shield"
+                        : name === "cumulativeSpent"
+                          ? "Actually Spent"
+                          : "Saved"
                     return (
                       <span className="flex items-center gap-2">
                         <span className="text-muted-foreground">{label}</span>
-                        <span className="font-mono font-medium text-foreground">${Number(value).toFixed(4)}</span>
+                        <span className="font-mono font-medium text-foreground">
+                          ${Number(value).toFixed(4)}
+                        </span>
                       </span>
                     )
                   }}

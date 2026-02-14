@@ -24,15 +24,21 @@ const mockSubtle = {
 }
 
 // Set up globals before importing the module
-Object.defineProperty(globalThis, 'crypto', {
-  value: { subtle: mockSubtle, getRandomValues: (arr: Uint8Array) => { arr.fill(42); return arr } },
+Object.defineProperty(globalThis, "crypto", {
+  value: {
+    subtle: mockSubtle,
+    getRandomValues: (arr: Uint8Array) => {
+      arr.fill(42)
+      return arr
+    },
+  },
   writable: true,
   configurable: true,
 })
 
 // Mock localStorage and sessionStorage for passphrase/session key derivation
 const localStorageMap = new Map<string, string>()
-Object.defineProperty(globalThis, 'localStorage', {
+Object.defineProperty(globalThis, "localStorage", {
   value: {
     getItem: (key: string) => localStorageMap.get(key) ?? null,
     setItem: (key: string, value: string) => localStorageMap.set(key, value),
@@ -43,7 +49,7 @@ Object.defineProperty(globalThis, 'localStorage', {
 })
 
 const sessionStorageMap = new Map<string, string>()
-Object.defineProperty(globalThis, 'sessionStorage', {
+Object.defineProperty(globalThis, "sessionStorage", {
   value: {
     getItem: (key: string) => sessionStorageMap.get(key) ?? null,
     setItem: (key: string, value: string) => sessionStorageMap.set(key, value),
@@ -55,10 +61,16 @@ Object.defineProperty(globalThis, 'sessionStorage', {
 
 // Mock IndexedDB with a simple in-memory store
 const idbStore = new Map<string, unknown>()
-vi.mock('idb-keyval', () => ({
+vi.mock("idb-keyval", () => ({
   get: vi.fn((key: string) => Promise.resolve(idbStore.get(key))),
-  set: vi.fn((key: string, value: unknown) => { idbStore.set(key, value); return Promise.resolve() }),
-  del: vi.fn((key: string) => { idbStore.delete(key); return Promise.resolve() }),
+  set: vi.fn((key: string, value: unknown) => {
+    idbStore.set(key, value)
+    return Promise.resolve()
+  }),
+  del: vi.fn((key: string) => {
+    idbStore.delete(key)
+    return Promise.resolve()
+  }),
   keys: vi.fn(() => Promise.resolve([...idbStore.keys()])),
   createStore: vi.fn(),
 }))

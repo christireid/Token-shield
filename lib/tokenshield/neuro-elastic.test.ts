@@ -124,7 +124,13 @@ describe("NeuroElasticEngine", () => {
         persist: false,
         seeds: { cost: 10, price: 10 },
       })
-      await withSeeds.learn("What is the total cost of this service?", "Ten dollars.", "gpt-4o", 5, 5)
+      await withSeeds.learn(
+        "What is the total cost of this service?",
+        "Ten dollars.",
+        "gpt-4o",
+        5,
+        5,
+      )
       const seededResult = withSeeds.find("What is the total price of this service?")
       const scoreWith = seededResult ? seededResult.score : 0
 
@@ -138,13 +144,7 @@ describe("NeuroElasticEngine", () => {
         persist: false,
         seeds: { cost: 10, price: 10 },
       })
-      await withSeeds.learn(
-        "How is the weather looking today?",
-        "Sunny.",
-        "gpt-4o",
-        5,
-        5,
-      )
+      await withSeeds.learn("How is the weather looking today?", "Sunny.", "gpt-4o", 5, 5)
       // "weather" and "looking" are not in the seeds
       const result = withSeeds.find("How is the weather looking today?")
       expect(result).not.toBeNull()
@@ -250,13 +250,7 @@ describe("NeuroElasticEngine", () => {
     })
 
     it("respects model filter — won't match entry with different model", async () => {
-      await engine.learn(
-        "How do I deploy to production?",
-        "Use CI/CD.",
-        "gpt-4o",
-        5,
-        10,
-      )
+      await engine.learn("How do I deploy to production?", "Use CI/CD.", "gpt-4o", 5, 10)
       const result = engine.find("How do I deploy to production?", "claude-3-opus")
       expect(result).toBeNull()
     })
@@ -326,13 +320,7 @@ describe("NeuroElasticEngine", () => {
 
     it("after learn, find can retrieve the entry", async () => {
       const engine = new NeuroElasticEngine({ threshold: 0.5, persist: false })
-      await engine.learn(
-        "What is the capital of France?",
-        "Paris.",
-        "gpt-4o",
-        5,
-        5,
-      )
+      await engine.learn("What is the capital of France?", "Paris.", "gpt-4o", 5, 5)
       const result = engine.find("What is the capital of France?")
       expect(result).not.toBeNull()
       expect(result!.response).toBe("Paris.")

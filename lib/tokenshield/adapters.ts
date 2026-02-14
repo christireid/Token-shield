@@ -65,9 +65,7 @@ function fromAiSdkPrompt(
   return prompt.map((m) => ({
     role: m.role,
     content:
-      Array.isArray(m.content) && m.content.length > 0
-        ? m.content.map((c) => c.text).join("")
-        : "",
+      Array.isArray(m.content) && m.content.length > 0 ? m.content.map((c) => c.text).join("") : "",
   }))
 }
 
@@ -90,7 +88,10 @@ export interface GenericAdapterOptions {
  * @param options - Optional configuration (model ID for cost estimation).
  * @returns A wrapped function with the same call signature.
  */
-export function createGenericAdapter<TParams extends { messages: AdapterMessage[]; modelId?: string }, TResult>(
+export function createGenericAdapter<
+  TParams extends { messages: AdapterMessage[]; modelId?: string },
+  TResult,
+>(
   shield: TokenShieldMiddleware,
   callFn: (params: TParams) => Promise<TResult>,
   options?: GenericAdapterOptions,
@@ -105,30 +106,30 @@ export function createGenericAdapter<TParams extends { messages: AdapterMessage[
 
     const result = await shield.wrapGenerate({
       doGenerate: async () => {
-         // Reconstruct the params with potential transformations
-         // Note: We cast back to TParams because we assume the transformation
-         // mostly touches TokenShield-specific fields or leaves structure intact.
-         // Realistically, complex transformations might break custom types, 
-         // but for generic usage, this is usually sufficient.
-         const executionParams = {
-            ...params,
-            ...transformed, // Apply overrides from middleware (e.g. model routing)
-         } as TParams
-         
-         const rawResult = await callFn(executionParams)
-         
-         // For generic adapters, we can't normalize the output for TokenShield's
-         // internal accounting perfectly unless TResult follows a known shape.
-         // We do a best-effort check or default to empty usage.
-         return {
-            text: "", 
-            usage: { promptTokens: 0, completionTokens: 0 },
-            rawResponse: rawResult as Record<string, unknown>
-         }
+        // Reconstruct the params with potential transformations
+        // Note: We cast back to TParams because we assume the transformation
+        // mostly touches TokenShield-specific fields or leaves structure intact.
+        // Realistically, complex transformations might break custom types,
+        // but for generic usage, this is usually sufficient.
+        const executionParams = {
+          ...params,
+          ...transformed, // Apply overrides from middleware (e.g. model routing)
+        } as TParams
+
+        const rawResult = await callFn(executionParams)
+
+        // For generic adapters, we can't normalize the output for TokenShield's
+        // internal accounting perfectly unless TResult follows a known shape.
+        // We do a best-effort check or default to empty usage.
+        return {
+          text: "",
+          usage: { promptTokens: 0, completionTokens: 0 },
+          rawResponse: rawResult as Record<string, unknown>,
+        }
       },
       params: transformed,
     })
-    
+
     // Explicitly return the rawResponse from the wrapGenerate result
     // This is the fix: return result.rawResponse instead of result directly or casting it
     return result.rawResponse as TResult
@@ -151,9 +152,7 @@ export function createOpenAIAdapter<TParams extends { messages: any[]; model?: s
   shield: TokenShieldMiddleware,
   createFn: (params: TParams) => Promise<TResult>,
   options?: OpenAIAdapterOptions,
-): (
-  params: TParams & { messages: AdapterMessage[] }
-) => Promise<TResult> {
+): (params: TParams & { messages: AdapterMessage[] }) => Promise<TResult> {
   return async (params) => {
     // 1. Extract what we need for middleware
     const { model, messages, ...rest } = params
@@ -174,7 +173,7 @@ export function createOpenAIAdapter<TParams extends { messages: any[]; model?: s
             content: Array<{ type: string; text: string }>
           }>,
         )
-        
+
         // Reconstruct params
         const openAiParams = {
           ...rest,
@@ -183,7 +182,7 @@ export function createOpenAIAdapter<TParams extends { messages: any[]; model?: s
           model: transformed.modelId ?? modelId,
           messages: openAiMessages,
         }
-        
+
         // Clean up TokenShield internal fields
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         delete (openAiParams as any).prompt
@@ -191,12 +190,16 @@ export function createOpenAIAdapter<TParams extends { messages: any[]; model?: s
         delete (openAiParams as any).modelId
 
         const raw = await createFn(openAiParams as TParams)
-        
-        // Helper to safely access response fields without strictly typing TResult 
+
+        // Helper to safely access response fields without strictly typing TResult
         // (since it might be Stream or non-standard response)
         const anyRaw = raw as Record<string, unknown>
-        const choices = anyRaw.choices as Array<{ message?: { content?: string }; finish_reason?: string }> | undefined
-        const usage = anyRaw.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined
+        const choices = anyRaw.choices as
+          | Array<{ message?: { content?: string }; finish_reason?: string }>
+          | undefined
+        const usage = anyRaw.usage as
+          | { prompt_tokens?: number; completion_tokens?: number }
+          | undefined
 
         return {
           text: choices?.[0]?.message?.content ?? "",
@@ -228,14 +231,15 @@ export interface AnthropicAdapterOptions {
 /**
  * Adapter for the Anthropic SDK (`client.messages.create`).
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function createAnthropicAdapter<TParams extends { messages: any[]; model?: string; max_tokens?: number }, TResult>(
+export function createAnthropicAdapter<
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  TParams extends { messages: any[]; model?: string; max_tokens?: number },
+  TResult,
+>(
   shield: TokenShieldMiddleware,
   createFn: (params: TParams) => Promise<TResult>,
   options?: AnthropicAdapterOptions,
-): (
-  params: TParams & { messages: AdapterMessage[] }
-) => Promise<TResult> {
+): (params: TParams & { messages: AdapterMessage[] }) => Promise<TResult> {
   return async (params) => {
     const { model, messages, max_tokens, ...rest } = params
     const modelId = model ?? options?.defaultModel ?? "claude-sonnet-4-20250514"
@@ -287,13 +291,16 @@ export function createAnthropicAdapter<TParams extends { messages: any[]; model?
         const anyRaw = raw as Record<string, unknown>
 
         const contentBlocks = anyRaw.content as Array<{ type?: string; text?: string }> | undefined
-        const usageData = anyRaw.usage as { input_tokens?: number; output_tokens?: number } | undefined
+        const usageData = anyRaw.usage as
+          | { input_tokens?: number; output_tokens?: number }
+          | undefined
 
         return {
-          text: contentBlocks
-            ?.filter((b) => b.type === "text" || b.type === undefined)
-            .map((b) => b.text ?? "")
-            .join("") ?? "",
+          text:
+            contentBlocks
+              ?.filter((b) => b.type === "text" || b.type === undefined)
+              .map((b) => b.text ?? "")
+              .join("") ?? "",
           usage: {
             promptTokens: usageData?.input_tokens ?? 0,
             completionTokens: usageData?.output_tokens ?? 0,
@@ -304,7 +311,7 @@ export function createAnthropicAdapter<TParams extends { messages: any[]; model?
       },
       params: transformed,
     })
-    
+
     return result.rawResponse as TResult
   }
 }
@@ -313,7 +320,9 @@ export function createAnthropicAdapter<TParams extends { messages: any[]; model?
 // 4. Stream Adapter
 // ---------------------------------------------------------------------------
 
-export function createStreamAdapter<TParams extends { messages: AdapterMessage[]; modelId?: string }>(
+export function createStreamAdapter<
+  TParams extends { messages: AdapterMessage[]; modelId?: string },
+>(
   shield: TokenShieldMiddleware,
   streamFn: (params: TParams) => Promise<ReadableStream>,
   options?: GenericAdapterOptions,
@@ -329,8 +338,8 @@ export function createStreamAdapter<TParams extends { messages: AdapterMessage[]
     const result = await shield.wrapStream({
       doStream: async () => {
         const executionParams = {
-            ...params,
-            ...transformed,
+          ...params,
+          ...transformed,
         } as TParams
         return { stream: await streamFn(executionParams) }
       },

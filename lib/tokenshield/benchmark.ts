@@ -24,12 +24,7 @@ import {
 
 // Re-export everything from benchmark-scenarios so that existing
 // import paths (`from "./benchmark"`) continue to work unchanged.
-export {
-  generateWords,
-  generateChatMessages,
-  generateContextMessages,
-  runAllBenchmarks,
-}
+export { generateWords, generateChatMessages, generateContextMessages, runAllBenchmarks }
 
 // -------------------------------------------------------
 // Types
@@ -61,7 +56,7 @@ const DEFAULT_ITERATIONS = 1000
 export function bench(
   name: string,
   fn: () => void,
-  iterations: number = DEFAULT_ITERATIONS
+  iterations: number = DEFAULT_ITERATIONS,
 ): BenchmarkResult {
   const timings: number[] = new Array(iterations)
 
@@ -88,7 +83,7 @@ export function bench(
 export async function benchAsync(
   name: string,
   fn: () => Promise<void>,
-  iterations: number = DEFAULT_ITERATIONS
+  iterations: number = DEFAULT_ITERATIONS,
 ): Promise<BenchmarkResult> {
   const timings: number[] = new Array(iterations)
 
@@ -111,11 +106,7 @@ export async function benchAsync(
 /**
  * Compute statistics from an array of timings.
  */
-function computeResult(
-  name: string,
-  timings: number[],
-  ops: number
-): BenchmarkResult {
+function computeResult(name: string, timings: number[], ops: number): BenchmarkResult {
   // Sort for percentile calculation
   const sorted = timings.slice().sort((a, b) => a - b)
   const totalMs = sorted.reduce((sum, t) => sum + t, 0)
@@ -136,10 +127,7 @@ function computeResult(
  */
 export function formatResults(results: BenchmarkResult[]): void {
   // Compute column widths
-  const nameWidth = Math.max(
-    "Benchmark".length,
-    ...results.map((r) => r.name.length)
-  )
+  const nameWidth = Math.max("Benchmark".length, ...results.map((r) => r.name.length))
   const opsWidth = 8
   const opsSecWidth = 14
   const avgWidth = 12
@@ -156,7 +144,7 @@ export function formatResults(results: BenchmarkResult[]): void {
   console.log("TokenShield Performance Benchmark")
   console.log(separator)
   console.log(
-    `${pad("Benchmark", nameWidth)}  ${pad("Ops", opsWidth, "right")}  ${pad("Ops/sec", opsSecWidth, "right")}  ${pad("Avg (ms)", avgWidth, "right")}  ${pad("P99 (ms)", p99Width, "right")}`
+    `${pad("Benchmark", nameWidth)}  ${pad("Ops", opsWidth, "right")}  ${pad("Ops/sec", opsSecWidth, "right")}  ${pad("Avg (ms)", avgWidth, "right")}  ${pad("P99 (ms)", p99Width, "right")}`,
   )
   console.log(separator)
 
@@ -180,7 +168,7 @@ export function formatResults(results: BenchmarkResult[]): void {
     const p99Str = r.p99Ms < 0.001 ? "<0.001" : r.p99Ms.toFixed(4)
 
     console.log(
-      `${pad(r.name, nameWidth)}  ${pad(opsStr, opsWidth, "right")}  ${pad(opsSecStr, opsSecWidth, "right")}  ${pad(avgStr, avgWidth, "right")}  ${pad(p99Str, p99Width, "right")}`
+      `${pad(r.name, nameWidth)}  ${pad(opsStr, opsWidth, "right")}  ${pad(opsSecStr, opsSecWidth, "right")}  ${pad(avgStr, avgWidth, "right")}  ${pad(p99Str, p99Width, "right")}`,
     )
   }
 
@@ -190,9 +178,11 @@ export function formatResults(results: BenchmarkResult[]): void {
 }
 
 function detectSection(name: string): string {
-  if (name.startsWith("countExactTokens") || name.startsWith("countChatTokens")) return "Token Counting"
+  if (name.startsWith("countExactTokens") || name.startsWith("countChatTokens"))
+    return "Token Counting"
   if (name.startsWith("estimateCost") || name.startsWith("compareCosts")) return "Cost Estimation"
-  if (name.startsWith("analyzeComplexity") || name.startsWith("routeToModel")) return "Complexity Analysis & Routing"
+  if (name.startsWith("analyzeComplexity") || name.startsWith("routeToModel"))
+    return "Complexity Analysis & Routing"
   if (name.startsWith("cache")) return "Response Cache"
   if (name.startsWith("fitToBudget") || name.startsWith("smartFit")) return "Context Fitting"
   if (name.startsWith("optimizePrefix")) return "Prefix Optimizer"
@@ -214,11 +204,10 @@ function formatNumber(n: number): string {
 // -------------------------------------------------------
 
 const isMainModule =
-  typeof require !== "undefined" && require.main === module ||
-  typeof process !== "undefined" && process.argv[1] && (
-    process.argv[1].endsWith("benchmark.ts") ||
-    process.argv[1].endsWith("benchmark.js")
-  )
+  (typeof require !== "undefined" && require.main === module) ||
+  (typeof process !== "undefined" &&
+    process.argv[1] &&
+    (process.argv[1].endsWith("benchmark.ts") || process.argv[1].endsWith("benchmark.js")))
 
 if (isMainModule) {
   runAllBenchmarks()

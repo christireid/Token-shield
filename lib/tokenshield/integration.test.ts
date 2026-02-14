@@ -8,10 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
 // ---------- Module imports (tested individually AND via pipeline) ----------
-import {
-  tokenShieldMiddleware,
-  type TokenShieldMiddleware,
-} from "./middleware"
+import { tokenShieldMiddleware, type TokenShieldMiddleware } from "./middleware"
 import { ResponseCache } from "./response-cache"
 import { ShieldWorker } from "./shield-worker"
 import {
@@ -135,9 +132,7 @@ describe("Full middleware pipeline", () => {
       },
       logger: { level: "debug", enableSpans: true },
       providerAdapter: {
-        providers: [
-          { name: "openai", models: ["gpt-4.1", "gpt-4o-mini"], priority: 0 },
-        ],
+        providers: [{ name: "openai", models: ["gpt-4.1", "gpt-4o-mini"], priority: 0 }],
       },
     })
   })
@@ -183,7 +178,10 @@ describe("Full middleware pipeline", () => {
     const params = {
       modelId: "gpt-4.1",
       prompt: makePrompt([
-        { role: "user", content: "Tell me a unique and interesting fact about the planet Mars and its moons" },
+        {
+          role: "user",
+          content: "Tell me a unique and interesting fact about the planet Mars and its moons",
+        },
       ]),
     }
 
@@ -252,7 +250,10 @@ describe("Full middleware pipeline", () => {
     const params = {
       modelId: "gpt-4.1",
       prompt: makePrompt([
-        { role: "user", content: "Stream me a response about advanced machine learning techniques" },
+        {
+          role: "user",
+          content: "Stream me a response about advanced machine learning techniques",
+        },
       ]),
     }
 
@@ -452,9 +453,9 @@ describe("Framework adapters", () => {
     })
 
     const chat = createOpenAIAdapter(shield, mockCreateFn, { defaultModel: "gpt-4.1" })
-    const result = await chat({
+    const result = (await chat({
       messages: [{ role: "user", content: "Test the OpenAI adapter with a meaningful prompt" }],
-    }) as { choices: { message: { content: string } }[] }
+    })) as { choices: { message: { content: string } }[] }
 
     expect(mockCreateFn).toHaveBeenCalledTimes(1)
     // Expect raw response
@@ -472,9 +473,9 @@ describe("Framework adapters", () => {
       defaultModel: "claude-sonnet-4-20250514",
       defaultMaxTokens: 1024,
     })
-    const result = await chat({
+    const result = (await chat({
       messages: [{ role: "user", content: "Test the Anthropic adapter with a thorough prompt" }],
-    }) as { content: { type: string; text: string }[] }
+    })) as { content: { type: string; text: string }[] }
 
     expect(mockCreateFn).toHaveBeenCalledTimes(1)
     // Expect raw response
@@ -587,13 +588,7 @@ describe("Pipeline stages compose correctly", () => {
     })
 
     // Pre-populate cache
-    await cache.store(
-      "Hello, how are you today?",
-      "I am doing well!",
-      "gpt-4.1",
-      50,
-      20,
-    )
+    await cache.store("Hello, how are you today?", "I am doing well!", "gpt-4.1", 50, 20)
 
     const pipeline = createPipeline(
       createCacheStage(cache),
@@ -652,7 +647,10 @@ describe("Event bus + Logger + Provider Adapter integration", () => {
     const params = {
       modelId: "gpt-4.1",
       prompt: makePrompt([
-        { role: "user", content: "Check that the logger receives structured event data from middleware" },
+        {
+          role: "user",
+          content: "Check that the logger receives structured event data from middleware",
+        },
       ]),
     }
 
@@ -707,9 +705,7 @@ describe("Event bus + Logger + Provider Adapter integration", () => {
         ledger: true,
       },
       providerAdapter: {
-        providers: [
-          { name: "openai", models: ["gpt-4.1", "gpt-4o-mini"], priority: 0 },
-        ],
+        providers: [{ name: "openai", models: ["gpt-4.1", "gpt-4o-mini"], priority: 0 }],
       },
     })
 
@@ -719,7 +715,10 @@ describe("Event bus + Logger + Provider Adapter integration", () => {
     const params = {
       modelId: "gpt-4.1",
       prompt: makePrompt([
-        { role: "user", content: "Test the provider adapter tracking through the middleware pipeline" },
+        {
+          role: "user",
+          content: "Test the provider adapter tracking through the middleware pipeline",
+        },
       ]),
     }
 

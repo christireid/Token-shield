@@ -99,10 +99,7 @@ interface DashboardContextValue {
   setMode: (m: "demo" | "live") => void
   timeRange: TimeRange
   setTimeRange: (t: TimeRange) => void
-  updateUserBudget: (
-    userId: string,
-    updates: Partial<Pick<UserBudget, "limits" | "tier">>
-  ) => void
+  updateUserBudget: (userId: string, updates: Partial<Pick<UserBudget, "limits" | "tier">>) => void
   addUser: (user: Omit<UserBudget, "spend" | "remaining" | "percentUsed" | "isOverBudget">) => void
   removeUser: (userId: string) => void
   resetUserSpend: (userId: string) => void
@@ -204,7 +201,11 @@ function randInt(min: number, max: number) {
   return Math.floor(rand(min, max))
 }
 
-function generateEventMessage(type: DashboardEvent["type"], model: string, savings: number): string {
+function generateEventMessage(
+  type: DashboardEvent["type"],
+  model: string,
+  savings: number,
+): string {
   switch (type) {
     case "cache:hit":
       return `Cache hit for ${model} — saved $${savings.toFixed(4)}`
@@ -241,7 +242,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     totalRequests: 0,
     requestsBlocked: 0,
     avgLatencyMs: 0,
-    sparklines: { saved: [], spent: [], savingsRate: [], cacheHitRate: [], blocked: [], latency: [] },
+    sparklines: {
+      saved: [],
+      spent: [],
+      savingsRate: [],
+      cacheHitRate: [],
+      blocked: [],
+      latency: [],
+    },
     timeSeries: [],
     byModule: { guard: 0, cache: 0, context: 0, router: 0, prefix: 0 },
     byModel: {},
@@ -308,7 +316,13 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           userId: user.userId,
         })
 
-        points.push({ timestamp: ts, spent, saved, cumulativeSpent: cumSpent, cumulativeSaved: cumSaved })
+        points.push({
+          timestamp: ts,
+          spent,
+          saved,
+          cumulativeSpent: cumSpent,
+          cumulativeSaved: cumSaved,
+        })
       }
 
       const totalReqs = 60
@@ -431,7 +445,13 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
         const newTimeSeries = [
           ...prev.timeSeries,
-          { timestamp: now, spent, saved, cumulativeSpent: newCumSpent, cumulativeSaved: newCumSaved },
+          {
+            timestamp: now,
+            spent,
+            saved,
+            cumulativeSpent: newCumSpent,
+            cumulativeSaved: newCumSaved,
+          },
         ].slice(-200)
 
         const cacheHits = (prev.cacheHitRate * prev.totalRequests) / 100 + (isCacheHit ? 1 : 0)
@@ -504,7 +524,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         }),
       }))
     },
-    []
+    [],
   )
 
   const addUser = React.useCallback(
@@ -523,7 +543,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         ],
       }))
     },
-    []
+    [],
   )
 
   const removeUser = React.useCallback((userId: string) => {

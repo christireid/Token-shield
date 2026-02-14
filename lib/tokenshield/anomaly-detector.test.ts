@@ -15,7 +15,7 @@ describe("AnomalyDetector", () => {
         windowSize: 10,
         sensitivity: 2.5,
         minCostThreshold: 0.05,
-        ignoreBelowCost: 0.20,
+        ignoreBelowCost: 0.2,
       })
       expect(detector).toBeInstanceOf(AnomalyDetector)
     })
@@ -32,7 +32,7 @@ describe("AnomalyDetector", () => {
     it("should return null for first 4 readings with default windowSize", () => {
       const detector = new AnomalyDetector()
 
-      expect(detector.check(0.10, 1000)).toBeNull()
+      expect(detector.check(0.1, 1000)).toBeNull()
       expect(detector.check(0.12, 1200)).toBeNull()
       expect(detector.check(0.11, 1100)).toBeNull()
       expect(detector.check(0.13, 1300)).toBeNull()
@@ -42,7 +42,7 @@ describe("AnomalyDetector", () => {
       const detector = new AnomalyDetector({ windowSize: 3 })
 
       // With windowSize=3, needs min(5, 3) = 3 readings
-      expect(detector.check(0.10, 1000)).toBeNull()
+      expect(detector.check(0.1, 1000)).toBeNull()
       expect(detector.check(0.12, 1200)).toBeNull()
     })
 
@@ -51,11 +51,11 @@ describe("AnomalyDetector", () => {
 
       // All identical values = stdDev of 0
       for (let i = 0; i < 5; i++) {
-        expect(detector.check(0.10, 1000)).toBeNull()
+        expect(detector.check(0.1, 1000)).toBeNull()
       }
 
       // Even a spike won't trigger with stdDev=0
-      expect(detector.check(1.00, 10000)).toBeNull()
+      expect(detector.check(1.0, 10000)).toBeNull()
     })
   })
 
@@ -64,7 +64,7 @@ describe("AnomalyDetector", () => {
       const detector = new AnomalyDetector({ sensitivity: 3.0 })
 
       // Build history with normal variation
-      const normalCosts = [0.10, 0.11, 0.12, 0.10, 0.13, 0.11, 0.12]
+      const normalCosts = [0.1, 0.11, 0.12, 0.1, 0.13, 0.11, 0.12]
       const normalTokens = [1000, 1100, 1200, 1000, 1300, 1100, 1200]
 
       for (let i = 0; i < normalCosts.length; i++) {
@@ -78,7 +78,7 @@ describe("AnomalyDetector", () => {
 
       // Build baseline
       for (let i = 0; i < 5; i++) {
-        detector.check(0.10, 1000)
+        detector.check(0.1, 1000)
       }
 
       // Slight increase, but not 3 standard deviations
@@ -92,17 +92,17 @@ describe("AnomalyDetector", () => {
       const detector = new AnomalyDetector({ sensitivity: 2.0 })
 
       // Build baseline with slight variation (stdDev must be > 0)
-      const base = [0.10, 0.11, 0.12, 0.10, 0.11]
+      const base = [0.1, 0.11, 0.12, 0.1, 0.11]
       for (const cost of base) {
         detector.check(cost, 1000)
       }
 
       // Introduce a significant spike
-      const result = detector.check(1.00, 1000)
+      const result = detector.check(1.0, 1000)
 
       expect(result).not.toBeNull()
       expect(result?.type).toBe("cost_spike")
-      expect(result?.value).toBe(1.00)
+      expect(result?.value).toBe(1.0)
       expect(result?.zScore).toBeGreaterThan(2.0)
       expect(result?.timestamp).toBeGreaterThan(0)
     })
@@ -110,12 +110,12 @@ describe("AnomalyDetector", () => {
     it("should include correct statistics in cost spike event", () => {
       const detector = new AnomalyDetector({ sensitivity: 2.0 })
 
-      const baseCosts = [0.10, 0.11, 0.12, 0.10, 0.11]
+      const baseCosts = [0.1, 0.11, 0.12, 0.1, 0.11]
       for (const cost of baseCosts) {
         detector.check(cost, 1000)
       }
 
-      const result = detector.check(0.50, 1000)
+      const result = detector.check(0.5, 1000)
 
       expect(result).not.toBeNull()
       expect(result?.type).toBe("cost_spike")
@@ -129,7 +129,7 @@ describe("AnomalyDetector", () => {
     it("should detect token spike after building sufficient history", () => {
       const detector = new AnomalyDetector({
         sensitivity: 2.0,
-        minCostThreshold: 10.0 // Set high to prevent cost anomalies
+        minCostThreshold: 10.0, // Set high to prevent cost anomalies
       })
 
       // Build baseline with varied token usage (stdDev > 0)
@@ -150,7 +150,7 @@ describe("AnomalyDetector", () => {
     it("should include correct statistics in token spike event", () => {
       const detector = new AnomalyDetector({
         sensitivity: 2.0,
-        minCostThreshold: 10.0
+        minCostThreshold: 10.0,
       })
 
       const baseTokens = [1000, 1100, 1200, 1000, 1100]
@@ -173,30 +173,30 @@ describe("AnomalyDetector", () => {
       const detector = new AnomalyDetector({ sensitivity: 2.0 })
 
       // Build history with slight variation
-      const base = [0.10, 0.11, 0.12, 0.10, 0.11]
+      const base = [0.1, 0.11, 0.12, 0.1, 0.11]
       for (let i = 0; i < base.length; i++) {
         detector.check(base[i], 1000 + i * 10)
       }
 
       // Both cost and tokens spike
-      const result = detector.check(1.00, 10000)
+      const result = detector.check(1.0, 10000)
 
       expect(result).not.toBeNull()
       expect(result?.type).toBe("cost_spike")
-      expect(result?.value).toBe(1.00)
+      expect(result?.value).toBe(1.0)
     })
 
     it("should only report cost spike when both anomalies occur", () => {
       const detector = new AnomalyDetector({ sensitivity: 1.5 })
 
       // Build baseline with variation
-      const base = [0.10, 0.11, 0.12, 0.10, 0.11]
+      const base = [0.1, 0.11, 0.12, 0.1, 0.11]
       for (let i = 0; i < base.length; i++) {
         detector.check(base[i], 1000 + i * 10)
       }
 
       // Massive spike in both
-      const result = detector.check(2.00, 20000)
+      const result = detector.check(2.0, 20000)
 
       expect(result).not.toBeNull()
       expect(result?.type).toBe("cost_spike")
@@ -207,7 +207,7 @@ describe("AnomalyDetector", () => {
     it("should ignore costs below minCostThreshold", () => {
       const detector = new AnomalyDetector({
         sensitivity: 1.0,
-        minCostThreshold: 0.10
+        minCostThreshold: 0.1,
       })
 
       // These should be ignored (below threshold)
@@ -220,17 +220,17 @@ describe("AnomalyDetector", () => {
     it("should process costs at or above minCostThreshold", () => {
       const detector = new AnomalyDetector({
         sensitivity: 2.0,
-        minCostThreshold: 0.10
+        minCostThreshold: 0.1,
       })
 
       // Build history at threshold with slight variation
-      const base = [0.10, 0.11, 0.12, 0.10, 0.11]
+      const base = [0.1, 0.11, 0.12, 0.1, 0.11]
       for (const cost of base) {
         detector.check(cost, 1000)
       }
 
       // Spike at threshold
-      const result = detector.check(0.50, 1000)
+      const result = detector.check(0.5, 1000)
       expect(result).not.toBeNull()
       expect(result?.type).toBe("cost_spike")
     })
@@ -238,12 +238,12 @@ describe("AnomalyDetector", () => {
     it("should use custom minCostThreshold value", () => {
       const detector = new AnomalyDetector({
         sensitivity: 2.0,
-        minCostThreshold: 0.50
+        minCostThreshold: 0.5,
       })
 
       // These are below custom threshold
       for (let i = 0; i < 10; i++) {
-        const result = detector.check(0.10, 1000)
+        const result = detector.check(0.1, 1000)
         expect(result).toBeNull()
       }
     })
@@ -254,7 +254,7 @@ describe("AnomalyDetector", () => {
       const detector = new AnomalyDetector({
         sensitivity: 1.0,
         minCostThreshold: 0.01,
-        ignoreBelowCost: 0.20
+        ignoreBelowCost: 0.2,
       })
 
       // Build history with very low costs
@@ -271,7 +271,7 @@ describe("AnomalyDetector", () => {
       const detector = new AnomalyDetector({
         sensitivity: 2.0,
         minCostThreshold: 0.01,
-        ignoreBelowCost: 0.20
+        ignoreBelowCost: 0.2,
       })
 
       // Build history with slight variation
@@ -281,7 +281,7 @@ describe("AnomalyDetector", () => {
       }
 
       // Spike above ignoreBelowCost threshold
-      const result = detector.check(0.50, 1000)
+      const result = detector.check(0.5, 1000)
       expect(result).not.toBeNull()
       expect(result?.type).toBe("cost_spike")
     })
@@ -290,16 +290,16 @@ describe("AnomalyDetector", () => {
       const detector = new AnomalyDetector({
         sensitivity: 2.0,
         minCostThreshold: 0.01,
-        ignoreBelowCost: 1.00
+        ignoreBelowCost: 1.0,
       })
 
       // Build history
       for (let i = 0; i < 5; i++) {
-        detector.check(0.10, 1000)
+        detector.check(0.1, 1000)
       }
 
       // Spike below custom ignoreBelowCost
-      const result = detector.check(0.80, 1000)
+      const result = detector.check(0.8, 1000)
       expect(result).toBeNull()
     })
   })
@@ -308,17 +308,17 @@ describe("AnomalyDetector", () => {
     it("should respect window size and cap history", () => {
       const detector = new AnomalyDetector({
         windowSize: 5,
-        sensitivity: 2.0
+        sensitivity: 2.0,
       })
 
       // Add entries with slight variation
-      const vals = [0.10, 0.11, 0.12, 0.10, 0.11, 0.10, 0.12, 0.11, 0.10, 0.11]
+      const vals = [0.1, 0.11, 0.12, 0.1, 0.11, 0.1, 0.12, 0.11, 0.1, 0.11]
       for (const cost of vals) {
         detector.check(cost, 1000)
       }
 
       // Add a spike
-      const result = detector.check(0.50, 1000)
+      const result = detector.check(0.5, 1000)
 
       // The mean should only reflect the last 5 entries
       if (result) {
@@ -330,39 +330,39 @@ describe("AnomalyDetector", () => {
     it("should handle small window sizes correctly", () => {
       const detector = new AnomalyDetector({
         windowSize: 3,
-        sensitivity: 2.0
+        sensitivity: 2.0,
       })
 
       // Need min(5, 3) = 3 readings
-      detector.check(0.10, 1000)
+      detector.check(0.1, 1000)
       detector.check(0.11, 1100)
       detector.check(0.12, 1200)
 
       // This should be able to detect anomalies now
-      const result = detector.check(0.50, 1000)
+      const result = detector.check(0.5, 1000)
       expect(result).not.toBeNull()
     })
 
     it("should maintain only windowSize entries in history", () => {
       const detector = new AnomalyDetector({
         windowSize: 3,
-        sensitivity: 2.0
+        sensitivity: 2.0,
       })
 
       // First three: 0.10, 0.10, 0.10
-      detector.check(0.10, 1000)
-      detector.check(0.10, 1000)
-      detector.check(0.10, 1000)
+      detector.check(0.1, 1000)
+      detector.check(0.1, 1000)
+      detector.check(0.1, 1000)
 
       // Next three should evict the first three: 0.20, 0.20, 0.20
-      detector.check(0.20, 2000)
-      detector.check(0.20, 2000)
-      detector.check(0.20, 2000)
+      detector.check(0.2, 2000)
+      detector.check(0.2, 2000)
+      detector.check(0.2, 2000)
 
       // Now history should be [0.20, 0.20, 0.20], so mean ≈ 0.20
-      const result = detector.check(0.60, 2000)
+      const result = detector.check(0.6, 2000)
       if (result) {
-        expect(result.mean).toBeCloseTo(0.20, 2)
+        expect(result.mean).toBeCloseTo(0.2, 2)
       }
     })
   })
@@ -372,7 +372,7 @@ describe("AnomalyDetector", () => {
       const detector = new AnomalyDetector({ sensitivity: 1.5 })
 
       // Build history with slight variation
-      const base = [0.10, 0.11, 0.12, 0.10, 0.11]
+      const base = [0.1, 0.11, 0.12, 0.1, 0.11]
       for (const cost of base) {
         detector.check(cost, 1000)
       }
@@ -386,7 +386,7 @@ describe("AnomalyDetector", () => {
       const detector = new AnomalyDetector({ sensitivity: 5.0 })
 
       // Build history with slight variation
-      const base = [0.10, 0.11, 0.12, 0.10, 0.11]
+      const base = [0.1, 0.11, 0.12, 0.1, 0.11]
       for (const cost of base) {
         detector.check(cost, 1000)
       }
@@ -401,13 +401,13 @@ describe("AnomalyDetector", () => {
       const detector = new AnomalyDetector({ sensitivity: 4.0 })
 
       // Build history with variation
-      const base = [0.10, 0.11, 0.12, 0.10, 0.11]
+      const base = [0.1, 0.11, 0.12, 0.1, 0.11]
       for (const cost of base) {
         detector.check(cost, 1000)
       }
 
       // Need much larger spike
-      const result = detector.check(2.00, 1000)
+      const result = detector.check(2.0, 1000)
       expect(result).not.toBeNull()
       expect(result?.zScore).toBeGreaterThan(4.0)
     })
@@ -418,12 +418,12 @@ describe("AnomalyDetector", () => {
       const detector = new AnomalyDetector({ sensitivity: 2.0 })
 
       // Use varied baseline to produce stdDev > 0
-      const base = [0.10, 0.11, 0.12, 0.10, 0.11]
+      const base = [0.1, 0.11, 0.12, 0.1, 0.11]
       for (const cost of base) {
         detector.check(cost, 1000)
       }
 
-      const result = detector.check(1.00, 1000)
+      const result = detector.check(1.0, 1000)
 
       expect(result).not.toBeNull()
       expect(result).toHaveProperty("type")
@@ -444,7 +444,7 @@ describe("AnomalyDetector", () => {
     it("should return correct AnomalyEvent shape for token spike", () => {
       const detector = new AnomalyDetector({
         sensitivity: 2.0,
-        minCostThreshold: 10.0
+        minCostThreshold: 10.0,
       })
 
       // Use varied token baseline to produce stdDev > 0
@@ -475,13 +475,13 @@ describe("AnomalyDetector", () => {
       const detector = new AnomalyDetector({ sensitivity: 2.0 })
 
       // Use varied baseline to produce stdDev > 0
-      const base = [0.10, 0.11, 0.12, 0.10, 0.11]
+      const base = [0.1, 0.11, 0.12, 0.1, 0.11]
       for (const cost of base) {
         detector.check(cost, 1000)
       }
 
       const before = Date.now()
-      const result = detector.check(1.00, 1000)
+      const result = detector.check(1.0, 1000)
       const after = Date.now()
 
       expect(result).not.toBeNull()
@@ -493,12 +493,12 @@ describe("AnomalyDetector", () => {
       const detector = new AnomalyDetector({ sensitivity: 2.0 })
 
       // Use varied baseline to produce stdDev > 0
-      const base = [0.10, 0.11, 0.12, 0.10, 0.11]
+      const base = [0.1, 0.11, 0.12, 0.1, 0.11]
       for (const cost of base) {
         detector.check(cost, 1000)
       }
 
-      const result = detector.check(1.00, 1000)
+      const result = detector.check(1.0, 1000)
 
       expect(result).not.toBeNull()
       if (result) {
@@ -523,12 +523,12 @@ describe("AnomalyDetector", () => {
       const detector = new AnomalyDetector()
 
       // Use varied baseline to produce stdDev > 0
-      const base = [0.10, 0.11, 0.12, 0.10, 0.11]
+      const base = [0.1, 0.11, 0.12, 0.1, 0.11]
       for (const cost of base) {
         detector.check(cost, 1000)
       }
 
-      const result = detector.check(0.50, 0)
+      const result = detector.check(0.5, 0)
       expect(result).not.toBeNull()
       expect(result?.type).toBe("cost_spike")
     })
@@ -537,7 +537,7 @@ describe("AnomalyDetector", () => {
       const detector = new AnomalyDetector({ minCostThreshold: -1 })
 
       // Negative costs shouldn't realistically happen, but shouldn't crash
-      const result = detector.check(-0.10, 1000)
+      const result = detector.check(-0.1, 1000)
       expect(result).toBeNull()
     })
 
@@ -545,7 +545,7 @@ describe("AnomalyDetector", () => {
       const detector = new AnomalyDetector({ sensitivity: 2.0 })
 
       // Use varied baseline to produce stdDev > 0
-      const base = [0.10, 0.11, 0.12, 0.10, 0.11]
+      const base = [0.1, 0.11, 0.12, 0.1, 0.11]
       for (const cost of base) {
         detector.check(cost, 1000)
       }

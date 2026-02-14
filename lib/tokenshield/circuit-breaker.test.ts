@@ -80,7 +80,9 @@ describe("CostCircuitBreaker", () => {
       limits: { perSession: 10.0 },
       action: "stop",
       persist: false,
-      onWarning: () => { warningFired = true },
+      onWarning: () => {
+        warningFired = true
+      },
     })
     // 80% of $10 = $8.00; projectedSpend must be >= $8.00
     b.recordSpend(8.01, "gpt-4o-mini")

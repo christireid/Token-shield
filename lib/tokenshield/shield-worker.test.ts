@@ -99,20 +99,8 @@ describe("ShieldWorker", () => {
       const sw = new ShieldWorker()
       await sw.init({ threshold: 0.5 })
 
-      await sw.learn(
-        "What is the capital of France?",
-        "Paris.",
-        "gpt-4o",
-        5,
-        5,
-      )
-      await sw.learn(
-        "What is the capital of Germany?",
-        "Berlin.",
-        "gpt-4o",
-        5,
-        5,
-      )
+      await sw.learn("What is the capital of France?", "Paris.", "gpt-4o", 5, 5)
+      await sw.learn("What is the capital of Germany?", "Berlin.", "gpt-4o", 5, 5)
 
       const r1 = await sw.find("What is the capital of France?")
       expect(r1).not.toBeNull()
@@ -127,13 +115,7 @@ describe("ShieldWorker", () => {
       const sw = new ShieldWorker()
       await sw.init({ threshold: 0.5 })
 
-      await sw.learn(
-        "How do I deploy to production?",
-        "Use CI/CD pipelines.",
-        "gpt-4o",
-        5,
-        10,
-      )
+      await sw.learn("How do I deploy to production?", "Use CI/CD pipelines.", "gpt-4o", 5, 10)
 
       // Same model should match
       const match = await sw.find("How do I deploy to production?", "gpt-4o")

@@ -58,7 +58,6 @@ const DEFAULT_CONFIG: CacheConfig = {
   storeName: "tokenshield-cache",
 }
 
-
 /**
  * Normalize text for comparison: lowercase, collapse whitespace,
  * remove punctuation, trim. This catches near-duplicate prompts
@@ -165,7 +164,7 @@ export class ResponseCache {
    */
   peek(
     prompt: string,
-    model: string
+    model: string,
   ): { hit: boolean; matchType?: "exact" | "fuzzy"; similarity?: number; entry?: CacheEntry } {
     const key = hashKey(prompt, model)
     const normalized = normalizeText(prompt)
@@ -205,7 +204,7 @@ export class ResponseCache {
    */
   async lookup(
     prompt: string,
-    model: string
+    model: string,
   ): Promise<{
     hit: boolean
     entry?: CacheEntry
@@ -224,7 +223,11 @@ export class ResponseCache {
         if (memHit.normalizedKey === normalized) {
           // Copy-on-read: create a new object to avoid shared mutable state
           // across concurrent lookups that could cause inconsistent IDB writes
-          const updated: CacheEntry = { ...memHit, accessCount: memHit.accessCount + 1, lastAccessed: Date.now() }
+          const updated: CacheEntry = {
+            ...memHit,
+            accessCount: memHit.accessCount + 1,
+            lastAccessed: Date.now(),
+          }
           this.memoryCache.set(key, updated)
           this.totalHits++
           return { hit: true, entry: updated, matchType: "exact", similarity: 1 }
@@ -245,7 +248,11 @@ export class ResponseCache {
           // Verify normalized prompt matches to guard against hash collisions
           if (idbHit.normalizedKey === normalized) {
             // Copy-on-read: create a fresh object before mutating and storing
-            const updated: CacheEntry = { ...idbHit, accessCount: idbHit.accessCount + 1, lastAccessed: Date.now() }
+            const updated: CacheEntry = {
+              ...idbHit,
+              accessCount: idbHit.accessCount + 1,
+              lastAccessed: Date.now(),
+            }
             this.memoryCache.set(key, updated)
             await set(key, updated, store)
             this.totalHits++
@@ -274,7 +281,11 @@ export class ResponseCache {
             if (entry.prompt === holoResult.prompt && (!model || entry.model === model)) {
               // TTL check — skip expired entries
               if (Date.now() - entry.createdAt >= this.config.ttlMs) continue
-              const updated: CacheEntry = { ...entry, accessCount: entry.accessCount + 1, lastAccessed: Date.now() }
+              const updated: CacheEntry = {
+                ...entry,
+                accessCount: entry.accessCount + 1,
+                lastAccessed: Date.now(),
+              }
               this.memoryCache.set(entryKey, updated)
               this.totalHits++
               return {
@@ -304,7 +315,11 @@ export class ResponseCache {
       }
 
       if (bestMatch) {
-        const updated: CacheEntry = { ...bestMatch, accessCount: bestMatch.accessCount + 1, lastAccessed: Date.now() }
+        const updated: CacheEntry = {
+          ...bestMatch,
+          accessCount: bestMatch.accessCount + 1,
+          lastAccessed: Date.now(),
+        }
         this.memoryCache.set(updated.key, updated)
         this.totalHits++
         return {
@@ -327,7 +342,7 @@ export class ResponseCache {
     response: string,
     model: string,
     inputTokens: number,
-    outputTokens: number
+    outputTokens: number,
   ): Promise<void> {
     const key = hashKey(prompt, model)
     const entry: CacheEntry = {
@@ -366,7 +381,9 @@ export class ResponseCache {
         try {
           const store = this.getStore()
           if (store) del(oldestKey, store).catch(() => {})
-        } catch { /* IDB not available */ }
+        } catch {
+          /* IDB not available */
+        }
       }
     }
 
@@ -395,7 +412,15 @@ export class ResponseCache {
           this.memoryCache.set(key, entry)
           // Populate holographic engine so fuzzy matching works after reload
           if (this.holoEngine) {
-            this.holoEngine.learn(entry.prompt, entry.response, entry.model, entry.inputTokens, entry.outputTokens).catch(() => {})
+            this.holoEngine
+              .learn(
+                entry.prompt,
+                entry.response,
+                entry.model,
+                entry.inputTokens,
+                entry.outputTokens,
+              )
+              .catch(() => {})
           }
           loaded++
         } else if (entry) {
@@ -420,8 +445,7 @@ export class ResponseCache {
   } {
     let totalSavedTokens = 0
     for (const entry of this.memoryCache.values()) {
-      totalSavedTokens +=
-        (entry.inputTokens + entry.outputTokens) * entry.accessCount
+      totalSavedTokens += (entry.inputTokens + entry.outputTokens) * entry.accessCount
     }
     return {
       entries: this.memoryCache.size,

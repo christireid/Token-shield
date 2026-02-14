@@ -58,10 +58,7 @@ export {
 } from "./react-hooks-pipeline"
 
 // Dashboard Components
-export {
-  TokenShieldDashboard,
-  type TokenShieldDashboardProps,
-} from "./dashboard"
+export { TokenShieldDashboard, type TokenShieldDashboardProps } from "./dashboard"
 
 export {
   SavingsSection,

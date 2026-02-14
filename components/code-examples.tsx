@@ -47,7 +47,8 @@ const { fits } = fitsInBudget(longDocument, 2000)`,
   {
     id: "context",
     label: "Context Manager",
-    description: "Trim conversation history to fit a token budget. System messages always preserved.",
+    description:
+      "Trim conversation history to fit a token budget. System messages always preserved.",
     code: `import { fitToBudget, smartFit } from 'tokenshield'
 
 // Basic: keep newest messages within budget
@@ -113,7 +114,8 @@ console.log(\`Use \${routing.selectedModel.name}, save $\${routing.savingsVsDefa
   {
     id: "tools",
     label: "Tool Token Counter",
-    description: "Measure the hidden tokens that tool/function definitions inject into every request.",
+    description:
+      "Measure the hidden tokens that tool/function definitions inject into every request.",
     code: `import { countToolTokens, optimizeToolDefinitions } from 'tokenshield'
 
 const tools = [
@@ -211,7 +213,8 @@ breaker.recordSpend(0.015, 'gpt-4o')`,
   {
     id: "output",
     label: "Output Predictor",
-    description: "Predict output length by task type. Set smart max_tokens instead of blanket 4096.",
+    description:
+      "Predict output length by task type. Set smart max_tokens instead of blanket 4096.",
     code: `import { predictOutputTokens } from 'tokenshield'
 
 // Detects task type and predicts output length

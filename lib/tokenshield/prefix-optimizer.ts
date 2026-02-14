@@ -130,9 +130,10 @@ export function getCacheDiscountRate(provider: Exclude<Provider, "auto">): numbe
  * Stable prefix = system messages + pinned messages + summary
  * Volatile = recent conversation messages that change each turn
  */
-function classifyMessages(
-  messages: ChatMessage[]
-): { stable: ChatMessage[]; volatile: ChatMessage[] } {
+function classifyMessages(messages: ChatMessage[]): {
+  stable: ChatMessage[]
+  volatile: ChatMessage[]
+} {
   const stable: ChatMessage[] = []
   const volatile: ChatMessage[] = []
 
@@ -212,7 +213,7 @@ export function optimizePrefix(
   messages: ChatMessage[],
   modelId: string,
   inputPricePerMillion: number,
-  config: Partial<PrefixOptimizerConfig> = {}
+  config: Partial<PrefixOptimizerConfig> = {},
 ): OptimizedResult {
   const cfg = { ...DEFAULT_CONFIG, ...config }
   const provider = cfg.provider === "auto" ? detectProvider(modelId) : cfg.provider
@@ -229,9 +230,7 @@ export function optimizePrefix(
   // OpenAI requires >1024 token prefix for caching to activate
   // Anthropic has no minimum but benefits from explicit breakpoints
   const prefixEligible =
-    provider === "openai"
-      ? prefixTokens >= cfg.openaiMinPrefixTokens
-      : prefixTokens > 0
+    provider === "openai" ? prefixTokens >= cfg.openaiMinPrefixTokens : prefixTokens > 0
 
   // Calculate savings: discountRate * input price * prefix tokens
   const savingsPerRequest = prefixEligible
@@ -299,7 +298,7 @@ export function projectPrefixSavings(
   inputPricePerMillion: number,
   provider: Exclude<Provider, "auto">,
   requestsPerHour: number,
-  hours: number
+  hours: number,
 ): {
   totalRequests: number
   cachedRequests: number
@@ -313,8 +312,7 @@ export function projectPrefixSavings(
   // Cache TTL ~5-10 min. At N requests/hour, approximately (N-6) to (N-12) hit cache.
   // Conservative estimate: 80% of requests after first hit the cache
   const cachedRequests = Math.max(0, Math.floor(totalRequests * 0.8))
-  const savingsPerCachedRequest =
-    (prefixTokens / 1_000_000) * inputPricePerMillion * discountRate
+  const savingsPerCachedRequest = (prefixTokens / 1_000_000) * inputPricePerMillion * discountRate
 
   return {
     totalRequests,

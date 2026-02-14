@@ -18,7 +18,8 @@ function isIndexedDBAvailable(): boolean {
   if (_idbAvailable !== null) return _idbAvailable
   try {
     // Edge Runtime and Workers lack indexedDB on globalThis
-    _idbAvailable = typeof globalThis !== "undefined" &&
+    _idbAvailable =
+      typeof globalThis !== "undefined" &&
       typeof (globalThis as Record<string, unknown>).indexedDB !== "undefined" &&
       (globalThis as Record<string, unknown>).indexedDB !== null
   } catch {

@@ -120,9 +120,15 @@ describe("Fix 2: ResponseCache.peek() immutability", () => {
     const fuzzyCache = new ResponseCache({
       maxEntries: 100,
       ttlMs: 60000,
-      similarityThreshold: 0.70,
+      similarityThreshold: 0.7,
     })
-    await fuzzyCache.store("Explain what React is and how it works", "React is a library...", "gpt-4o-mini", 15, 25)
+    await fuzzyCache.store(
+      "Explain what React is and how it works",
+      "React is a library...",
+      "gpt-4o-mini",
+      15,
+      25,
+    )
 
     const statsBefore = fuzzyCache.stats()
 
@@ -347,8 +353,10 @@ describe("Fix 6: Per-instance event bus isolation + global forwarding", () => {
     // Set up forwarding (mirrors what middleware.ts does)
     instanceBus.on("ledger:entry", ((data: unknown) => {
       try {
-        (shieldEvents.emit as (type: string, data: unknown) => void)("ledger:entry", data)
-      } catch { /* non-fatal */ }
+        ;(shieldEvents.emit as (type: string, data: unknown) => void)("ledger:entry", data)
+      } catch {
+        /* non-fatal */
+      }
     }) as never)
 
     shieldEvents.on("ledger:entry", (data) => globalReceived.push(data))

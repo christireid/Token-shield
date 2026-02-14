@@ -5,7 +5,14 @@ import { useDashboard } from "./dashboard-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { PieChart, Pie, Cell } from "recharts"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 
 const MODEL_COLORS: Record<string, string> = {
@@ -62,7 +69,7 @@ export function ModelUsageChart() {
   }
 
   const chartConfig = Object.fromEntries(
-    entries.map((e) => [e.id, { label: e.id, color: e.color }])
+    entries.map((e) => [e.id, { label: e.id, color: e.color }]),
   )
 
   return (
@@ -77,7 +84,10 @@ export function ModelUsageChart() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
           {/* Donut */}
           <div className="flex-shrink-0">
-            <ChartContainer config={chartConfig} className="mx-auto aspect-square h-[180px] w-[180px]">
+            <ChartContainer
+              config={chartConfig}
+              className="mx-auto aspect-square h-[180px] w-[180px]"
+            >
               <PieChart>
                 <Pie
                   data={pieData}
@@ -127,19 +137,28 @@ export function ModelUsageChart() {
                 <TableRow className="border-border/30 hover:bg-transparent">
                   <TableHead className="text-xs">Model</TableHead>
                   <TableHead
-                    className={cn("cursor-pointer text-right text-xs", sortKey === "calls" && "text-foreground")}
+                    className={cn(
+                      "cursor-pointer text-right text-xs",
+                      sortKey === "calls" && "text-foreground",
+                    )}
                     onClick={() => handleSort("calls")}
                   >
                     Calls {sortKey === "calls" && (sortDir === "desc" ? "↓" : "↑")}
                   </TableHead>
                   <TableHead
-                    className={cn("cursor-pointer text-right text-xs", sortKey === "cost" && "text-foreground")}
+                    className={cn(
+                      "cursor-pointer text-right text-xs",
+                      sortKey === "cost" && "text-foreground",
+                    )}
                     onClick={() => handleSort("cost")}
                   >
                     Cost {sortKey === "cost" && (sortDir === "desc" ? "↓" : "↑")}
                   </TableHead>
                   <TableHead
-                    className={cn("cursor-pointer text-right text-xs", sortKey === "tokens" && "text-foreground")}
+                    className={cn(
+                      "cursor-pointer text-right text-xs",
+                      sortKey === "tokens" && "text-foreground",
+                    )}
                     onClick={() => handleSort("tokens")}
                   >
                     Tokens {sortKey === "tokens" && (sortDir === "desc" ? "↓" : "↑")}
@@ -151,7 +170,10 @@ export function ModelUsageChart() {
                   <TableRow key={entry.id} className="border-border/20">
                     <TableCell className="py-2">
                       <div className="flex items-center gap-2">
-                        <div className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
+                        <div
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: entry.color }}
+                        />
                         <span className="font-mono text-xs text-foreground">{entry.id}</span>
                       </div>
                     </TableCell>

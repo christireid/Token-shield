@@ -32,7 +32,9 @@ describe("predictOutputTokens", () => {
     })
 
     it("detects structured output / JSON requests", () => {
-      const result = predictOutputTokens("Return the data as a JSON object with name and age fields")
+      const result = predictOutputTokens(
+        "Return the data as a JSON object with name and age fields",
+      )
       expect(result.taskType).toBe("structured-output")
       expect(result.confidence).toBe("medium")
       expect(result.predictedTokens).toBe(200)
@@ -127,7 +129,10 @@ describe("predictOutputTokens", () => {
     })
 
     it("respects maxMaxTokens", () => {
-      const result = predictOutputTokens("Explain everything about quantum physics in great detail", { maxMaxTokens: 500 })
+      const result = predictOutputTokens(
+        "Explain everything about quantum physics in great detail",
+        { maxMaxTokens: 500 },
+      )
       expect(result.suggestedMaxTokens).toBeLessThanOrEqual(500)
     })
 
@@ -165,12 +170,7 @@ describe("predictOutputTokens", () => {
     })
 
     it("all numeric fields are non-negative", () => {
-      const prompts = [
-        "What is 1+1?",
-        "Summarize this text",
-        "Write a Python class",
-        "Hello world",
-      ]
+      const prompts = ["What is 1+1?", "Summarize this text", "Write a Python class", "Hello world"]
       for (const prompt of prompts) {
         const result = predictOutputTokens(prompt)
         expect(result.predictedTokens).toBeGreaterThanOrEqual(0)

@@ -97,9 +97,9 @@ describe("createGenericAdapter", () => {
     const callFn = vi.fn().mockRejectedValue(new Error("API error"))
 
     const call = createGenericAdapter(shield, callFn, { modelId: "gpt-4o-mini" })
-    await expect(
-      call({ messages: [{ role: "user", content: "test" }] })
-    ).rejects.toThrow("API error")
+    await expect(call({ messages: [{ role: "user", content: "test" }] })).rejects.toThrow(
+      "API error",
+    )
     shield.dispose()
   })
 
@@ -117,7 +117,7 @@ describe("createGenericAdapter", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       any
     >(shield, callFn, { modelId: "gpt-4o-mini" })
-    
+
     await call({
       messages: [{ role: "user", content: "test" }],
       temperature: 0.5,
@@ -138,9 +138,9 @@ describe("createOpenAIAdapter", () => {
     })
 
     const chat = createOpenAIAdapter(shield, createFn, { defaultModel: "gpt-4o-mini" })
-    const result = await chat({
+    const result = (await chat({
       messages: [{ role: "user", content: "Hello" }],
-    }) as { choices: { message: { content: string } }[] }
+    })) as { choices: { message: { content: string } }[] }
 
     // Expect raw OpenAI response, not normalized shape
     expect(result.choices[0].message.content).toBe("Hello from OpenAI!")
@@ -200,9 +200,9 @@ describe("createOpenAIAdapter", () => {
     })
 
     const chat = createOpenAIAdapter(shield, createFn, { defaultModel: "gpt-4o-mini" })
-    const result = await chat({
+    const result = (await chat({
       messages: [{ role: "user", content: "test" }],
-    }) as { choices: { message: { content: string } }[] }
+    })) as { choices: { message: { content: string } }[] }
 
     expect(result.choices[0].message.content).toBe("no usage")
     shield.dispose()
@@ -222,9 +222,9 @@ describe("createAnthropicAdapter", () => {
       defaultModel: "claude-sonnet-4-20250514",
       defaultMaxTokens: 1024,
     })
-    const result = await chat({
+    const result = (await chat({
       messages: [{ role: "user", content: "Hello" }],
-    }) as { content: { type: string; text: string }[] }
+    })) as { content: { type: string; text: string }[] }
 
     // Expect raw Anthropic response
     expect(result.content[0].text).toBe("Hello from Claude!")
@@ -305,9 +305,9 @@ describe("createAnthropicAdapter", () => {
     })
 
     const chat = createAnthropicAdapter(shield, createFn)
-    const result = await chat({
+    const result = (await chat({
       messages: [{ role: "user", content: "test" }],
-    }) as { content: { type: string; text: string }[] }
+    })) as { content: { type: string; text: string }[] }
 
     // Expect raw result
     expect(result.content).toEqual([])
@@ -324,7 +324,7 @@ describe("createStreamAdapter", () => {
           controller.enqueue({ type: "text-delta", textDelta: "Hello" })
           controller.close()
         },
-      })
+      }),
     )
 
     const stream = createStreamAdapter(shield, streamFn, { modelId: "gpt-4o-mini" })
@@ -339,7 +339,11 @@ describe("createStreamAdapter", () => {
   it("uses the modelId from options", async () => {
     const shield = createMinimalShield()
     const streamFn = vi.fn().mockResolvedValue(
-      new ReadableStream({ start(c) { c.close() } })
+      new ReadableStream({
+        start(c) {
+          c.close()
+        },
+      }),
     )
 
     const stream = createStreamAdapter(shield, streamFn, { modelId: "gpt-4o-mini" })
@@ -357,9 +361,9 @@ describe("createStreamAdapter", () => {
     const streamFn = vi.fn().mockRejectedValue(new Error("Stream error"))
 
     const stream = createStreamAdapter(shield, streamFn, { modelId: "gpt-4o-mini" })
-    await expect(
-      stream({ messages: [{ role: "user", content: "test" }] })
-    ).rejects.toThrow("Stream error")
+    await expect(stream({ messages: [{ role: "user", content: "test" }] })).rejects.toThrow(
+      "Stream error",
+    )
     shield.dispose()
   })
 })

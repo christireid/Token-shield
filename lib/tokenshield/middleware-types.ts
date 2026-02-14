@@ -9,7 +9,12 @@ import type { ResponseCache } from "./response-cache"
 import type { RequestGuard } from "./request-guard"
 import type { CostLedger } from "./cost-ledger"
 import type { CostCircuitBreaker, BreakerConfig } from "./circuit-breaker"
-import type { UserBudgetManager, UserBudgetConfig, BudgetExceededEvent, BudgetWarningEvent } from "./user-budget-manager"
+import type {
+  UserBudgetManager,
+  UserBudgetConfig,
+  BudgetExceededEvent,
+  BudgetWarningEvent,
+} from "./user-budget-manager"
 import type { createEventBus } from "./event-bus"
 import type { TokenShieldLogger, LogEntry } from "./logger"
 import type { ProviderAdapter, AdapterConfig } from "./provider-adapter"
@@ -36,7 +41,7 @@ export const MSG_OVERHEAD_TOKENS = 5
  * so that budget enforcement and cost tracking still function.
  */
 export const FALLBACK_INPUT_PER_MILLION = 0.15
-export const FALLBACK_OUTPUT_PER_MILLION = 0.60
+export const FALLBACK_OUTPUT_PER_MILLION = 0.6
 
 // -------------------------------------------------------
 // Config Interface
@@ -130,7 +135,7 @@ export interface TokenShieldMiddlewareConfig {
     /** Function that returns the current user's ID */
     getUserId: () => string
     /** Budget configuration (users, defaultBudget, tierModels, etc.) */
-    budgets: Omit<UserBudgetConfig, 'onBudgetExceeded' | 'onBudgetWarning'>
+    budgets: Omit<UserBudgetConfig, "onBudgetExceeded" | "onBudgetWarning">
     /** Called when a user exceeds their budget */
     onBudgetExceeded?: (userId: string, event: BudgetExceededEvent) => void
     /** Called when a user approaches their budget (80%) */
@@ -170,10 +175,22 @@ export interface TokenShieldMiddlewareConfig {
   /** Called when a request is blocked by the guard */
   onBlocked?: (reason: string) => void
   /** Called with every ledger entry after a request completes */
-  onUsage?: (entry: { model: string; inputTokens: number; outputTokens: number; cost: number; saved: number }) => void
+  onUsage?: (entry: {
+    model: string
+    inputTokens: number
+    outputTokens: number
+    cost: number
+    saved: number
+  }) => void
 
   /** Optional logger for structured observability */
-  logger?: TokenShieldLogger | { level?: 'debug' | 'info' | 'warn' | 'error'; handler?: (entry: LogEntry) => void; enableSpans?: boolean }
+  logger?:
+    | TokenShieldLogger
+    | {
+        level?: "debug" | "info" | "warn" | "error"
+        handler?: (entry: LogEntry) => void
+        enableSpans?: boolean
+      }
 
   /** Optional multi-provider adapter for routing, retries, and health tracking */
   providerAdapter?: ProviderAdapter | AdapterConfig
@@ -208,9 +225,15 @@ export interface TokenShieldMiddleware {
   /** Pre-model transform — runs breaker, budget, guard, cache, context, router, prefix */
   transformParams: (args: { params: Record<string, unknown> }) => Promise<Record<string, unknown>>
   /** Wraps non-streaming model calls with caching, ledger, budget tracking */
-  wrapGenerate: (args: { doGenerate: () => Promise<Record<string, unknown>>; params: Record<string, unknown> }) => Promise<Record<string, unknown>>
+  wrapGenerate: (args: {
+    doGenerate: () => Promise<Record<string, unknown>>
+    params: Record<string, unknown>
+  }) => Promise<Record<string, unknown>>
   /** Wraps streaming model calls with token tracking, caching, budget accounting */
-  wrapStream: (args: { doStream: () => Promise<Record<string, unknown>>; params: Record<string, unknown> }) => Promise<Record<string, unknown>>
+  wrapStream: (args: {
+    doStream: () => Promise<Record<string, unknown>>
+    params: Record<string, unknown>
+  }) => Promise<Record<string, unknown>>
   /** Returns a snapshot of all module health indicators */
   healthCheck: () => HealthCheckResult
   /** Clean up event forwarding listeners. Call when disposing a middleware instance. */
@@ -317,10 +340,12 @@ export function extractLastUserText(params: Record<string, unknown>): string {
   const prompt = params.prompt as AISDKPrompt | undefined
   if (!prompt || !Array.isArray(prompt)) return ""
   const lastUserMsg = prompt.filter((m) => m.role === "user").pop()
-  return lastUserMsg?.content
-    ?.filter((p: { type: string }) => p.type === "text")
-    .map((p: { text?: string }) => p.text ?? "")
-    .join("") ?? ""
+  return (
+    lastUserMsg?.content
+      ?.filter((p: { type: string }) => p.type === "text")
+      .map((p: { text?: string }) => p.text ?? "")
+      .join("") ?? ""
+  )
 }
 
 /**
@@ -333,7 +358,9 @@ export function safeCost(modelId: string, inputTokens: number, outputTokens: num
     return estimateCost(modelId, inputTokens, outputTokens).totalCost
   } catch {
     // Unknown model — use fallback pricing to keep budget checks functional
-    return (inputTokens / 1_000_000) * FALLBACK_INPUT_PER_MILLION +
-           (outputTokens / 1_000_000) * FALLBACK_OUTPUT_PER_MILLION
+    return (
+      (inputTokens / 1_000_000) * FALLBACK_INPUT_PER_MILLION +
+      (outputTokens / 1_000_000) * FALLBACK_OUTPUT_PER_MILLION
+    )
   }
 }

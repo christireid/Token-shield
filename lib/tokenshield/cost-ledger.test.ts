@@ -22,7 +22,12 @@ describe("CostLedger", () => {
 
   it("getSummary aggregates correctly", async () => {
     await ledger.record({ model: "gpt-4o-mini", inputTokens: 1000, outputTokens: 500, savings: {} })
-    await ledger.record({ model: "gpt-4o-mini", inputTokens: 2000, outputTokens: 1000, savings: {} })
+    await ledger.record({
+      model: "gpt-4o-mini",
+      inputTokens: 2000,
+      outputTokens: 1000,
+      savings: {},
+    })
     const summary = ledger.getSummary()
     expect(summary.totalCalls).toBe(2)
     expect(summary.totalSpent).toBeGreaterThan(0)
@@ -41,7 +46,9 @@ describe("CostLedger", () => {
 
   it("subscribe notifies on new entries", async () => {
     let notified = false
-    ledger.subscribe(() => { notified = true })
+    ledger.subscribe(() => {
+      notified = true
+    })
     await ledger.record({ model: "gpt-4o-mini", inputTokens: 100, outputTokens: 50, savings: {} })
     expect(notified).toBe(true)
   })

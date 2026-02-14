@@ -69,9 +69,27 @@ describe("Pipeline - execute", () => {
   it("runs stages in order", async () => {
     const order: string[] = []
     const pipeline = createPipeline(
-      { name: "first", execute: (ctx) => { order.push("first"); return ctx } },
-      { name: "second", execute: (ctx) => { order.push("second"); return ctx } },
-      { name: "third", execute: (ctx) => { order.push("third"); return ctx } },
+      {
+        name: "first",
+        execute: (ctx) => {
+          order.push("first")
+          return ctx
+        },
+      },
+      {
+        name: "second",
+        execute: (ctx) => {
+          order.push("second")
+          return ctx
+        },
+      },
+      {
+        name: "third",
+        execute: (ctx) => {
+          order.push("third")
+          return ctx
+        },
+      },
     )
     await pipeline.execute(makeCtx())
     expect(order).toEqual(["first", "second", "third"])
@@ -89,7 +107,13 @@ describe("Pipeline - execute", () => {
           return ctx
         },
       },
-      { name: "skipped", execute: (ctx) => { order.push("skipped"); return ctx } },
+      {
+        name: "skipped",
+        execute: (ctx) => {
+          order.push("skipped")
+          return ctx
+        },
+      },
     )
     const result = await pipeline.execute(makeCtx())
     expect(order).toEqual(["aborter"])
@@ -100,9 +124,7 @@ describe("Pipeline - execute", () => {
   it("calls beforeStage and afterStage hooks", async () => {
     const beforeStage = vi.fn()
     const afterStage = vi.fn()
-    const pipeline = createPipeline(
-      { name: "s1", execute: (ctx) => ctx },
-    )
+    const pipeline = createPipeline({ name: "s1", execute: (ctx) => ctx })
     pipeline.addHook({ beforeStage, afterStage })
     await pipeline.execute(makeCtx())
     expect(beforeStage).toHaveBeenCalledWith("s1", expect.any(Object))
@@ -128,11 +150,11 @@ describe("Pipeline - execute", () => {
   })
 
   it("swallows hook errors without aborting the pipeline", async () => {
-    const pipeline = createPipeline(
-      { name: "s1", execute: (ctx) => ctx },
-    )
+    const pipeline = createPipeline({ name: "s1", execute: (ctx) => ctx })
     pipeline.addHook({
-      beforeStage: () => { throw new Error("hook error") },
+      beforeStage: () => {
+        throw new Error("hook error")
+      },
     })
     const result = await pipeline.execute(makeCtx())
     expect(result.aborted).toBe(false)
@@ -307,9 +329,7 @@ describe("createRouterStage", () => {
   })
 
   it("skips routing if tierRouted is already set", () => {
-    const tiers = [
-      { modelId: "gpt-4o-mini", maxComplexity: 40 },
-    ]
+    const tiers = [{ modelId: "gpt-4o-mini", maxComplexity: 40 }]
     const stage = createRouterStage(tiers)
     const ctx = makeCtx({ modelId: "gpt-4o", meta: { tierRouted: true } })
     const result = stage.execute(ctx) as PipelineContext

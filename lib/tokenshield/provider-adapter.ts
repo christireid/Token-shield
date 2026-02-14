@@ -43,7 +43,7 @@ export interface AdapterConfig {
 export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   maxRetries: number,
-  baseDelayMs: number
+  baseDelayMs: number,
 ): Promise<T> {
   let lastError: unknown
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -83,19 +83,29 @@ export class ProviderAdapter {
     for (const p of config.providers) {
       this.configs.set(p.name, p)
       this.healthMap.set(p.name, {
-        name: p.name, healthy: p.healthy !== false,
-        consecutiveFailures: 0, totalRequests: 0, totalFailures: 0, avgLatencyMs: 0,
+        name: p.name,
+        healthy: p.healthy !== false,
+        consecutiveFailures: 0,
+        totalRequests: 0,
+        totalFailures: 0,
+        avgLatencyMs: 0,
       })
     }
   }
 
   selectModel(
-    preferredModel?: string, inputTokens = 1000, outputTokens = 500
+    preferredModel?: string,
+    inputTokens = 1000,
+    outputTokens = 500,
   ): { provider: ProviderName; model: string; estimatedCost: number } {
     if (preferredModel) {
       const prov = this.getProviderForModel(preferredModel)
       if (prov && this.isHealthy(prov)) {
-        return { provider: prov, model: preferredModel, estimatedCost: this.cost(preferredModel, inputTokens, outputTokens) }
+        return {
+          provider: prov,
+          model: preferredModel,
+          estimatedCost: this.cost(preferredModel, inputTokens, outputTokens),
+        }
       }
     }
     const ordered = this.orderProviders(inputTokens, outputTokens)
@@ -103,14 +113,19 @@ export class ProviderAdapter {
       if (this.isHealthy(entry.provider)) {
         if (preferredModel) {
           const from = this.getProviderForModel(preferredModel)
-          if (from && from !== entry.provider) this.onFallback?.(from, entry.provider, "preferred provider unhealthy")
+          if (from && from !== entry.provider)
+            this.onFallback?.(from, entry.provider, "preferred provider unhealthy")
         }
         return entry
       }
     }
     // All unhealthy — return first provider's first model
     const first = Array.from(this.configs.values())[0]
-    return { provider: first.name, model: first.models[0], estimatedCost: this.cost(first.models[0], inputTokens, outputTokens) }
+    return {
+      provider: first.name,
+      model: first.models[0],
+      estimatedCost: this.cost(first.models[0], inputTokens, outputTokens),
+    }
   }
 
   recordSuccess(provider: ProviderName, latencyMs: number): void {
@@ -120,7 +135,8 @@ export class ProviderAdapter {
     h.totalRequests++
     h.consecutiveFailures = 0
     h.healthy = true
-    h.avgLatencyMs = h.avgLatencyMs === 0 ? latencyMs : h.avgLatencyMs * (1 - EMA_ALPHA) + latencyMs * EMA_ALPHA
+    h.avgLatencyMs =
+      h.avgLatencyMs === 0 ? latencyMs : h.avgLatencyMs * (1 - EMA_ALPHA) + latencyMs * EMA_ALPHA
     if (wasUnhealthy) this.onHealthChange?.(h)
   }
 
@@ -141,23 +157,35 @@ export class ProviderAdapter {
       const timer = setTimeout(() => {
         this.recoveryTimers.delete(provider)
         const cur = this.healthMap.get(provider)
-        if (cur && !cur.healthy) { cur.healthy = true; this.onHealthChange?.(cur) }
+        if (cur && !cur.healthy) {
+          cur.healthy = true
+          this.onHealthChange?.(cur)
+        }
       }, this.recoveryMs)
       this.recoveryTimers.set(provider, timer)
     }
   }
 
-  getHealth(): ProviderHealth[] { return Array.from(this.healthMap.values()) }
+  getHealth(): ProviderHealth[] {
+    return Array.from(this.healthMap.values())
+  }
 
-  getProviderHealth(name: ProviderName): ProviderHealth | undefined { return this.healthMap.get(name) }
+  getProviderHealth(name: ProviderName): ProviderHealth | undefined {
+    return this.healthMap.get(name)
+  }
 
   resetHealth(): void {
     // Clear all recovery timers to prevent stale callbacks
     for (const timer of this.recoveryTimers.values()) clearTimeout(timer)
     this.recoveryTimers.clear()
     Array.from(this.healthMap.values()).forEach((h) => {
-      h.healthy = true; h.consecutiveFailures = 0; h.totalRequests = 0
-      h.totalFailures = 0; h.avgLatencyMs = 0; h.lastError = undefined; h.lastErrorTime = undefined
+      h.healthy = true
+      h.consecutiveFailures = 0
+      h.totalRequests = 0
+      h.totalFailures = 0
+      h.avgLatencyMs = 0
+      h.lastError = undefined
+      h.lastErrorTime = undefined
     })
   }
 
@@ -181,24 +209,44 @@ export class ProviderAdapter {
   }
 
   private cost(modelId: string, inp: number, out: number): number {
-    try { return estimateCost(modelId, inp, out).totalCost } catch { return Infinity }
+    try {
+      return estimateCost(modelId, inp, out).totalCost
+    } catch {
+      return Infinity
+    }
   }
 
-  private orderProviders(inp: number, out: number): { provider: ProviderName; model: string; estimatedCost: number }[] {
+  private orderProviders(
+    inp: number,
+    out: number,
+  ): { provider: ProviderName; model: string; estimatedCost: number }[] {
     const entries = Array.from(this.configs.entries()).map(([name, cfg]) => {
-      let bestModel = cfg.models[0], bestCost = this.cost(bestModel, inp, out)
+      let bestModel = cfg.models[0],
+        bestCost = this.cost(bestModel, inp, out)
       for (let i = 1; i < cfg.models.length; i++) {
         const c = this.cost(cfg.models[i], inp, out)
-        if (c < bestCost) { bestCost = c; bestModel = cfg.models[i] }
+        if (c < bestCost) {
+          bestCost = c
+          bestModel = cfg.models[i]
+        }
       }
-      return { provider: name, model: bestModel, estimatedCost: bestCost, priority: cfg.priority ?? 0 }
+      return {
+        provider: name,
+        model: bestModel,
+        estimatedCost: bestCost,
+        priority: cfg.priority ?? 0,
+      }
     })
     if (this.strategy === "cost") {
       entries.sort((a, b) => a.estimatedCost - b.estimatedCost)
     } else if (this.strategy === "round-robin") {
       const idx = this.rrIndex++ % entries.length
       const rotated = entries.slice(idx).concat(entries.slice(0, idx))
-      return rotated.map(({ provider, model, estimatedCost }) => ({ provider, model, estimatedCost }))
+      return rotated.map(({ provider, model, estimatedCost }) => ({
+        provider,
+        model,
+        estimatedCost,
+      }))
     } else {
       entries.sort((a, b) => a.priority - b.priority)
     }

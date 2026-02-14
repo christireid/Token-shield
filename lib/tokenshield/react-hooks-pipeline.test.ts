@@ -211,10 +211,7 @@ describe("react-hooks-pipeline", () => {
       // When latencySamples = 0, avgLatencyMs should be 0
       const cumulativeLatencyMs = 0
       const latencySamples = 0
-      const avgLatencyMs =
-        latencySamples > 0
-          ? Math.round(cumulativeLatencyMs / latencySamples)
-          : 0
+      const avgLatencyMs = latencySamples > 0 ? Math.round(cumulativeLatencyMs / latencySamples) : 0
 
       expect(avgLatencyMs).toBe(0)
     })
@@ -223,8 +220,7 @@ describe("react-hooks-pipeline", () => {
       // When totalRequests = 0, cacheHitRate should be 0
       const totalRequests = 0
       const totalCacheHits = 0
-      const cacheHitRate =
-        totalRequests > 0 ? totalCacheHits / totalRequests : 0
+      const cacheHitRate = totalRequests > 0 ? totalCacheHits / totalRequests : 0
 
       expect(cacheHitRate).toBe(0)
     })
