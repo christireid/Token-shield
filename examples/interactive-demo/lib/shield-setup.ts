@@ -1,13 +1,13 @@
-import { tokenShieldMiddleware } from "@tokenshield/ai-sdk";
+import { tokenShieldMiddleware } from "@tokenshield/ai-sdk"
 
 // Initialize the shield with all interactive modules enabled
 export const shield = tokenShieldMiddleware({
   modules: {
-    cache: true,      // Enable semantic caching
-    guard: true,      // Enable rate limiting
-    ledger: true,     // Enable cost tracking
-    breaker: true,    // Enable circuit breaker
-    context: true,    // Enable context compression
+    cache: true, // Enable semantic caching
+    guard: true, // Enable rate limiting
+    ledger: true, // Enable cost tracking
+    breaker: true, // Enable circuit breaker
+    context: true, // Enable context compression
   },
   guard: {
     maxCostPerHour: 5.0, // $5/hr limit for demo
@@ -20,12 +20,12 @@ export const shield = tokenShieldMiddleware({
   userBudget: {
     budgets: {
       defaultDailyBudget: 1.0, // $1.00 per user per day
-    }
-  }
-});
+    },
+  },
+})
 
 // Mock user database for the demo
 export const users = [
   { id: "user_pro", plan: "pro", name: "Pro User (Alice)" },
   { id: "user_free", plan: "free", name: "Free User (Bob)" },
-];
+]
