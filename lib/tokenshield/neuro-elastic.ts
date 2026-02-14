@@ -122,7 +122,9 @@ export class NeuroElasticEngine {
       }
     }
 
-    // Dynamic thresholding: stricter for short prompts (< 10 chars get +0.05)
+    // Dynamic thresholding: stricter for short prompts because they produce
+    // fewer trigrams, reducing encoding uniqueness and increasing false-positive
+    // risk. A +0.05 penalty prevents short queries like "help" from matching "hi".
     const effectiveThreshold = this.config.threshold + (prompt.length < 10 ? 0.05 : 0)
 
     if (bestScore >= effectiveThreshold && bestMatch) {

@@ -96,7 +96,11 @@ export class CostLedger {
         }
       }
 
-      // Setup cross-tab synchronization
+      // Cross-tab synchronization via BroadcastChannel. When one tab records
+      // a ledger entry, other tabs merge it into their in-memory state so
+      // dashboards stay up-to-date across browser tabs. Entries are deduplicated
+      // by timestamp+model in mergeEntry(). Tabs that go offline simply miss
+      // messages and resync from IDB on next page load.
       try {
         this.channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME)
         this.channel.onmessage = (event) => {
@@ -105,7 +109,7 @@ export class CostLedger {
           }
         }
       } catch {
-        // BroadcastChannel not supported
+        // BroadcastChannel not supported (SSR, Workers, or older browsers)
       }
     }
   }

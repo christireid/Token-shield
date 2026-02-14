@@ -72,7 +72,9 @@ export async function callOpenAI(
     throw new Error(err.error ?? `OpenAI API error: ${res.status}`)
   }
 
-  const data = await res.json()
+  const data = await res.json().catch(() => {
+    throw new Error(`OpenAI API returned invalid JSON (status ${res.status})`)
+  })
   // OpenAI returns prompt_tokens and completion_tokens; fallback to input/output tokens if present
   const promptTokens = data.usage?.prompt_tokens ?? data.usage?.input_tokens ?? 0
   const completionTokens = data.usage?.completion_tokens ?? data.usage?.output_tokens ?? 0
@@ -125,7 +127,9 @@ export async function callAnthropic(
     throw new Error(err.error ?? `Anthropic API error: ${res.status}`)
   }
 
-  const data = await res.json()
+  const data = await res.json().catch(() => {
+    throw new Error(`Anthropic API returned invalid JSON (status ${res.status})`)
+  })
   const inputTokens = data.usage?.input_tokens ?? 0
   const outputTokens = data.usage?.output_tokens ?? 0
   const totalTokens = data.usage?.total_tokens ?? inputTokens + outputTokens
@@ -172,7 +176,9 @@ export async function callGoogle(
     throw new Error(err.error ?? `Google API error: ${res.status}`)
   }
 
-  const data = await res.json()
+  const data = await res.json().catch(() => {
+    throw new Error(`Google API returned invalid JSON (status ${res.status})`)
+  })
   const inputTokens = data.usage?.input_tokens ?? 0
   const outputTokens = data.usage?.output_tokens ?? 0
   const totalTokens = data.usage?.total_tokens ?? inputTokens + outputTokens

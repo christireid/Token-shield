@@ -293,6 +293,42 @@ describe("wrapGenerate", () => {
       ).rejects.toThrow("API failure")
       shield.dispose()
     })
+
+    it("tolerates cache store failure gracefully", async () => {
+      const shield = tokenShieldMiddleware({
+        modules: {
+          guard: false,
+          cache: true,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
+        cache: { maxEntries: 10 },
+      })
+
+      // Sabotage the cache store method to throw
+      vi.spyOn(shield.cache!, "store").mockRejectedValue(new Error("IDB write failed"))
+
+      const params = {
+        modelId: "gpt-4o-mini",
+        prompt: makePrompt([{ role: "user", content: "Cache store failure test" }]),
+      }
+      const transformed = await shield.transformParams({ params })
+
+      // Should NOT throw — cache failure is non-fatal
+      const result = await shield.wrapGenerate({
+        doGenerate: vi.fn().mockResolvedValue({
+          text: "Response despite cache failure",
+          usage: { promptTokens: 10, completionTokens: 5 },
+          finishReason: "stop",
+        }),
+        params: transformed,
+      })
+
+      expect(result).toHaveProperty("text", "Response despite cache failure")
+      shield.dispose()
+    })
   })
 })
 
@@ -532,6 +568,54 @@ describe("wrapStream", () => {
           params: transformed,
         }),
       ).rejects.toThrow("Stream failure")
+      shield.dispose()
+    })
+
+    it("emits stream:abort on mid-stream error and still records usage", async () => {
+      const abortEvents: unknown[] = []
+      const shield = tokenShieldMiddleware({
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
+      })
+      shield.events.on("stream:abort", (data) => abortEvents.push(data))
+
+      const params = {
+        modelId: "gpt-4o-mini",
+        prompt: makePrompt([{ role: "user", content: "Abort stream" }]),
+      }
+      const transformed = await shield.transformParams({ params })
+
+      // Stream that errors mid-read
+      const errorStream = new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: "text-delta", textDelta: "partial " })
+          controller.error(new Error("connection lost"))
+        },
+      })
+
+      const result = await shield.wrapStream({
+        doStream: vi.fn().mockResolvedValue({ stream: errorStream }),
+        params: transformed,
+      })
+
+      const reader = ((result as Record<string, unknown>).stream as ReadableStream).getReader()
+      // Read until error
+      try {
+        while (true) {
+          const { done } = await reader.read()
+          if (done) break
+        }
+      } catch {
+        // Expected: stream error
+      }
+
+      expect(abortEvents.length).toBe(1)
       shield.dispose()
     })
   })

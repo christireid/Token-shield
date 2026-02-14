@@ -183,13 +183,6 @@ export function tokenShieldMiddleware(
     forwardingHandlers.push({ name, handler })
   }
 
-  // Hydrate persisted budget data from IndexedDB
-  if (userBudgetManager && config.userBudget?.budgets.persist) {
-    userBudgetManager.hydrate().catch(() => {
-      // Hydration failed silently — budget starts from $0
-    })
-  }
-
   // Initialize logger if configured
   const log: TokenShieldLogger | null =
     config.logger instanceof TokenShieldLogger
@@ -207,6 +200,15 @@ export function tokenShieldMiddleware(
   // Auto-connect logger to the event bus for structured observability
   if (log) {
     log.connectEventBus(instanceEvents)
+  }
+
+  // Hydrate persisted budget data from IndexedDB (after logger init so failures are logged)
+  if (userBudgetManager && config.userBudget?.budgets.persist) {
+    userBudgetManager.hydrate().catch((err) => {
+      log?.warn("budget", "Failed to hydrate budget data — starting from $0", {
+        error: err instanceof Error ? err.message : String(err),
+      })
+    })
   }
 
   // Initialize provider adapter if configured

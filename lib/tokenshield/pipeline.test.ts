@@ -66,6 +66,27 @@ describe("Pipeline - addStage / removeStage / getStageNames", () => {
 // ---------------------------------------------------------------------------
 
 describe("Pipeline - execute", () => {
+  it("handles empty pipeline gracefully", async () => {
+    const pipeline = new Pipeline()
+    const ctx = makeCtx()
+    const result = await pipeline.execute(ctx)
+    expect(result.aborted).toBe(false)
+    expect(result.lastUserText).toBe("Hello")
+  })
+
+  it("supports async stages (Promise return)", async () => {
+    const pipeline = createPipeline({
+      name: "async",
+      async execute(ctx) {
+        await new Promise((r) => setTimeout(r, 1))
+        ctx.meta.asyncDone = true
+        return ctx
+      },
+    })
+    const result = await pipeline.execute(makeCtx())
+    expect(result.meta.asyncDone).toBe(true)
+  })
+
   it("runs stages in order", async () => {
     const order: string[] = []
     const pipeline = createPipeline(
@@ -158,6 +179,59 @@ describe("Pipeline - execute", () => {
     })
     const result = await pipeline.execute(makeCtx())
     expect(result.aborted).toBe(false)
+  })
+
+  it("swallows afterStage hook errors", async () => {
+    const pipeline = createPipeline(
+      { name: "s1", execute: (ctx) => ctx },
+      {
+        name: "s2",
+        execute: (ctx) => {
+          ctx.meta.s2Ran = true
+          return ctx
+        },
+      },
+    )
+    pipeline.addHook({
+      afterStage: () => {
+        throw new Error("after hook error")
+      },
+    })
+    const result = await pipeline.execute(makeCtx())
+    expect(result.aborted).toBe(false)
+    expect(result.meta.s2Ran).toBe(true)
+  })
+
+  it("swallows onError hook errors", async () => {
+    const pipeline = createPipeline({
+      name: "bad",
+      execute: () => {
+        throw new Error("stage error")
+      },
+    })
+    pipeline.addHook({
+      onError: () => {
+        throw new Error("onError hook itself threw")
+      },
+    })
+    const result = await pipeline.execute(makeCtx())
+    expect(result.aborted).toBe(true)
+    expect(result.abortReason).toContain("stage error")
+  })
+
+  it("calls multiple hooks in order", async () => {
+    const order: string[] = []
+    const pipeline = createPipeline({ name: "s", execute: (ctx) => ctx })
+    pipeline.addHook({ beforeStage: () => order.push("hook1-before") })
+    pipeline.addHook({ beforeStage: () => order.push("hook2-before") })
+    await pipeline.execute(makeCtx())
+    expect(order).toEqual(["hook1-before", "hook2-before"])
+  })
+
+  it("addHook is chainable", () => {
+    const pipeline = new Pipeline()
+    const result = pipeline.addHook({ beforeStage: vi.fn() })
+    expect(result).toBe(pipeline)
   })
 })
 

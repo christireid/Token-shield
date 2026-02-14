@@ -32,6 +32,7 @@ export function buildWrapGenerate(ctx: MiddlewareContext) {
     anomalyDetector,
     instanceEvents,
     adapter,
+    log,
   } = ctx
 
   return async ({
@@ -132,7 +133,11 @@ export function buildWrapGenerate(ctx: MiddlewareContext) {
       if (cachedUserText) {
         cache
           .store(cachedUserText, responseText, modelId, inputTokens, outputTokens)
-          .catch(() => {})
+          .catch((err) => {
+            log?.debug("cache", "Failed to store response", {
+              error: err instanceof Error ? err.message : String(err),
+            })
+          })
       }
     }
 
@@ -239,6 +244,7 @@ export function buildWrapStream(ctx: MiddlewareContext) {
     anomalyDetector,
     instanceEvents,
     adapter,
+    log,
   } = ctx
 
   return async ({
@@ -350,7 +356,11 @@ export function buildWrapStream(ctx: MiddlewareContext) {
         if (cachedUserText && responseText) {
           cache
             .store(cachedUserText, responseText, modelId, usage.inputTokens, usage.outputTokens)
-            .catch(() => {})
+            .catch((err) => {
+              log?.debug("cache", "Failed to store streamed response", {
+                error: err instanceof Error ? err.message : String(err),
+              })
+            })
         }
       }
 
@@ -376,7 +386,11 @@ export function buildWrapStream(ctx: MiddlewareContext) {
             feature: config.ledger?.feature,
             latencyMs,
           })
-          .catch(() => {})
+          .catch((err) => {
+            log?.debug("ledger", "Failed to record stream usage", {
+              error: err instanceof Error ? err.message : String(err),
+            })
+          })
       }
 
       const streamPerRequestCost = safeCost(modelId, usage.inputTokens, usage.outputTokens)

@@ -36,9 +36,10 @@ export const SHIELD_META = Symbol("tokenshield")
 export const MSG_OVERHEAD_TOKENS = 5
 
 /**
- * Fallback pricing used when a model is not in MODEL_PRICING.
- * Uses GPT-4o-mini rates as a conservative middle-ground estimate
- * so that budget enforcement and cost tracking still function.
+ * Fallback pricing for unknown models not found in MODEL_PRICING.
+ * Uses GPT-4o-mini rates ($0.15/1M input, $0.60/1M output) as a conservative
+ * middle-ground estimate. This ensures budget enforcement and cost tracking
+ * remain functional for custom, fine-tuned, or newly released models.
  */
 export const FALLBACK_INPUT_PER_MILLION = 0.15
 export const FALLBACK_OUTPUT_PER_MILLION = 0.6
