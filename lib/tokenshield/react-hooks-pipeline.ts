@@ -12,7 +12,7 @@ import { estimateCost } from "./cost-estimator"
 import { smartFit, type Message, type ContextBudget } from "./context-manager"
 import { calculateSavings } from "./cost-estimator"
 import type { GuardResult } from "./request-guard"
-import type { TokenShieldEvents } from "./event-bus"
+import { subscribeToEvent, type TokenShieldEvents } from "./event-bus"
 import type { ProviderAdapter, ProviderHealth } from "./provider-adapter"
 import { useTokenShield } from "./react-context"
 
@@ -214,10 +214,7 @@ export function useEventLog(maxEntries = 50): EventLogEntry[] {
           return next.length > maxEntries ? next.slice(0, maxEntries) : next
         })
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      eventBus.on(eventType, handler as any)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      handlers.push(() => eventBus.off(eventType, handler as any))
+      handlers.push(subscribeToEvent(eventBus, eventType, handler as never))
     }
 
     return () => {
@@ -358,10 +355,7 @@ export function usePipelineMetrics(): PipelineMetrics {
 
         updateMetrics()
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      eventBus.on(eventType, handler as any)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      handlers.push(() => eventBus.off(eventType, handler as any))
+      handlers.push(subscribeToEvent(eventBus, eventType, handler as never))
     }
 
     return () => {

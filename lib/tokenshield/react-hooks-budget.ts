@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from "react"
 import { CostCircuitBreaker } from "./circuit-breaker"
 import { UserBudgetManager, type UserBudgetStatus } from "./user-budget-manager"
+import { subscribeToEvent } from "./event-bus"
 import { useTokenShield } from "./react-context"
 
 // -------------------------------------------------------
@@ -281,10 +282,7 @@ export function useSessionSavings(): SessionSavingsState {
         requestCount: prev.requestCount + 1,
       }))
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    eventBus.on("ledger:entry", handler as any)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return () => eventBus.off("ledger:entry", handler as any)
+    return subscribeToEvent(eventBus, "ledger:entry", handler as never)
   }, [eventBus])
 
   return state

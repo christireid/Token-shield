@@ -135,6 +135,15 @@ const DEFAULT_CONFIG: BreakerConfig = {
   storageKey: "tokenshield-breaker",
 }
 
+/** Warning threshold: fire warnings when spend reaches this fraction of the limit */
+const WARNING_THRESHOLD = 0.8
+/** One hour in milliseconds */
+const ONE_HOUR_MS = 60 * 60 * 1000
+/** One day in milliseconds */
+const ONE_DAY_MS = 24 * 60 * 60 * 1000
+/** Thirty days in milliseconds */
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+
 /** Maximum spend records kept in memory (prevents unbounded growth in high-throughput scenarios) */
 const MAX_BREAKER_RECORDS = 50_000
 
@@ -173,13 +182,13 @@ export class CostCircuitBreaker {
 
     // Auto-reset time-window warnings when spend drops below 80% threshold
     // (session warnings never auto-reset — they clear on explicit reset() only)
-    if (limits.perHour != null && status.spend.lastHour < limits.perHour * 0.8) {
+    if (limits.perHour != null && status.spend.lastHour < limits.perHour * WARNING_THRESHOLD) {
       this.warningFired.delete("hour-warning")
     }
-    if (limits.perDay != null && status.spend.lastDay < limits.perDay * 0.8) {
+    if (limits.perDay != null && status.spend.lastDay < limits.perDay * WARNING_THRESHOLD) {
       this.warningFired.delete("day-warning")
     }
-    if (limits.perMonth != null && status.spend.lastMonth < limits.perMonth * 0.8) {
+    if (limits.perMonth != null && status.spend.lastMonth < limits.perMonth * WARNING_THRESHOLD) {
       this.warningFired.delete("month-warning")
     }
 
@@ -217,7 +226,7 @@ export class CostCircuitBreaker {
 
       // Fire warning at 80%
       const warningKey = `${c.type}-warning`
-      if (projectedSpend >= c.limit * 0.8 && !this.warningFired.has(warningKey)) {
+      if (projectedSpend >= c.limit * WARNING_THRESHOLD && !this.warningFired.has(warningKey)) {
         this.warningFired.add(warningKey)
         this.config.onWarning?.({
           limitType: c.type,
@@ -279,7 +288,7 @@ export class CostCircuitBreaker {
     })
 
     // Clean up old records (keep last 30 days) + enforce hard cap
-    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
+    const thirtyDaysAgo = Date.now() - THIRTY_DAYS_MS
     this.records = this.records.filter((r) => r.timestamp > thirtyDaysAgo)
     if (this.records.length > MAX_BREAKER_RECORDS) {
       this.records = this.records.slice(-MAX_BREAKER_RECORDS)
@@ -293,9 +302,9 @@ export class CostCircuitBreaker {
    */
   getStatus(): BreakerStatus {
     const now = Date.now()
-    const oneHourAgo = now - 60 * 60 * 1000
-    const oneDayAgo = now - 24 * 60 * 60 * 1000
-    const oneMonthAgo = now - 30 * 24 * 60 * 60 * 1000
+    const oneHourAgo = now - ONE_HOUR_MS
+    const oneDayAgo = now - ONE_DAY_MS
+    const oneMonthAgo = now - THIRTY_DAYS_MS
 
     let sessionSpend = 0
     let hourSpend = 0

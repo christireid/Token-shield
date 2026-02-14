@@ -9,11 +9,10 @@
 import { MODEL_PRICING } from "./cost-estimator"
 import { StreamTokenTracker } from "./stream-tracker"
 import {
-  SHIELD_META,
   extractLastUserText,
   safeCost,
+  getShieldMeta,
   type MiddlewareContext,
-  type ShieldMeta,
 } from "./middleware-types"
 
 /**
@@ -42,7 +41,7 @@ export function buildWrapGenerate(ctx: MiddlewareContext) {
     doGenerate: () => Promise<Record<string, unknown>>
     params: Record<string, unknown>
   }) => {
-    const meta = (params as Record<string | symbol, unknown>)[SHIELD_META] as ShieldMeta | undefined
+    const meta = getShieldMeta(params)
 
     // Cache hit: return cached response without calling the model
     if (meta?.cacheHit) {
@@ -254,7 +253,7 @@ export function buildWrapStream(ctx: MiddlewareContext) {
     doStream: () => Promise<Record<string, unknown>>
     params: Record<string, unknown>
   }) => {
-    const meta = (params as Record<string | symbol, unknown>)[SHIELD_META] as ShieldMeta | undefined
+    const meta = getShieldMeta(params)
 
     // Cache hit: return a simulated stream without calling the model
     if (meta?.cacheHit) {

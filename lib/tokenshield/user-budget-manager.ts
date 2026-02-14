@@ -36,6 +36,9 @@ import {
   evictStaleWarnings,
 } from "./user-budget-types"
 
+/** Warning threshold: fire warnings when spend reaches this fraction of the limit */
+const WARNING_THRESHOLD = 0.8
+
 // Re-export all public types so existing imports from "./user-budget-manager" still work
 export type {
   UserBudgetTier,
@@ -152,7 +155,10 @@ export class UserBudgetManager {
       if (dailyWarningTime !== undefined && now - dailyWarningTime > ONE_DAY_MS) {
         this.warningFired.delete(dailyWarningKey)
       }
-      if (projectedDaily >= status.limits.daily * 0.8 && !this.warningFired.has(dailyWarningKey)) {
+      if (
+        projectedDaily >= status.limits.daily * WARNING_THRESHOLD &&
+        !this.warningFired.has(dailyWarningKey)
+      ) {
         this.warningFired.set(dailyWarningKey, now)
         const warningEvent = {
           limitType: "daily" as const,
@@ -203,7 +209,7 @@ export class UserBudgetManager {
         this.warningFired.delete(monthlyWarningKey)
       }
       if (
-        projectedMonthly >= status.limits.monthly * 0.8 &&
+        projectedMonthly >= status.limits.monthly * WARNING_THRESHOLD &&
         !this.warningFired.has(monthlyWarningKey)
       ) {
         this.warningFired.set(monthlyWarningKey, now)

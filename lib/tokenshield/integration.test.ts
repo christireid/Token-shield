@@ -826,6 +826,7 @@ describe("All index.ts exports are importable", () => {
       // Event Bus
       "shieldEvents",
       "createEventBus",
+      "subscribeToEvent",
       // Errors
       "TokenShieldError",
       "TokenShieldBlockedError",

@@ -81,6 +81,19 @@ const DEFAULT_CONFIG: GuardConfig = {
   deduplicateWindow: 0,
 }
 
+/** Hard cap on tracked request timestamps to prevent unbounded growth during bursts */
+const MAX_TRACKED_TIMESTAMPS = 200
+/** In-flight map size threshold that triggers stale entry eviction */
+const IN_FLIGHT_EVICTION_THRESHOLD = 50
+/** Entries older than this are considered stale and evicted (5 minutes) */
+const STALE_REQUEST_AGE_MS = 5 * 60 * 1000
+/** Hard cap on cost log entries to prevent unbounded growth in high-throughput */
+const MAX_COST_LOG_ENTRIES = 500
+/** One minute in milliseconds */
+const ONE_MINUTE_MS = 60_000
+/** One hour in milliseconds */
+const ONE_HOUR_MS = 3_600_000
+
 export class RequestGuard {
   private config: GuardConfig
   private lastRequestTime = 0
@@ -180,7 +193,7 @@ export class RequestGuard {
     }
 
     // 2. Rate limit check
-    const oneMinuteAgo = now - 60_000
+    const oneMinuteAgo = now - ONE_MINUTE_MS
     this.requestTimestamps = this.requestTimestamps.filter((t) => t > oneMinuteAgo)
     if (this.requestTimestamps.length >= this.config.maxRequestsPerMinute) {
       this.blockedCount++
@@ -231,8 +244,8 @@ export class RequestGuard {
     this.lastRequestTime = now
     this.requestTimestamps.push(now)
     // Hard cap: keep only last 200 timestamps to prevent growth during bursts
-    if (this.requestTimestamps.length > 200) {
-      this.requestTimestamps = this.requestTimestamps.slice(-200)
+    if (this.requestTimestamps.length > MAX_TRACKED_TIMESTAMPS) {
+      this.requestTimestamps = this.requestTimestamps.slice(-MAX_TRACKED_TIMESTAMPS)
     }
     this.blockedCount = 0
     this.totalAllowed++
@@ -276,8 +289,8 @@ export class RequestGuard {
     })
 
     // Evict stale in-flight entries older than 5 minutes (never completed)
-    if (this.inFlight.size > 50) {
-      const staleThreshold = Date.now() - 300_000
+    if (this.inFlight.size > IN_FLIGHT_EVICTION_THRESHOLD) {
+      const staleThreshold = Date.now() - STALE_REQUEST_AGE_MS
       for (const [key, req] of this.inFlight) {
         if (req.startedAt < staleThreshold) {
           req.controller.abort()
@@ -307,8 +320,8 @@ export class RequestGuard {
     const cost = estimateCost(modelId ?? this.config.modelId, actualInputTokens, actualOutputTokens)
     this.costLog.push({ timestamp: Date.now(), cost: cost.totalCost })
     // Hard cap: keep only last 500 entries to prevent growth in high-throughput
-    if (this.costLog.length > 500) {
-      this.costLog = this.costLog.slice(-500)
+    if (this.costLog.length > MAX_COST_LOG_ENTRIES) {
+      this.costLog = this.costLog.slice(-MAX_COST_LOG_ENTRIES)
     }
   }
 
@@ -368,7 +381,7 @@ export class RequestGuard {
   }
 
   private getCurrentHourlySpend(): number {
-    const oneHourAgo = Date.now() - 3_600_000
+    const oneHourAgo = Date.now() - ONE_HOUR_MS
     this.costLog = this.costLog.filter((c) => c.timestamp > oneHourAgo)
     return this.costLog.reduce((sum, c) => sum + c.cost, 0)
   }
@@ -385,7 +398,7 @@ export class RequestGuard {
     currentHourlySpend: number
     inFlightCount: number
   } {
-    const oneMinuteAgo = Date.now() - 60_000
+    const oneMinuteAgo = Date.now() - ONE_MINUTE_MS
     const total = this.totalBlocked + this.totalAllowed
     return {
       totalBlocked: this.totalBlocked,
@@ -407,8 +420,8 @@ export class RequestGuard {
     requestsLastMinute: number
     currentHourlySpend: number
   } {
-    const oneMinuteAgo = Date.now() - 60_000
-    const oneHourAgo = Date.now() - 3_600_000
+    const oneMinuteAgo = Date.now() - ONE_MINUTE_MS
+    const oneHourAgo = Date.now() - ONE_HOUR_MS
     return {
       lastRequestTime: this.lastRequestTime,
       requestsLastMinute: this.requestTimestamps.filter((t) => t > oneMinuteAgo).length,

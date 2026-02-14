@@ -297,6 +297,14 @@ export interface ShieldMeta {
   lastUserText?: string
 }
 
+/**
+ * Extract ShieldMeta from params without double type assertion at every callsite.
+ * Replaces the repeated `(params as Record<string | symbol, unknown>)[SHIELD_META] as ShieldMeta | undefined` pattern.
+ */
+export function getShieldMeta(params: Record<string, unknown>): ShieldMeta | undefined {
+  return (params as Record<string | symbol, unknown>)[SHIELD_META] as ShieldMeta | undefined
+}
+
 /** AI SDK prompt type used internally for type-safe extraction */
 export type AISDKPrompt = Array<{ role: string; content: Array<{ type: string; text?: string }> }>
 

@@ -203,7 +203,13 @@ export {
 } from "./pricing-registry"
 
 // Event Bus
-export { shieldEvents, createEventBus, type TokenShieldEvents } from "./event-bus"
+export {
+  shieldEvents,
+  createEventBus,
+  subscribeToEvent,
+  type EventBus,
+  type TokenShieldEvents,
+} from "./event-bus"
 
 // Typed Error Hierarchy
 export {

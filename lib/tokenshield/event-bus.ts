@@ -39,8 +39,30 @@ export type TokenShieldEvents = {
   "anomaly:detected": AnomalyEvent
 }
 
-export const shieldEvents = mitt<TokenShieldEvents>()
+export type EventBus = ReturnType<typeof mitt<TokenShieldEvents>>
 
-export function createEventBus() {
+export const shieldEvents: EventBus = mitt<TokenShieldEvents>()
+
+export function createEventBus(): EventBus {
   return mitt<TokenShieldEvents>()
+}
+
+/**
+ * Type-safe event subscription that handles the dynamic event name union narrowing
+ * inherent to mitt. Centralizes the unavoidable cast in one place so consumers
+ * don't need per-callsite eslint-disable comments.
+ *
+ * Returns an unsubscribe function for easy cleanup.
+ */
+export function subscribeToEvent(
+  bus: EventBus,
+  name: keyof TokenShieldEvents,
+  handler: (data: never) => void,
+): () => void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  bus.on(name, handler as any)
+  return () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    bus.off(name, handler as any)
+  }
 }
