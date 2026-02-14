@@ -32,6 +32,10 @@ export const ERROR_CODES = {
   CRYPTO_KEY_DERIVATION_FAILED: "CRYPTO_KEY_DERIVATION_FAILED",
   CRYPTO_ENCRYPTION_FAILED: "CRYPTO_ENCRYPTION_FAILED",
   CRYPTO_DECRYPTION_FAILED: "CRYPTO_DECRYPTION_FAILED",
+
+  // API errors
+  API_REQUEST_FAILED: "API_REQUEST_FAILED",
+  API_INVALID_RESPONSE: "API_INVALID_RESPONSE",
 } as const
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES]
@@ -100,6 +104,25 @@ export class TokenShieldCryptoError extends TokenShieldError {
   constructor(message: string, code: ErrorCode = ERROR_CODES.CRYPTO_ENCRYPTION_FAILED) {
     super(message, code)
     this.name = "TokenShieldCryptoError"
+    Object.setPrototypeOf(this, new.target.prototype)
+  }
+}
+
+/** Thrown when an API call to a provider fails. */
+export class TokenShieldAPIError extends TokenShieldError {
+  readonly provider: string
+  readonly statusCode?: number
+
+  constructor(
+    message: string,
+    provider: string,
+    statusCode?: number,
+    code: ErrorCode = ERROR_CODES.API_REQUEST_FAILED,
+  ) {
+    super(message, code)
+    this.name = "TokenShieldAPIError"
+    this.provider = provider
+    this.statusCode = statusCode
     Object.setPrototypeOf(this, new.target.prototype)
   }
 }

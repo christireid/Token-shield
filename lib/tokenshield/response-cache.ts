@@ -239,35 +239,36 @@ export class ResponseCache {
     }
 
     // 2. Exact match from IDB
-    try {
-      const store = this.getStore()
-      if (!store) throw new Error("no idb")
-      const idbHit = await get<CacheEntry>(key, store)
-      if (idbHit) {
-        if (Date.now() - idbHit.createdAt < this.config.ttlMs) {
-          // Verify normalized prompt matches to guard against hash collisions
-          if (idbHit.normalizedKey === normalized) {
-            // Copy-on-read: create a fresh object before mutating and storing
-            const updated: CacheEntry = {
-              ...idbHit,
-              accessCount: idbHit.accessCount + 1,
-              lastAccessed: Date.now(),
-            }
-            this.memoryCache.set(key, updated)
-            await set(key, updated, store)
-            this.totalHits++
-            return {
-              hit: true,
-              entry: updated,
-              matchType: "exact",
-              similarity: 1,
+    const lookupStore = this.getStore()
+    if (lookupStore) {
+      try {
+        const idbHit = await get<CacheEntry>(key, lookupStore)
+        if (idbHit) {
+          if (Date.now() - idbHit.createdAt < this.config.ttlMs) {
+            // Verify normalized prompt matches to guard against hash collisions
+            if (idbHit.normalizedKey === normalized) {
+              // Copy-on-read: create a fresh object before mutating and storing
+              const updated: CacheEntry = {
+                ...idbHit,
+                accessCount: idbHit.accessCount + 1,
+                lastAccessed: Date.now(),
+              }
+              this.memoryCache.set(key, updated)
+              await set(key, updated, lookupStore)
+              this.totalHits++
+              return {
+                hit: true,
+                entry: updated,
+                matchType: "exact",
+                similarity: 1,
+              }
             }
           }
+          await del(key, lookupStore)
         }
-        await del(key, store)
+      } catch {
+        // IDB read failed, fall through to fuzzy match
       }
-    } catch {
-      // IDB not available (SSR), fall through
     }
 
     // 3. Fuzzy match against memory cache
@@ -388,12 +389,13 @@ export class ResponseCache {
     }
 
     // Persist to IDB
-    try {
-      const store = this.getStore()
-      if (!store) throw new Error("no idb")
-      await set(key, entry, store)
-    } catch {
-      // IDB not available (SSR)
+    const persistStore = this.getStore()
+    if (persistStore) {
+      try {
+        await set(key, entry, persistStore)
+      } catch {
+        // IDB write failed (SSR or quota exceeded)
+      }
     }
   }
 

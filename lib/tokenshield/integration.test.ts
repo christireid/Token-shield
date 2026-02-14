@@ -832,6 +832,7 @@ describe("All index.ts exports are importable", () => {
       "TokenShieldConfigError",
       "TokenShieldBudgetError",
       "TokenShieldCryptoError",
+      "TokenShieldAPIError",
       "ERROR_CODES",
       // Config Schemas
       "validateConfig",

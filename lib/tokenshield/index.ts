@@ -212,6 +212,7 @@ export {
   TokenShieldConfigError,
   TokenShieldBudgetError,
   TokenShieldCryptoError,
+  TokenShieldAPIError,
   ERROR_CODES,
   type ErrorCode,
 } from "./errors"

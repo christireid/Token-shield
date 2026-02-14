@@ -174,20 +174,18 @@ export function createOpenAIAdapter<TParams extends { messages: any[]; model?: s
           }>,
         )
 
-        // Reconstruct params
+        // Reconstruct params, excluding TokenShield internal fields
+        const {
+          prompt: _prompt,
+          modelId: _modelId,
+          ...cleanTransformed
+        } = transformed as Record<string, unknown>
         const openAiParams = {
           ...rest,
-          // Apply middleware overrides
-          ...transformed,
+          ...cleanTransformed,
           model: transformed.modelId ?? modelId,
           messages: openAiMessages,
         }
-
-        // Clean up TokenShield internal fields
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        delete (openAiParams as any).prompt
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        delete (openAiParams as any).modelId
 
         const raw = await createFn(openAiParams as TParams)
 

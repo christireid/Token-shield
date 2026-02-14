@@ -3,6 +3,8 @@
  * Returns the real usage data from each provider alongside the response.
  */
 
+import { TokenShieldAPIError, ERROR_CODES } from "./errors"
+
 export type Provider = "openai" | "anthropic" | "google"
 
 export interface LLMResult {
@@ -69,11 +71,20 @@ export async function callOpenAI(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Unknown error" }))
-    throw new Error(err.error ?? `OpenAI API error: ${res.status}`)
+    throw new TokenShieldAPIError(
+      err.error ?? `OpenAI API error: ${res.status}`,
+      "openai",
+      res.status,
+    )
   }
 
   const data = await res.json().catch(() => {
-    throw new Error(`OpenAI API returned invalid JSON (status ${res.status})`)
+    throw new TokenShieldAPIError(
+      `OpenAI API returned invalid JSON (status ${res.status})`,
+      "openai",
+      res.status,
+      ERROR_CODES.API_INVALID_RESPONSE,
+    )
   })
   // OpenAI returns prompt_tokens and completion_tokens; fallback to input/output tokens if present
   const promptTokens = data.usage?.prompt_tokens ?? data.usage?.input_tokens ?? 0
@@ -124,11 +135,20 @@ export async function callAnthropic(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Unknown error" }))
-    throw new Error(err.error ?? `Anthropic API error: ${res.status}`)
+    throw new TokenShieldAPIError(
+      err.error ?? `Anthropic API error: ${res.status}`,
+      "anthropic",
+      res.status,
+    )
   }
 
   const data = await res.json().catch(() => {
-    throw new Error(`Anthropic API returned invalid JSON (status ${res.status})`)
+    throw new TokenShieldAPIError(
+      `Anthropic API returned invalid JSON (status ${res.status})`,
+      "anthropic",
+      res.status,
+      ERROR_CODES.API_INVALID_RESPONSE,
+    )
   })
   const inputTokens = data.usage?.input_tokens ?? 0
   const outputTokens = data.usage?.output_tokens ?? 0
@@ -173,11 +193,20 @@ export async function callGoogle(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Unknown error" }))
-    throw new Error(err.error ?? `Google API error: ${res.status}`)
+    throw new TokenShieldAPIError(
+      err.error ?? `Google API error: ${res.status}`,
+      "google",
+      res.status,
+    )
   }
 
   const data = await res.json().catch(() => {
-    throw new Error(`Google API returned invalid JSON (status ${res.status})`)
+    throw new TokenShieldAPIError(
+      `Google API returned invalid JSON (status ${res.status})`,
+      "google",
+      res.status,
+      ERROR_CODES.API_INVALID_RESPONSE,
+    )
   })
   const inputTokens = data.usage?.input_tokens ?? 0
   const outputTokens = data.usage?.output_tokens ?? 0

@@ -1,3 +1,5 @@
+import { TokenShieldConfigError } from "./errors"
+
 /**
  * TokenShield - Cost Estimator
  *
@@ -189,7 +191,7 @@ export function estimateCost(
 ): CostEstimate {
   const model = MODEL_PRICING[modelId]
   if (!model) {
-    throw new Error(
+    throw new TokenShieldConfigError(
       `Unknown model: ${modelId}. Available: ${Object.keys(MODEL_PRICING).join(", ")}`,
     )
   }

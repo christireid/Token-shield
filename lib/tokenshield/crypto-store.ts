@@ -15,6 +15,7 @@
  */
 
 import { get, set, del, keys, createStore, type UseStore } from "./storage-adapter"
+import { TokenShieldCryptoError, ERROR_CODES } from "./errors"
 
 // -------------------------------------------------------
 // Types
@@ -164,7 +165,10 @@ export class EncryptedStore {
       this.cryptoKey = await this.keyPromise
       return this.cryptoKey
     }
-    throw new Error("EncryptedStore: no encryption key available")
+    throw new TokenShieldCryptoError(
+      "EncryptedStore: no encryption key available",
+      ERROR_CODES.CRYPTO_KEY_DERIVATION_FAILED,
+    )
   }
 
   /**

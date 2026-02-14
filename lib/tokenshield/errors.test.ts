@@ -6,6 +6,7 @@ import {
   TokenShieldConfigError,
   TokenShieldBudgetError,
   TokenShieldCryptoError,
+  TokenShieldAPIError,
 } from "./errors"
 
 describe("errors", () => {
@@ -38,9 +39,14 @@ describe("errors", () => {
       expect(ERROR_CODES.CRYPTO_DECRYPTION_FAILED).toBe("CRYPTO_DECRYPTION_FAILED")
     })
 
+    it("has API error codes", () => {
+      expect(ERROR_CODES.API_REQUEST_FAILED).toBe("API_REQUEST_FAILED")
+      expect(ERROR_CODES.API_INVALID_RESPONSE).toBe("API_INVALID_RESPONSE")
+    })
+
     it("is immutable (as const prevents mutation at type level)", () => {
       const keys = Object.keys(ERROR_CODES)
-      expect(keys.length).toBe(16)
+      expect(keys.length).toBe(18)
       // Each value matches its key
       for (const key of keys) {
         expect(ERROR_CODES[key as keyof typeof ERROR_CODES]).toBe(key)
@@ -153,6 +159,41 @@ describe("errors", () => {
     })
   })
 
+  describe("TokenShieldAPIError", () => {
+    it("has provider and statusCode properties", () => {
+      const err = new TokenShieldAPIError("API failed", "openai", 429)
+      expect(err.name).toBe("TokenShieldAPIError")
+      expect(err.code).toBe("API_REQUEST_FAILED")
+      expect(err.provider).toBe("openai")
+      expect(err.statusCode).toBe(429)
+      expect(err.message).toBe("API failed")
+    })
+
+    it("allows custom error code", () => {
+      const err = new TokenShieldAPIError(
+        "Invalid JSON",
+        "anthropic",
+        200,
+        ERROR_CODES.API_INVALID_RESPONSE,
+      )
+      expect(err.code).toBe("API_INVALID_RESPONSE")
+      expect(err.provider).toBe("anthropic")
+    })
+
+    it("statusCode is optional", () => {
+      const err = new TokenShieldAPIError("Network error", "google")
+      expect(err.statusCode).toBeUndefined()
+      expect(err.provider).toBe("google")
+    })
+
+    it("is instanceof TokenShieldError and Error", () => {
+      const err = new TokenShieldAPIError("fail", "openai")
+      expect(err).toBeInstanceOf(TokenShieldAPIError)
+      expect(err).toBeInstanceOf(TokenShieldError)
+      expect(err).toBeInstanceOf(Error)
+    })
+  })
+
   describe("catch-all handling", () => {
     it("all error types can be caught by catching TokenShieldError", () => {
       const errors = [
@@ -161,6 +202,7 @@ describe("errors", () => {
         new TokenShieldConfigError("config", "path"),
         new TokenShieldBudgetError("u1", "daily", 1, 1),
         new TokenShieldCryptoError("crypto"),
+        new TokenShieldAPIError("api fail", "openai", 500),
       ]
 
       for (const err of errors) {
