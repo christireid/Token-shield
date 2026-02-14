@@ -241,4 +241,123 @@ describe("ShieldWorker", () => {
       expect(sw.isReady).toBe(false)
     })
   })
+
+  // -------------------------------------------------------
+  // handleMessage coverage (simulate worker responses)
+  // -------------------------------------------------------
+  describe("handleMessage", () => {
+    it("ignores messages with unknown IDs", async () => {
+      const sw = new ShieldWorker()
+      await sw.init()
+      const handler = (
+        sw as unknown as { handleMessage: (msg: Record<string, unknown>) => void }
+      ).handleMessage.bind(sw)
+      // Should not throw for unknown ID
+      handler({ type: "FIND_RESULT", id: "nonexistent_id_123", payload: null })
+    })
+
+    it("rejects pending on ERROR response", async () => {
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      const pendingMap = (
+        sw as unknown as {
+          pending: Map<string, { resolve: (v: unknown) => void; reject: (r: unknown) => void }>
+        }
+      ).pending
+      const handler = (
+        sw as unknown as { handleMessage: (msg: Record<string, unknown>) => void }
+      ).handleMessage.bind(sw)
+
+      const promise = new Promise((resolve, reject) => {
+        pendingMap.set("err_id_1", {
+          resolve: resolve as (v: unknown) => void,
+          reject: reject as (r: unknown) => void,
+        })
+      })
+
+      handler({ type: "ERROR", id: "err_id_1", payload: "something went wrong" })
+      await expect(promise).rejects.toThrow("something went wrong")
+    })
+
+    it("resolves STATS_RESULT", async () => {
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      const pendingMap = (
+        sw as unknown as {
+          pending: Map<string, { resolve: (v: unknown) => void; reject: (r: unknown) => void }>
+        }
+      ).pending
+      const handler = (
+        sw as unknown as { handleMessage: (msg: Record<string, unknown>) => void }
+      ).handleMessage.bind(sw)
+
+      const promise = new Promise((resolve, reject) => {
+        pendingMap.set("stats_id_1", {
+          resolve: resolve as (v: unknown) => void,
+          reject: reject as (r: unknown) => void,
+        })
+      })
+
+      handler({
+        type: "STATS_RESULT",
+        id: "stats_id_1",
+        payload: { entries: 5, totalHits: 10, avgScore: 0.9 },
+      })
+      await expect(promise).resolves.toEqual({ entries: 5, totalHits: 10, avgScore: 0.9 })
+    })
+
+    it("resolves INIT_SUCCESS with undefined", async () => {
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      const pendingMap = (
+        sw as unknown as {
+          pending: Map<string, { resolve: (v: unknown) => void; reject: (r: unknown) => void }>
+        }
+      ).pending
+      const handler = (
+        sw as unknown as { handleMessage: (msg: Record<string, unknown>) => void }
+      ).handleMessage.bind(sw)
+
+      const promise = new Promise((resolve, reject) => {
+        pendingMap.set("init_id_1", {
+          resolve: resolve as (v: unknown) => void,
+          reject: reject as (r: unknown) => void,
+        })
+      })
+
+      handler({ type: "INIT_SUCCESS", id: "init_id_1" })
+      await expect(promise).resolves.toBeUndefined()
+    })
+  })
+
+  // -------------------------------------------------------
+  // Concurrent operations
+  // -------------------------------------------------------
+  describe("concurrent operations", () => {
+    it("handles multiple concurrent learn/find operations", async () => {
+      const sw = new ShieldWorker()
+      await sw.init({ threshold: 0.5 })
+
+      await Promise.all([
+        sw.learn("What is TypeScript?", "TS is a typed JS superset.", "gpt-4o", 10, 20),
+        sw.learn("What is JavaScript?", "JS is a scripting language.", "gpt-4o", 10, 20),
+        sw.learn("What is Python?", "Python is a general-purpose language.", "gpt-4o", 10, 20),
+      ])
+
+      const stats = await sw.stats()
+      expect(stats.entries).toBe(3)
+
+      const [ts, js, py] = await Promise.all([
+        sw.find("What is TypeScript?"),
+        sw.find("What is JavaScript?"),
+        sw.find("What is Python?"),
+      ])
+      expect(ts).not.toBeNull()
+      expect(js).not.toBeNull()
+      expect(py).not.toBeNull()
+    })
+  })
 })

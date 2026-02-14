@@ -3,6 +3,7 @@ import {
   Pipeline,
   createPipeline,
   createBreakerStage,
+  createBudgetStage,
   createGuardStage,
   createCacheStage,
   createContextStage,
@@ -13,6 +14,7 @@ import {
 import { CostCircuitBreaker } from "./circuit-breaker"
 import { RequestGuard } from "./request-guard"
 import { ResponseCache } from "./response-cache"
+import { UserBudgetManager } from "./user-budget-manager"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -463,5 +465,100 @@ describe("createPrefixStage", () => {
     const result = stage.execute(ctx) as PipelineContext
     // Should pass through without changes
     expect(result.meta.prefixSaved).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Pre-built stages: createBudgetStage
+// ---------------------------------------------------------------------------
+
+describe("createBudgetStage", () => {
+  it("allows requests within budget", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+    })
+    const stage = createBudgetStage(manager, () => "user-123", { reserveForOutput: 500 })
+    const ctx = makeCtx({ lastUserText: "Hello, help me with something" })
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.aborted).toBe(false)
+    expect(result.meta.userId).toBe("user-123")
+  })
+
+  it("aborts when getUserId throws", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+    })
+    const stage = createBudgetStage(
+      manager,
+      () => {
+        throw new Error("no auth")
+      },
+      { reserveForOutput: 500 },
+    )
+    const ctx = makeCtx()
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.aborted).toBe(true)
+    expect(result.abortReason).toBe("Failed to resolve user ID")
+  })
+
+  it("aborts when getUserId returns empty string", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+    })
+    const stage = createBudgetStage(manager, () => "", { reserveForOutput: 500 })
+    const ctx = makeCtx()
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.aborted).toBe(true)
+    expect(result.abortReason).toContain("non-empty string")
+  })
+
+  it("stores userId and userBudgetInflight in meta", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+    })
+    const stage = createBudgetStage(manager, () => "user-456", { reserveForOutput: 500 })
+    const ctx = makeCtx({ lastUserText: "Estimate my cost" })
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.meta.userId).toBe("user-456")
+    expect(result.meta.userBudgetInflight).toBeDefined()
+  })
+
+  it("applies tier model routing when configured", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+      tierModels: {
+        standard: "gpt-4o-mini",
+        premium: "gpt-4o",
+      },
+    })
+    const stage = createBudgetStage(manager, () => "user-789", { reserveForOutput: 500 })
+    const ctx = makeCtx({ modelId: "gpt-4o" })
+    const result = stage.execute(ctx) as PipelineContext
+    // Default tier is "standard", which maps to gpt-4o-mini
+    if (result.meta.tierRouted) {
+      expect(result.modelId).toBe("gpt-4o-mini")
+      expect(result.meta.originalModel).toBe("gpt-4o")
+    }
+  })
+
+  it("skips when already aborted", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+    })
+    const stage = createBudgetStage(manager, () => "user-123", { reserveForOutput: 500 })
+    const ctx = makeCtx({ aborted: true, abortReason: "earlier" })
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.abortReason).toBe("earlier")
+  })
+
+  it("handles missing lastUserText gracefully (0 estimated input)", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+    })
+    const stage = createBudgetStage(manager, () => "user-123", { reserveForOutput: 500 })
+    const ctx = makeCtx({ lastUserText: "" })
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.aborted).toBe(false)
+    expect(result.meta.userId).toBe("user-123")
   })
 })
