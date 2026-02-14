@@ -219,6 +219,8 @@ export {
   registerModel,
   getModelPricing,
   getModelsByProvider,
+  fetchLatestPricing,
+  getLastPricingFetchTime,
   type ModelPricingEntry,
 } from "./pricing-registry"
 

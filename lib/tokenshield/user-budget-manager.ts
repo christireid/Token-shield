@@ -362,12 +362,16 @@ export class UserBudgetManager {
 
   /**
    * Get the model ID for a user based on their budget tier.
-   * Returns null if no tier routing is configured.
+   * Returns null if no tier routing is configured or the user has no
+   * explicit tier (prevents accidentally routing all users to the
+   * "standard" tier model when they have no tier set).
    */
   getModelForUser(userId: string): string | null {
+    if (!this.config.tierModels) return null
     const limits = resolveUserLimits(this.config, userId)
-    const tier = limits?.tier ?? "standard"
-    return this.config.tierModels?.[tier] ?? null
+    // Only route if the user has an explicit tier set
+    if (!limits?.tier) return null
+    return this.config.tierModels[limits.tier] ?? null
   }
 
   /**

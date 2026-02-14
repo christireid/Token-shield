@@ -27,7 +27,7 @@ import {
  * Captures the initialized module instances via the context object.
  */
 export function buildTransformParams(ctx: MiddlewareContext) {
-  const { config, modules, guard, cache, breaker, userBudgetManager, instanceEvents, log, adapter } = ctx
+  const { config, modules, guard, cache, breaker, userBudgetManager, anomalyDetector, instanceEvents, log, adapter } = ctx
 
   return async ({ params }: { params: Record<string, unknown> }) => {
     const meta: ShieldMeta = {}
@@ -63,6 +63,42 @@ export function buildTransformParams(ctx: MiddlewareContext) {
       if (config.dryRun) {
         const modelId = String(params.modelId ?? "")
         const inputTokens = messages.reduce((sum, m) => sum + countTokens(m.content) + MSG_OVERHEAD_TOKENS, 0)
+        const expectedOut = config.context?.reserveForOutput ?? 500
+        const estimatedCost = safeCost(modelId, inputTokens, expectedOut)
+
+        // Breaker dry-run check
+        if (breaker && lastUserText) {
+          const breakStatus = breaker.getStatus()
+          const wouldTrip = breakStatus.tripped ||
+            (breakStatus.currentSpend !== undefined && config.breaker?.limits?.perHour !== undefined &&
+              (breakStatus.currentSpend + estimatedCost) > config.breaker.limits.perHour)
+          config.onDryRun?.({
+            module: 'breaker',
+            description: wouldTrip
+              ? `Would be blocked (spend: $${breakStatus.currentSpend?.toFixed(4) ?? '?'}, est cost: $${estimatedCost.toFixed(4)})`
+              : `Would pass breaker (spend: $${breakStatus.currentSpend?.toFixed(4) ?? '0'})`,
+          })
+        }
+
+        // User budget dry-run check
+        if (userBudgetManager && config.userBudget) {
+          try {
+            const userId = config.userBudget.getUserId()
+            if (userId) {
+              const status = userBudgetManager.getStatus(userId)
+              const wouldExceedDaily = status.limits?.daily ? (status.spend.daily + estimatedCost) >= status.limits.daily : false
+              const wouldExceedMonthly = status.limits?.monthly ? (status.spend.monthly + estimatedCost) >= status.limits.monthly : false
+              config.onDryRun?.({
+                module: 'userBudget',
+                description: wouldExceedDaily
+                  ? `User ${userId} would exceed daily budget ($${status.spend.daily.toFixed(4)}/$${status.limits?.daily?.toFixed(2)})`
+                  : wouldExceedMonthly
+                    ? `User ${userId} would exceed monthly budget ($${status.spend.monthly.toFixed(4)}/$${status.limits?.monthly?.toFixed(2)})`
+                    : `User ${userId} within budget (daily: $${status.spend.daily.toFixed(4)}, monthly: $${status.spend.monthly.toFixed(4)})`,
+              })
+            }
+          } catch { /* getUserId failed — skip */ }
+        }
 
         if (guard && lastUserText) {
           const stats = guard.getStats()
@@ -90,6 +126,17 @@ export function buildTransformParams(ctx: MiddlewareContext) {
             const optimized = optimizePrefix(messages, modelId, pricing.inputPerMillion, { provider: config.prefix?.provider ?? "auto" })
             config.onDryRun?.({ module: 'prefix', description: `Prefix: ${optimized.prefixTokens} tokens (${optimized.prefixEligibleForCaching ? 'eligible' : 'not eligible'} for caching)`, estimatedSavings: optimized.estimatedPrefixSavings })
           }
+        }
+
+        // Anomaly dry-run check
+        if (anomalyDetector) {
+          const anomaly = anomalyDetector.check(estimatedCost, inputTokens + expectedOut)
+          config.onDryRun?.({
+            module: 'anomaly',
+            description: anomaly
+              ? `Anomaly detected: ${anomaly.type} (z-score: ${anomaly.zScore.toFixed(2)}, value: ${anomaly.value.toFixed(4)}, mean: ${anomaly.mean.toFixed(4)})`
+              : 'No anomaly detected',
+          })
         }
 
         span?.end({ dryRun: true })

@@ -61,6 +61,8 @@ export interface RoutingDecision {
   estimatedCost: ReturnType<typeof estimateCost>
   cheapestAlternativeCost: ReturnType<typeof estimateCost>
   savingsVsDefault: number
+  /** Whether the selected model is from a different provider than the default */
+  crossProvider: boolean
 }
 
 // Keyword sets for signal detection
@@ -272,10 +274,31 @@ export function routeToModel(
     minTier?: ModelPricing["tier"]
     /** Expected output tokens (for cost comparison) */
     expectedOutputTokens?: number
+    /**
+     * Enable cross-provider routing. When true (default), the router considers
+     * models from all providers. When false, only routes within the default
+     * model's provider. Set to false if your code depends on provider-specific
+     * response formats or features (e.g., Anthropic cache_control).
+     */
+    crossProvider?: boolean
+    /**
+     * Minimum context window required. Filters out models whose context window
+     * is smaller than this value. Useful when routing long-context requests.
+     */
+    minContextWindow?: number
+    /**
+     * Required capabilities. When set, only models that support these features
+     * are considered. Skips models that don't match.
+     */
+    requiredCapabilities?: {
+      vision?: boolean
+      functions?: boolean
+    }
   } = {}
 ): RoutingDecision {
   const complexity = analyzeComplexity(prompt)
   const expectedOutput = options.expectedOutputTokens ?? 500
+  const enableCrossProvider = options.crossProvider ?? true
 
   const tierOrder: Record<ModelPricing["tier"], number> = {
     budget: 0,
@@ -287,12 +310,31 @@ export function routeToModel(
   const minTier = options.minTier ?? complexity.recommendedTier
   const minTierNum = tierOrder[minTier]
 
+  // Determine the default model's provider for same-provider filtering
+  const defaultModel = MODEL_PRICING[defaultModelId]
+  const defaultProvider = defaultModel?.provider
+
   // Filter models by criteria
   const candidates = Object.values(MODEL_PRICING).filter((m) => {
+    // Explicit provider filter takes highest priority
     if (options.allowedProviders && !options.allowedProviders.includes(m.provider)) {
       return false
     }
-    return tierOrder[m.tier] >= minTierNum
+    // When cross-provider is disabled, restrict to same provider as default
+    if (!enableCrossProvider && defaultProvider && m.provider !== defaultProvider) {
+      return false
+    }
+    // Tier filter
+    if (tierOrder[m.tier] < minTierNum) return false
+    // Context window filter
+    if (options.minContextWindow && m.contextWindow < options.minContextWindow) return false
+    // Capability filters — use pricing registry for richer metadata
+    if (options.requiredCapabilities) {
+      const registryEntry = PRICING_REGISTRY_LOOKUP(m.id)
+      if (options.requiredCapabilities.vision && registryEntry && !registryEntry.supportsVision) return false
+      if (options.requiredCapabilities.functions && registryEntry && !registryEntry.supportsFunctions) return false
+    }
+    return true
   })
 
   // Sort by total cost (cheapest first)
@@ -319,6 +361,7 @@ export function routeToModel(
       estimatedCost: defaultCost,
       cheapestAlternativeCost: defaultCost,
       savingsVsDefault: 0,
+      crossProvider: false,
     }
   }
 
@@ -334,6 +377,18 @@ export function routeToModel(
     estimatedCost: selected.cost,
     cheapestAlternativeCost: selected.cost,
     savingsVsDefault: defaultCost.totalCost - selected.cost.totalCost,
+    crossProvider: defaultProvider !== undefined && selected.model.provider !== defaultProvider,
+  }
+}
+
+/** Lazy import helper for pricing registry capabilities lookup */
+function PRICING_REGISTRY_LOOKUP(modelId: string): { supportsVision: boolean; supportsFunctions: boolean } | undefined {
+  try {
+    // Access the pricing registry for richer metadata (vision, functions)
+    const { PRICING_REGISTRY } = require("./pricing-registry")
+    return PRICING_REGISTRY[modelId]
+  } catch {
+    return undefined
   }
 }
 

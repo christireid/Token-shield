@@ -385,3 +385,165 @@ export function getModelsByProvider(
     (entry) => entry.provider === provider
   )
 }
+
+// -------------------------------------------------------
+// Remote Pricing Fetch
+// -------------------------------------------------------
+
+/** Timestamp of the last successful remote pricing fetch */
+let lastFetchTimestamp = 0
+
+/** Minimum interval between fetches (1 hour) */
+const MIN_FETCH_INTERVAL_MS = 60 * 60 * 1000
+
+/**
+ * Fetch latest pricing data from a remote URL and merge into the registry.
+ *
+ * The remote endpoint should return a JSON object where keys are model IDs
+ * and values are {@link ModelPricingEntry} objects. New models are added;
+ * existing models are updated. Hardcoded entries serve as fallback if the
+ * fetch fails.
+ *
+ * Includes rate limiting (max once per hour) and validation to prevent
+ * corrupt data from overwriting the registry.
+ *
+ * @param url - URL returning JSON-formatted pricing data
+ * @param options - Optional fetch configuration
+ * @param options.timeoutMs - Fetch timeout in milliseconds (default: 5000)
+ * @param options.force - Bypass the rate limit and fetch immediately (default: false)
+ * @returns Object with number of models updated/added and any errors
+ *
+ * @example
+ * ```ts
+ * const result = await fetchLatestPricing("https://api.tokenshield.dev/pricing")
+ * // result.updated === 5
+ * // result.added === 2
+ * // result.errors === []
+ * ```
+ */
+export async function fetchLatestPricing(
+  url: string,
+  options: {
+    timeoutMs?: number
+    force?: boolean
+  } = {}
+): Promise<{
+  updated: number
+  added: number
+  errors: string[]
+  fromCache: boolean
+}> {
+  const timeoutMs = options.timeoutMs ?? 5000
+  const force = options.force ?? false
+
+  // Rate limit: skip if we fetched recently (unless forced)
+  if (!force && Date.now() - lastFetchTimestamp < MIN_FETCH_INTERVAL_MS) {
+    return { updated: 0, added: 0, errors: [], fromCache: true }
+  }
+
+  const errors: string[] = []
+  let updated = 0
+  let added = 0
+
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), timeoutMs)
+
+    let response: Response
+    try {
+      response = await fetch(url, {
+        signal: controller.signal,
+        headers: { "Accept": "application/json" },
+      })
+    } finally {
+      clearTimeout(timeout)
+    }
+
+    if (!response.ok) {
+      errors.push(`HTTP ${response.status}: ${response.statusText}`)
+      return { updated, added, errors, fromCache: false }
+    }
+
+    const data = await response.json()
+
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      errors.push("Invalid response format: expected a JSON object")
+      return { updated, added, errors, fromCache: false }
+    }
+
+    // Validate and merge each entry
+    for (const [id, entry] of Object.entries(data as Record<string, unknown>)) {
+      const validated = validatePricingEntry(id, entry)
+      if (validated.error) {
+        errors.push(`${id}: ${validated.error}`)
+        continue
+      }
+      if (PRICING_REGISTRY[id]) {
+        updated++
+      } else {
+        added++
+      }
+      PRICING_REGISTRY[id] = validated.entry!
+    }
+
+    lastFetchTimestamp = Date.now()
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      errors.push(`Fetch timed out after ${timeoutMs}ms`)
+    } else {
+      errors.push(`Fetch failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  return { updated, added, errors, fromCache: false }
+}
+
+/** Validate a single pricing entry from remote data */
+function validatePricingEntry(
+  id: string,
+  raw: unknown
+): { entry?: ModelPricingEntry; error?: string } {
+  if (!raw || typeof raw !== "object") {
+    return { error: "Not an object" }
+  }
+
+  const e = raw as Record<string, unknown>
+
+  // Required fields
+  if (typeof e.provider !== "string" || !["openai", "anthropic", "google"].includes(e.provider)) {
+    return { error: `Invalid provider: ${e.provider}` }
+  }
+  if (typeof e.name !== "string" || e.name.length === 0) {
+    return { error: "Missing or empty name" }
+  }
+  if (typeof e.inputPerMillion !== "number" || e.inputPerMillion < 0) {
+    return { error: `Invalid inputPerMillion: ${e.inputPerMillion}` }
+  }
+  if (typeof e.outputPerMillion !== "number" || e.outputPerMillion < 0) {
+    return { error: `Invalid outputPerMillion: ${e.outputPerMillion}` }
+  }
+  if (typeof e.contextWindow !== "number" || e.contextWindow <= 0) {
+    return { error: `Invalid contextWindow: ${e.contextWindow}` }
+  }
+
+  return {
+    entry: {
+      id,
+      provider: e.provider as ModelPricingEntry["provider"],
+      name: e.name as string,
+      inputPerMillion: e.inputPerMillion as number,
+      outputPerMillion: e.outputPerMillion as number,
+      cachedInputDiscount: typeof e.cachedInputDiscount === "number" ? e.cachedInputDiscount : 0,
+      contextWindow: e.contextWindow as number,
+      maxOutputTokens: typeof e.maxOutputTokens === "number" ? e.maxOutputTokens : 4096,
+      supportsVision: typeof e.supportsVision === "boolean" ? e.supportsVision : false,
+      supportsFunctions: typeof e.supportsFunctions === "boolean" ? e.supportsFunctions : false,
+      deprecated: typeof e.deprecated === "boolean" ? e.deprecated : undefined,
+    },
+  }
+}
+
+/** Get the timestamp of the last successful pricing fetch (0 = never fetched) */
+export function getLastPricingFetchTime(): number {
+  return lastFetchTimestamp
+}

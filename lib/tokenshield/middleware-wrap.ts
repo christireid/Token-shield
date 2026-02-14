@@ -264,7 +264,17 @@ export function buildWrapStream(ctx: MiddlewareContext) {
       }
     }
 
-    const tracker = new StreamTokenTracker({ modelId })
+    const tracker = new StreamTokenTracker({
+      modelId,
+      updateInterval: config.stream?.updateInterval,
+      costThreshold: config.stream?.costThreshold,
+      onCostThreshold: config.stream?.onCostThreshold
+        ? (usage) => config.stream!.onCostThreshold!({ estimatedCost: usage.estimatedCost, outputTokens: usage.outputTokens })
+        : undefined,
+      onAbort: config.stream?.onAbort
+        ? (usage) => config.stream!.onAbort!({ inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, estimatedCost: usage.estimatedCost })
+        : undefined,
+    })
 
     if (meta?.originalInputTokens) {
       tracker.setInputTokens(meta.originalInputTokens)

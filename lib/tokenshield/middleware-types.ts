@@ -137,6 +137,18 @@ export interface TokenShieldMiddlewareConfig {
     onBudgetWarning?: (userId: string, event: BudgetWarningEvent) => void
   }
 
+  /** Stream tracker config */
+  stream?: {
+    /** How often to fire usage updates (every N chunks, default 5) */
+    updateInterval?: number
+    /** Cost threshold that triggers a warning callback */
+    costThreshold?: number
+    /** Called when cost threshold is exceeded during streaming */
+    onCostThreshold?: (usage: { estimatedCost: number; outputTokens: number }) => void
+    /** Called when a stream is aborted (user stops generating) */
+    onAbort?: (usage: { inputTokens: number; outputTokens: number; estimatedCost: number }) => void
+  }
+
   /** Anomaly detection config */
   anomaly?: AnomalyConfig & {
     /** Called when an anomaly is detected */
