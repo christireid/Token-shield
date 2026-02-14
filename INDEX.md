@@ -5,7 +5,7 @@
 > **Node:** >= 18.0.0
 > **Module System:** ESM-first (`"type": "module"`) with CJS fallback
 > **Build:** tsup (esbuild) -> ESM (.js) + CJS (.cjs) + .d.ts
-> **Tests:** Vitest — 41 suites, 779 tests (75% line/function coverage, 60% branch)
+> **Tests:** Vitest — 46 suites, 886 tests (84% line, 87% function, 74% branch coverage)
 
 ## Overview
 
@@ -21,7 +21,7 @@ Token-shield/
 │   ├── index.ts                   # Main barrel export (60+ named exports)
 │   ├── react.tsx                  # React barrel export (hooks, provider, dashboard)
 │   ├── *.ts / *.tsx               # Source modules (see Module Index below)
-│   └── *.test.ts                  # Co-located test files (41 test suites)
+│   └── *.test.ts                  # Co-located test files (46 test suites)
 ├── lib/utils.ts                   # Shared utility (cn helper)
 ├── app/                           # Next.js app directory (demo site)
 │   └── dashboard/page.tsx         # Advanced dashboard route
@@ -50,7 +50,10 @@ Token-shield/
 ├── tsconfig.build.json            # Build-only TypeScript config (SDK-scoped)
 ├── tsup.config.ts                 # Build config (ESM + CJS + DTS)
 ├── vitest.config.ts               # Test runner config
-├── eslint.config.mjs              # Linting (SDK-scoped)
+├── eslint.config.mjs              # Linting (SDK-scoped, with Prettier compat)
+├── .prettierrc.json               # Prettier formatting config
+├── .prettierignore                # Prettier ignore patterns
+├── .husky/pre-commit              # Git pre-commit hook (lint-staged)
 ├── .nvmrc                         # Node version (20)
 ├── .npmignore                     # npm publish exclusions
 └── .gitignore                     # Git exclusions
@@ -215,17 +218,20 @@ Token-shield/
 
 ## Scripts
 
-| Command                  | Action                                       |
-| ------------------------ | -------------------------------------------- |
-| `npm test`               | Run Vitest test suite (41 suites, 779 tests) |
-| `npm run test:watch`     | Run tests in watch mode                      |
-| `npm run test:coverage`  | Generate coverage report                     |
-| `npm run build`          | Build with tsup to `dist/`                   |
-| `npm run typecheck`      | TypeScript type checking (`tsc --noEmit`)    |
-| `npm run lint`           | ESLint on `lib/tokenshield/`                 |
-| `npm run clean`          | Remove `dist/` and `.next/`                  |
-| `npm run dev`            | Start Next.js dev server (demo)              |
-| `npm run prepublishOnly` | typecheck + test + build                     |
+| Command                  | Action                                          |
+| ------------------------ | ----------------------------------------------- |
+| `npm test`               | Run Vitest test suite (46 suites, 886 tests)    |
+| `npm run test:watch`     | Run tests in watch mode                         |
+| `npm run test:coverage`  | Generate V8 coverage report (lcov + text)       |
+| `npm run build`          | Build with tsup to `dist/`                      |
+| `npm run typecheck`      | TypeScript type checking (`tsc --noEmit`)       |
+| `npm run lint`           | ESLint on `lib/tokenshield/`                    |
+| `npm run format`         | Format all files with Prettier                  |
+| `npm run format:check`   | Check formatting (CI-friendly, no write)        |
+| `npm run validate`       | Full local CI: typecheck + lint + format + test |
+| `npm run clean`          | Remove `dist/`, `.next/`, and `coverage/`       |
+| `npm run dev`            | Start Next.js dev server (demo)                 |
+| `npm run prepublishOnly` | typecheck + test + build                        |
 
 ---
 
@@ -235,7 +241,7 @@ Token-shield/
 
 - **Triggers:** Push to `main` or `claude/**`, PRs to `main`
 - **Test matrix:** Node 18, 20, 22
-- **Jobs:** Test (vitest + typecheck) -> Lint (eslint) -> Build (tsup, uploads dist artifact)
+- **Jobs:** Test (vitest + typecheck) -> Lint (eslint + prettier) -> Build (tsup, uploads dist artifact)
 
 ### Publish (`publish.yml`)
 
@@ -246,21 +252,23 @@ Token-shield/
 
 ## Configuration Files
 
-| File                  | Purpose                                               |
-| --------------------- | ----------------------------------------------------- |
-| `package.json`        | ESM-first npm package config with conditional exports |
-| `tsconfig.json`       | TypeScript strict mode, ES2020, bundler resolution    |
-| `tsconfig.build.json` | Build-only config (SDK-scoped, excludes tests)        |
-| `tsup.config.ts`      | Build config (ESM + CJS + DTS, tree-shaking, ES2020)  |
-| `vitest.config.ts`    | Test runner (Node env, 75% coverage thresholds)       |
-| `eslint.config.mjs`   | Flat config, SDK-scoped linting                       |
-| `tailwind.config.ts`  | Tailwind CSS theme (demo app)                         |
-| `postcss.config.mjs`  | PostCSS plugins (demo app)                            |
-| `next.config.mjs`     | Next.js app config (demo app)                         |
-| `components.json`     | Shadcn/ui config                                      |
-| `.nvmrc`              | Node version pin (20)                                 |
-| `.npmignore`          | npm publish exclusions                                |
-| `.gitignore`          | Git exclusions                                        |
+| File                  | Purpose                                                |
+| --------------------- | ------------------------------------------------------ |
+| `package.json`        | ESM-first npm package config with conditional exports  |
+| `tsconfig.json`       | TypeScript strict mode, ES2020, bundler resolution     |
+| `tsconfig.build.json` | Build-only config (SDK-scoped, excludes tests)         |
+| `tsup.config.ts`      | Build config (ESM + CJS + DTS, tree-shaking, ES2020)   |
+| `vitest.config.ts`    | Test runner (Node env, 75% coverage thresholds)        |
+| `eslint.config.mjs`   | Flat config, SDK-scoped linting + Prettier compat      |
+| `.prettierrc.json`    | Prettier formatting (no semis, double quotes, 100 col) |
+| `.prettierignore`     | Prettier exclusions (dist, node_modules, lockfiles)    |
+| `tailwind.config.ts`  | Tailwind CSS theme (demo app)                          |
+| `postcss.config.mjs`  | PostCSS plugins (demo app)                             |
+| `next.config.mjs`     | Next.js app config (demo app)                          |
+| `components.json`     | Shadcn/ui config                                       |
+| `.nvmrc`              | Node version pin (20)                                  |
+| `.npmignore`          | npm publish exclusions                                 |
+| `.gitignore`          | Git exclusions                                         |
 
 ---
 
@@ -272,3 +280,4 @@ Token-shield/
 - **Storage:** IndexedDB via idb-keyval, optional AES-GCM encryption, BroadcastChannel cross-tab sync
 - **Error Handling:** Typed hierarchy (`TokenShieldError` -> `BlockedError` / `ConfigError` / `BudgetError` / `CryptoError`)
 - **Build:** ESM-first with CJS fallback, conditional exports, tree-shakeable, ES2020 target
+- **DX:** Prettier + ESLint + husky pre-commit hooks + lint-staged + npm-run-all2
