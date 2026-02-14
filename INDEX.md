@@ -2,13 +2,14 @@
 
 > **Package:** `@tokenshield/ai-sdk` v0.2.0
 > **License:** MIT
-> **Runtime Size:** ~5 KB gzip (tree-shakeable)
-> **Build:** tsup (esbuild) -> CJS + ESM + .d.ts
-> **Tests:** Vitest (75% line/function coverage, 60% branch)
+> **Node:** >= 18.0.0
+> **Module System:** ESM-first (`"type": "module"`) with CJS fallback
+> **Build:** tsup (esbuild) -> ESM (.js) + CJS (.cjs) + .d.ts
+> **Tests:** Vitest — 41 suites, 779 tests (75% line/function coverage, 60% branch)
 
 ## Overview
 
-TokenShield is a developer-first, client-side React/TypeScript SDK that reduces LLM API costs 30-60% without vendor lock-in. It runs entirely in the browser as middleware - zero infrastructure, zero latency added (<5ms), zero privacy risk (data never leaves the client).
+TokenShield is a developer-first, client-side React/TypeScript SDK that reduces LLM API costs 30-60% without vendor lock-in. It runs entirely in the browser as middleware — zero infrastructure, zero latency added (<5ms), zero privacy risk (data never leaves the client).
 
 ---
 
@@ -16,29 +17,43 @@ TokenShield is a developer-first, client-side React/TypeScript SDK that reduces 
 
 ```
 Token-shield/
-├── lib/tokenshield/           # SDK source (all core code lives here)
-│   ├── index.ts               # Main barrel export (60+ named exports)
-│   ├── react.tsx              # React barrel export (hooks, provider, dashboard)
-│   ├── *.ts / *.tsx           # Source modules (see Module Index below)
-│   └── *.test.ts              # Co-located test files (41 test suites)
-├── lib/utils.ts               # Shared utility (cn helper)
-├── examples/                  # Integration examples
+├── lib/tokenshield/               # SDK source (all core code)
+│   ├── index.ts                   # Main barrel export (60+ named exports)
+│   ├── react.tsx                  # React barrel export (hooks, provider, dashboard)
+│   ├── *.ts / *.tsx               # Source modules (see Module Index below)
+│   └── *.test.ts                  # Co-located test files (41 test suites)
+├── lib/utils.ts                   # Shared utility (cn helper)
+├── app/                           # Next.js app directory (demo site)
+│   └── dashboard/page.tsx         # Advanced dashboard route
+├── components/                    # UI component library
+│   ├── ui/                        # Shadcn/ui primitives
+│   ├── dashboard/                 # Advanced dashboard (10 components)
+│   ├── tests/                     # Interactive test components
+│   ├── playground.tsx             # SDK playground
+│   └── savings-dashboard.tsx      # Savings visualization
+├── hooks/                         # Shared React hooks (toast, mobile)
+├── examples/                      # Integration examples
 │   ├── existing-sdk-integration/
-│   │   ├── openai-wrap/       # OpenAI SDK integration
-│   │   ├── anthropic-wrap/    # Anthropic SDK integration
-│   │   └── vercel-ai-wrap/    # Vercel AI SDK integration
-│   └── interactive-demo/      # Full Next.js demo app
-├── app/                       # Next.js app directory (demo site)
-├── webapp/                    # Additional web app demo
-├── components/                # Shadcn/ui component library
-├── hooks/                     # Shared React hooks (toast, mobile)
-├── styles/                    # CSS / Tailwind styles
-├── scripts/                   # Build and utility scripts
-├── docs/                      # Developer documentation
-├── marketing/                 # Marketing materials
-├── public/                    # Static assets
-├── .github/workflows/         # CI/CD (ci.yml, publish.yml)
-└── dist/                      # Build output (gitignored)
+│   │   ├── openai-wrap/           # OpenAI SDK integration
+│   │   ├── anthropic-wrap/        # Anthropic SDK integration
+│   │   └── vercel-ai-wrap/        # Vercel AI SDK integration
+│   └── interactive-demo/          # Full Next.js demo app
+├── docs/                          # Developer documentation
+├── scripts/                       # Utility scripts
+├── styles/                        # CSS / Tailwind styles
+├── public/                        # Static assets
+├── marketing/                     # Marketing materials
+├── .github/workflows/             # CI/CD (ci.yml, publish.yml)
+├── dist/                          # Build output (gitignored)
+├── package.json                   # ESM-first package config
+├── tsconfig.json                  # TypeScript (strict, ES2020, bundler resolution)
+├── tsconfig.build.json            # Build-only TypeScript config (SDK-scoped)
+├── tsup.config.ts                 # Build config (ESM + CJS + DTS)
+├── vitest.config.ts               # Test runner config
+├── eslint.config.mjs              # Linting (SDK-scoped)
+├── .nvmrc                         # Node version (20)
+├── .npmignore                     # npm publish exclusions
+└── .gitignore                     # Git exclusions
 ```
 
 ---
@@ -112,19 +127,61 @@ Token-shield/
 | Benchmark Scenarios | `benchmark-scenarios.ts` | Real-world benchmark cases |
 | Savings Calculator | `savings-calculator.tsx` | Savings projection React component |
 
+### Advanced Dashboard (`components/dashboard/`)
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| Dashboard Shell | `dashboard-shell.tsx` | Layout wrapper with all sections |
+| Dashboard Provider | `dashboard-provider.tsx` | Data layer with demo/live mode |
+| Dashboard Header | `dashboard-header.tsx` | Controls: pause, demo/live, time range, export |
+| KPI Cards | `kpi-cards.tsx` | 6 KPI cards with sparkline charts |
+| Savings Timeline | `savings-timeline-chart.tsx` | Area chart of cumulative savings |
+| Module Breakdown | `module-breakdown-chart.tsx` | Bar chart of savings by module |
+| Model Usage | `model-usage-chart.tsx` | Donut chart + sortable table |
+| Event Feed | `event-feed.tsx` | Live scrollable event stream |
+| Budget Gauge | `budget-gauge.tsx` | SVG arc gauge with tier bars |
+| User Budget Table | `user-budget-table.tsx` | CRUD table for per-user budgets |
+
 ---
 
 ## Entry Points & Exports
 
 ### Main Entry (`@tokenshield/ai-sdk`)
 - **Source:** `lib/tokenshield/index.ts`
-- **Build output:** `dist/index.js` (CJS), `dist/index.mjs` (ESM), `dist/index.d.ts`
+- **Build:** `dist/index.js` (ESM), `dist/index.cjs` (CJS), `dist/index.d.ts` (types)
 - **Exports:** 60+ named exports covering all modules
 
 ### React Entry (`@tokenshield/ai-sdk/react`)
 - **Source:** `lib/tokenshield/react.tsx`
-- **Build output:** `dist/react.js` (CJS), `dist/react.mjs` (ESM), `dist/react.d.ts`
+- **Build:** `dist/react.js` (ESM), `dist/react.cjs` (CJS), `dist/react.d.ts` (types)
 - **Exports:** Provider, 18+ hooks, dashboard components
+
+### Package Exports Map
+```json
+{
+  ".":              { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/index.cjs" },
+  "./react":        { "types": "./dist/react.d.ts", "import": "./dist/react.js", "require": "./dist/react.cjs" },
+  "./package.json": "./package.json"
+}
+```
+
+---
+
+## Build & Packaging
+
+| Feature | Value |
+|---------|-------|
+| Module system | `"type": "module"` (ESM-first) |
+| ESM output | `.js` files |
+| CJS output | `.cjs` files |
+| Type definitions | `.d.ts` + `.d.cts` |
+| Source maps | Enabled |
+| Tree-shaking | Enabled |
+| Target | ES2020 |
+| Code splitting | Enabled |
+| External | `react`, `react-dom`, `ai` |
+| Minification | Disabled (readable output) |
+| Banner | `/* @tokenshield/ai-sdk - MIT License */` |
 
 ---
 
@@ -151,64 +208,15 @@ Token-shield/
 
 | Command | Action |
 |---------|--------|
-| `npm test` | Run Vitest test suite |
+| `npm test` | Run Vitest test suite (41 suites, 779 tests) |
 | `npm run test:watch` | Run tests in watch mode |
 | `npm run test:coverage` | Generate coverage report |
 | `npm run build` | Build with tsup to `dist/` |
 | `npm run typecheck` | TypeScript type checking (`tsc --noEmit`) |
 | `npm run lint` | ESLint on `lib/tokenshield/` |
+| `npm run clean` | Remove `dist/` and `.next/` |
 | `npm run dev` | Start Next.js dev server (demo) |
 | `npm run prepublishOnly` | typecheck + test + build |
-
----
-
-## Test Suites (41 files)
-
-All tests are co-located with source in `lib/tokenshield/`:
-
-| Test File | Covers |
-|-----------|--------|
-| `token-counter.test.ts` | BPE accuracy, overhead calculation |
-| `cost-estimator.test.ts` | Pricing lookups, cost projections |
-| `context-manager.test.ts` | Conversation trimming strategies |
-| `response-cache.test.ts` | Exact/fuzzy cache matching |
-| `model-router.test.ts` | Complexity analysis, model selection |
-| `request-guard.test.ts` | Debounce, dedup, rate limits |
-| `prefix-optimizer.test.ts` | Message reordering, savings projection |
-| `cost-ledger.test.ts` | Usage tracking, export/import |
-| `tool-token-counter.test.ts` | Tool definitions, image tokens |
-| `stream-tracker.test.ts` | Streaming token counting |
-| `circuit-breaker.test.ts` | Spending limit enforcement |
-| `user-budget-manager.test.ts` | Per-user budget tracking |
-| `anomaly-detector.test.ts` | Outlier detection |
-| `middleware.test.ts` | Middleware factory, config |
-| `middleware-transform.test.ts` | Request transformation |
-| `middleware-wrap.test.ts` | Response wrapping |
-| `adapters.test.ts` | OpenAI/Anthropic/generic adapters |
-| `provider-adapter.test.ts` | Multi-provider routing |
-| `pipeline.test.ts` | Composable pipeline stages |
-| `react-context.test.ts` | React provider setup |
-| `react-hooks-core.test.ts` | Core React hooks |
-| `react-hooks-budget.test.ts` | Budget React hooks |
-| `react-hooks-pipeline.test.ts` | Pipeline React hooks |
-| `dashboard.test.ts` | Dashboard component |
-| `event-bus.test.ts` | Event system |
-| `logger.test.ts` | Structured logging |
-| `errors.test.ts` | Error hierarchy |
-| `config-schemas.test.ts` | Config validation |
-| `pricing-registry.test.ts` | Pricing registry |
-| `storage-adapter.test.ts` | IndexedDB abstraction |
-| `crypto-store.test.ts` | Encrypted storage |
-| `create-token-shield.test.ts` | Quick-start factory |
-| `neuro-elastic.test.ts` | Holographic encoding |
-| `shield-worker.test.ts` | Worker communication |
-| `api-client.test.ts` | Multi-provider API calls |
-| `output-predictor.test.ts` | Output prediction |
-| `benchmark.test.ts` | Benchmarking utilities |
-| `savings-calculator.test.ts` | Savings projections |
-| `integration.test.ts` | Full middleware pipeline |
-| `e2e.test.ts` | End-to-end scenarios |
-| `budget-battle.test.ts` | Multi-user budget scenarios |
 
 ---
 
@@ -216,6 +224,7 @@ All tests are co-located with source in `lib/tokenshield/`:
 
 ### CI (`ci.yml`)
 - **Triggers:** Push to `main` or `claude/**`, PRs to `main`
+- **Test matrix:** Node 18, 20, 22
 - **Jobs:** Test (vitest + typecheck) -> Lint (eslint) -> Build (tsup, uploads dist artifact)
 
 ### Publish (`publish.yml`)
@@ -228,16 +237,19 @@ All tests are co-located with source in `lib/tokenshield/`:
 
 | File | Purpose |
 |------|---------|
-| `package.json` | npm metadata, scripts, dependencies |
-| `tsconfig.json` | TypeScript strict mode, DOM/ESNext libs |
-| `tsup.config.ts` | Build config (CJS + ESM, .d.ts, tree-shaking) |
-| `vitest.config.ts` | Test runner (Node env, 75% coverage threshold) |
-| `eslint.config.mjs` | Linting rules |
-| `tailwind.config.ts` | Tailwind CSS theme |
-| `postcss.config.mjs` | PostCSS plugins |
-| `next.config.mjs` | Next.js app config |
+| `package.json` | ESM-first npm package config with conditional exports |
+| `tsconfig.json` | TypeScript strict mode, ES2020, bundler resolution |
+| `tsconfig.build.json` | Build-only config (SDK-scoped, excludes tests) |
+| `tsup.config.ts` | Build config (ESM + CJS + DTS, tree-shaking, ES2020) |
+| `vitest.config.ts` | Test runner (Node env, 75% coverage thresholds) |
+| `eslint.config.mjs` | Flat config, SDK-scoped linting |
+| `tailwind.config.ts` | Tailwind CSS theme (demo app) |
+| `postcss.config.mjs` | PostCSS plugins (demo app) |
+| `next.config.mjs` | Next.js app config (demo app) |
 | `components.json` | Shadcn/ui config |
+| `.nvmrc` | Node version pin (20) |
 | `.npmignore` | npm publish exclusions |
+| `.gitignore` | Git exclusions |
 
 ---
 
@@ -248,3 +260,4 @@ All tests are co-located with source in `lib/tokenshield/`:
 - **React Integration:** Context Provider + custom hooks + event-driven updates
 - **Storage:** IndexedDB via idb-keyval, optional AES-GCM encryption, BroadcastChannel cross-tab sync
 - **Error Handling:** Typed hierarchy (`TokenShieldError` -> `BlockedError` / `ConfigError` / `BudgetError` / `CryptoError`)
+- **Build:** ESM-first with CJS fallback, conditional exports, tree-shakeable, ES2020 target

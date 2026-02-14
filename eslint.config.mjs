@@ -26,25 +26,23 @@ export default tseslint.config(
     },
   },
 
-  // Ignore non-SDK files and build artifacts
+  // Only lint the SDK source — ignore everything else
   {
     ignores: [
       "node_modules/**",
+      "dist/**",
       ".next/**",
       "out/**",
-      "dist/**",
       "*.config.*",
-      "components/**",
       "app/**",
+      "components/**",
       "hooks/**",
+      "styles/**",
+      "public/**",
       "examples/**",
-      "webapp/**",
       "scripts/**",
       "docs/**",
       "marketing/**",
-      "public/**",
-      "styles/**",
-      "token-shield-updated/**",
     ],
   }
 )

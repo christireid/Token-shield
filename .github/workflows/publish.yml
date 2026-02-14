@@ -18,22 +18,16 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
           cache: npm
-          cache-dependency-path: token-shield-updated/token-shield/package-lock.json
 
-      - run: npm ci
-        working-directory: token-shield-updated/token-shield
+      - run: npm ci --legacy-peer-deps
 
       - run: npx vitest run
-        working-directory: token-shield-updated/token-shield
 
-      - run: npx tsc --noEmit --skipLibCheck
-        working-directory: token-shield-updated/token-shield
+      - run: npx tsc --noEmit
 
       - run: npx tsup
-        working-directory: token-shield-updated/token-shield
 
       - run: npm publish --provenance --access public
-        working-directory: token-shield-updated/token-shield
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
