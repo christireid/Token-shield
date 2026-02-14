@@ -11,6 +11,18 @@ export default defineConfig({
         "lib/tokenshield/**/*.test.ts",
         "lib/tokenshield/benchmark.ts",
         "lib/tokenshield/benchmark-scenarios.ts",
+        // Barrel re-exports (no logic to test)
+        "lib/tokenshield/index.ts",
+        "lib/tokenshield/react.tsx",
+        // React UI components require jsdom environment
+        "lib/tokenshield/dashboard.tsx",
+        "lib/tokenshield/dashboard-sections.tsx",
+        "lib/tokenshield/savings-calculator.tsx",
+        "lib/tokenshield/react-context.tsx",
+        // React hooks require DOM + rendering context
+        "lib/tokenshield/react-hooks-core.ts",
+        "lib/tokenshield/react-hooks-budget.ts",
+        "lib/tokenshield/react-hooks-pipeline.ts",
       ],
       reporter: ["text", "text-summary", "lcov"],
       thresholds: {

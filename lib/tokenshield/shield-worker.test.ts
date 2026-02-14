@@ -127,4 +127,118 @@ describe("ShieldWorker", () => {
       expect(noMatch).toBeNull()
     })
   })
+
+  // -------------------------------------------------------
+  // Not-ready guards (before init)
+  // -------------------------------------------------------
+  describe("not-ready guards", () => {
+    it("learn() returns early without error when not ready", async () => {
+      const sw = new ShieldWorker()
+      // Do NOT call init — engine is not ready
+      await expect(
+        sw.learn("some prompt", "some response", "gpt-4o", 5, 10),
+      ).resolves.toBeUndefined()
+    })
+
+    it("clear() returns early without error when not ready", async () => {
+      const sw = new ShieldWorker()
+      await expect(sw.clear()).resolves.toBeUndefined()
+    })
+
+    it("stats() returns zeroed stats when not ready", async () => {
+      const sw = new ShieldWorker()
+      const stats = await sw.stats()
+      expect(stats).toEqual({ entries: 0, totalHits: 0, avgScore: 0 })
+    })
+  })
+
+  // -------------------------------------------------------
+  // Re-initialization
+  // -------------------------------------------------------
+  describe("re-initialization", () => {
+    it("double init() reinitializes cleanly", async () => {
+      const sw = new ShieldWorker()
+      await sw.init({ threshold: 0.5 })
+      await sw.learn("What color is the sky?", "Blue.", "gpt-4o", 5, 5)
+
+      const stats1 = await sw.stats()
+      expect(stats1.entries).toBe(1)
+
+      // Re-init should wipe the engine and start fresh
+      await sw.init({ threshold: 0.6 })
+      expect(sw.isReady).toBe(true)
+      expect(sw.executionMode).toBe("inline")
+
+      const stats2 = await sw.stats()
+      expect(stats2.entries).toBe(0)
+    })
+  })
+
+  // -------------------------------------------------------
+  // initInline with persist: true
+  // -------------------------------------------------------
+  describe("initInline with persist", () => {
+    it("init() with persist: true initializes and hydrates without error", async () => {
+      const sw = new ShieldWorker()
+      // In Node.js/Vitest there is no IDB — hydrate gracefully returns 0
+      await expect(sw.init({ persist: true })).resolves.toBeUndefined()
+      expect(sw.isReady).toBe(true)
+      expect(sw.executionMode).toBe("inline")
+
+      // Engine is functional after hydrating with persist enabled
+      await sw.learn("Persisted prompt for testing", "Persisted response", "gpt-4o", 5, 5)
+      const stats = await sw.stats()
+      expect(stats.entries).toBe(1)
+    })
+  })
+
+  // -------------------------------------------------------
+  // find() without model parameter
+  // -------------------------------------------------------
+  describe("find without model param", () => {
+    it("find() with only prompt (no model) returns a match regardless of stored model", async () => {
+      const sw = new ShieldWorker()
+      await sw.init({ threshold: 0.5 })
+
+      await sw.learn("How do I reset my password?", "Click forgot password.", "gpt-4o", 5, 10)
+
+      // Call find with prompt only — no model filter
+      const result = await sw.find("How do I reset my password?")
+      expect(result).not.toBeNull()
+      expect(result!.response).toBe("Click forgot password.")
+    })
+  })
+
+  // -------------------------------------------------------
+  // terminate() with pending promises
+  // -------------------------------------------------------
+  describe("terminate with pending promises", () => {
+    it("terminate() rejects pending promises", async () => {
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      // Learn something so find has work to do
+      await sw.learn("Test prompt for pending", "Test response", "gpt-4o", 5, 5)
+
+      // Manually add a pending promise to simulate in-flight requests
+      // Access the private pending map via bracket notation
+      const pendingMap = (
+        sw as unknown as {
+          pending: Map<string, { resolve: (v: unknown) => void; reject: (r: unknown) => void }>
+        }
+      ).pending
+      const promise = new Promise<void>((resolve, reject) => {
+        pendingMap.set("test_pending_1", {
+          resolve: resolve as (v: unknown) => void,
+          reject: reject as (r: unknown) => void,
+        })
+      })
+
+      // Terminate should reject all pending promises
+      sw.terminate()
+
+      await expect(promise).rejects.toThrow("ShieldWorker terminated")
+      expect(sw.isReady).toBe(false)
+    })
+  })
 })
