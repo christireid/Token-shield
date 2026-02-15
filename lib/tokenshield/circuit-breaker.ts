@@ -167,7 +167,8 @@ export class CostCircuitBreaker {
 
   /**
    * Check if a request should proceed given current spending.
-   * Call this before every API request.
+   * Call before every API call. Returns a decision with the current
+   * status and optional warning/throttle signals.
    */
   check(
     modelId?: string,

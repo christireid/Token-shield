@@ -117,11 +117,11 @@ export class RequestGuard {
   }
 
   /**
-   * Check if a request should proceed. Returns a gate decision
-   * with the reason if blocked.
+   * Check if a request should proceed. Call before every API call.
+   * Returns a gate decision with the reason if blocked.
    *
    * @param modelId - Optional model ID for cost estimation. Falls back to
-   *   config.modelId when not provided (backward-compatible).
+   *   config.modelId when not provided.
    */
   check(prompt: string, expectedOutputTokens = 500, modelId?: string): GuardResult {
     const now = Date.now()

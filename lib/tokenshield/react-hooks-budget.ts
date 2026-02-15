@@ -282,7 +282,7 @@ export function useSessionSavings(): SessionSavingsState {
         requestCount: prev.requestCount + 1,
       }))
     }
-    return subscribeToEvent(eventBus, "ledger:entry", handler as never)
+    return subscribeToEvent(eventBus, "ledger:entry", handler)
   }, [eventBus])
 
   return state

@@ -13,7 +13,111 @@ import {
   safeCost,
   getShieldMeta,
   type MiddlewareContext,
+  type ShieldMeta,
 } from "./middleware-types"
+
+/**
+ * Shared post-request recording logic used by both wrapGenerate and wrapStream.
+ * Computes savings, records in ledger, emits events, completes guard tracking,
+ * records in breaker/budget, and checks for anomalies.
+ */
+async function recordPostRequestUsage(
+  ctx: MiddlewareContext,
+  opts: {
+    modelId: string
+    inputTokens: number
+    outputTokens: number
+    latencyMs: number
+    meta: ShieldMeta | undefined
+    params: Record<string, unknown>
+  },
+): Promise<void> {
+  const { config, guard, ledger, breaker, userBudgetManager, anomalyDetector, instanceEvents } = ctx
+  const { modelId, inputTokens, outputTokens, latencyMs, meta, params } = opts
+
+  // Compute per-request savings
+  const contextSavedDollars = meta?.contextSaved
+    ? (meta.contextSaved / 1_000_000) * (MODEL_PRICING[modelId]?.inputPerMillion ?? 2.5)
+    : 0
+  const routerSavedDollars = meta?.routerSaved ?? 0
+  const prefixSavedDollars = meta?.prefixSaved ?? 0
+
+  // Record in ledger
+  if (ledger) {
+    await ledger.record({
+      model: modelId,
+      inputTokens,
+      outputTokens,
+      savings: {
+        context: contextSavedDollars,
+        router: routerSavedDollars,
+        prefix: prefixSavedDollars,
+      },
+      originalInputTokens: meta?.originalInputTokens,
+      originalModel: meta?.originalModel,
+      feature: config.ledger?.feature,
+      latencyMs,
+    })
+  }
+
+  const perRequestCost = safeCost(modelId, inputTokens, outputTokens)
+  const perRequestSaved = contextSavedDollars + routerSavedDollars + prefixSavedDollars
+
+  try {
+    instanceEvents.emit("ledger:entry", {
+      model: modelId,
+      inputTokens,
+      outputTokens,
+      cost: perRequestCost,
+      saved: perRequestSaved,
+    })
+  } catch {
+    /* non-fatal */
+  }
+
+  config.onUsage?.({
+    model: modelId,
+    inputTokens,
+    outputTokens,
+    cost: perRequestCost,
+    saved: perRequestSaved,
+  })
+
+  // Complete the guard request tracking
+  if (guard) {
+    const guardUserText = meta?.lastUserText ?? extractLastUserText(params)
+    if (guardUserText) {
+      guard.completeRequest(guardUserText, inputTokens, outputTokens, modelId)
+    }
+  }
+
+  // Record spending in circuit breaker
+  if (breaker && perRequestCost > 0) {
+    breaker.recordSpend(perRequestCost, modelId)
+  }
+
+  // Record spending in per-user budget manager
+  if (userBudgetManager && meta?.userId) {
+    await userBudgetManager
+      .recordSpend(meta.userId, perRequestCost, modelId, meta.userBudgetInflight)
+      .catch(() => {
+        /* IDB write failed — inflight already released synchronously */
+      })
+  }
+
+  // Detect anomalies
+  if (anomalyDetector) {
+    const anomaly = anomalyDetector.check(perRequestCost, inputTokens + outputTokens)
+    if (anomaly) {
+      try {
+        instanceEvents.emit("anomaly:detected", anomaly)
+      } catch {
+        /* non-fatal */
+      }
+      config.anomaly?.onAnomalyDetected?.(anomaly)
+    }
+  }
+}
 
 /**
  * Build the wrapGenerate function for the middleware pipeline.
@@ -21,18 +125,7 @@ import {
  * and records usage in the ledger.
  */
 export function buildWrapGenerate(ctx: MiddlewareContext) {
-  const {
-    config,
-    guard,
-    cache,
-    ledger,
-    breaker,
-    userBudgetManager,
-    anomalyDetector,
-    instanceEvents,
-    adapter,
-    log,
-  } = ctx
+  const { config, cache, ledger, userBudgetManager, adapter, log } = ctx
 
   return async ({
     doGenerate,
@@ -140,88 +233,15 @@ export function buildWrapGenerate(ctx: MiddlewareContext) {
       }
     }
 
-    // Compute per-request savings
-    const contextSavedDollars = meta?.contextSaved
-      ? (meta.contextSaved / 1_000_000) * (MODEL_PRICING[modelId]?.inputPerMillion ?? 2.5)
-      : 0
-    const routerSavedDollars = meta?.routerSaved ?? 0
-    const prefixSavedDollars = meta?.prefixSaved ?? 0
-
-    // Record in ledger
-    if (ledger) {
-      await ledger.record({
-        model: modelId,
-        inputTokens,
-        outputTokens,
-        savings: {
-          context: contextSavedDollars,
-          router: routerSavedDollars,
-          prefix: prefixSavedDollars,
-        },
-        originalInputTokens: meta?.originalInputTokens,
-        originalModel: meta?.originalModel,
-        feature: config.ledger?.feature,
-        latencyMs,
-      })
-    }
-
-    const perRequestCost = safeCost(modelId, inputTokens, outputTokens)
-    const perRequestSaved = contextSavedDollars + routerSavedDollars + prefixSavedDollars
-
-    try {
-      instanceEvents.emit("ledger:entry", {
-        model: modelId,
-        inputTokens,
-        outputTokens,
-        cost: perRequestCost,
-        saved: perRequestSaved,
-      })
-    } catch {
-      /* non-fatal */
-    }
-
-    config.onUsage?.({
-      model: modelId,
+    // Record usage, savings, and emit events
+    await recordPostRequestUsage(ctx, {
+      modelId,
       inputTokens,
       outputTokens,
-      cost: perRequestCost,
-      saved: perRequestSaved,
+      latencyMs,
+      meta,
+      params,
     })
-
-    // Complete the guard request tracking
-    if (guard) {
-      const guardUserText = meta?.lastUserText ?? extractLastUserText(params)
-      if (guardUserText) {
-        guard.completeRequest(guardUserText, inputTokens, outputTokens, modelId)
-      }
-    }
-
-    // Record spending in circuit breaker
-    if (breaker && perRequestCost > 0) {
-      breaker.recordSpend(perRequestCost, modelId)
-    }
-
-    // Record spending in per-user budget manager
-    if (userBudgetManager && meta?.userId) {
-      await userBudgetManager
-        .recordSpend(meta.userId, perRequestCost, modelId, meta.userBudgetInflight)
-        .catch(() => {
-          /* IDB write failed — inflight already released synchronously */
-        })
-    }
-
-    // Detect anomalies
-    if (anomalyDetector) {
-      const anomaly = anomalyDetector.check(perRequestCost, inputTokens + outputTokens)
-      if (anomaly) {
-        try {
-          instanceEvents.emit("anomaly:detected", anomaly)
-        } catch {
-          /* non-fatal */
-        }
-        config.anomaly?.onAnomalyDetected?.(anomaly)
-      }
-    }
 
     return result
   }
@@ -233,18 +253,7 @@ export function buildWrapGenerate(ctx: MiddlewareContext) {
  * pipes chunks through a StreamTokenTracker, and records usage when done.
  */
 export function buildWrapStream(ctx: MiddlewareContext) {
-  const {
-    config,
-    guard,
-    cache,
-    ledger,
-    breaker,
-    userBudgetManager,
-    anomalyDetector,
-    instanceEvents,
-    adapter,
-    log,
-  } = ctx
+  const { config, cache, ledger, userBudgetManager, instanceEvents, adapter, log } = ctx
 
   return async ({
     doStream,
@@ -363,92 +372,19 @@ export function buildWrapStream(ctx: MiddlewareContext) {
         }
       }
 
-      const contextSavedDollars = meta?.contextSaved
-        ? (meta.contextSaved / 1_000_000) * (MODEL_PRICING[modelId]?.inputPerMillion ?? 2.5)
-        : 0
-      const routerSavedDollars = meta?.routerSaved ?? 0
-      const prefixSavedDollars = meta?.prefixSaved ?? 0
-
-      if (ledger) {
-        ledger
-          .record({
-            model: modelId,
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            savings: {
-              context: contextSavedDollars,
-              router: routerSavedDollars,
-              prefix: prefixSavedDollars,
-            },
-            originalInputTokens: meta?.originalInputTokens,
-            originalModel: meta?.originalModel,
-            feature: config.ledger?.feature,
-            latencyMs,
-          })
-          .catch((err) => {
-            log?.debug("ledger", "Failed to record stream usage", {
-              error: err instanceof Error ? err.message : String(err),
-            })
-          })
-      }
-
-      const streamPerRequestCost = safeCost(modelId, usage.inputTokens, usage.outputTokens)
-      const streamPerRequestSaved = contextSavedDollars + routerSavedDollars + prefixSavedDollars
-
-      try {
-        instanceEvents.emit("ledger:entry", {
-          model: modelId,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          cost: streamPerRequestCost,
-          saved: streamPerRequestSaved,
-        })
-      } catch {
-        /* non-fatal */
-      }
-
-      config.onUsage?.({
-        model: modelId,
+      // Record usage, savings, and emit events (fire-and-forget for streams)
+      recordPostRequestUsage(ctx, {
+        modelId,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
-        cost: streamPerRequestCost,
-        saved: streamPerRequestSaved,
+        latencyMs,
+        meta,
+        params,
+      }).catch((err) => {
+        log?.debug("ledger", "Failed to record stream usage", {
+          error: err instanceof Error ? err.message : String(err),
+        })
       })
-
-      if (guard) {
-        const guardUserText = meta?.lastUserText ?? extractLastUserText(params)
-        if (guardUserText) {
-          guard.completeRequest(guardUserText, usage.inputTokens, usage.outputTokens, modelId)
-        }
-      }
-
-      if (breaker && streamPerRequestCost > 0) {
-        breaker.recordSpend(streamPerRequestCost, modelId)
-      }
-
-      if (userBudgetManager && meta?.userId) {
-        userBudgetManager
-          .recordSpend(meta.userId, streamPerRequestCost, modelId, meta.userBudgetInflight)
-          .catch(() => {
-            /* IDB write failed — inflight already released synchronously */
-          })
-      }
-
-      // Detect anomalies
-      if (anomalyDetector) {
-        const anomaly = anomalyDetector.check(
-          streamPerRequestCost,
-          usage.inputTokens + usage.outputTokens,
-        )
-        if (anomaly) {
-          try {
-            instanceEvents.emit("anomaly:detected", anomaly)
-          } catch {
-            /* non-fatal */
-          }
-          config.anomaly?.onAnomalyDetected?.(anomaly)
-        }
-      }
     }
 
     // Guard flag to prevent double-recording

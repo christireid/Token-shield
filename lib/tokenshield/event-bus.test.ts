@@ -38,7 +38,7 @@ describe("event-bus", () => {
     it("subscribes to events and receives data", () => {
       const bus = createEventBus()
       const handler = vi.fn()
-      subscribeToEvent(bus, "request:blocked", handler as never)
+      subscribeToEvent(bus, "request:blocked", handler)
       bus.emit("request:blocked", { reason: "test", estimatedCost: 0.5 })
       expect(handler).toHaveBeenCalledWith({ reason: "test", estimatedCost: 0.5 })
     })
@@ -46,7 +46,7 @@ describe("event-bus", () => {
     it("returns an unsubscribe function that removes the handler", () => {
       const bus = createEventBus()
       const handler = vi.fn()
-      const unsub = subscribeToEvent(bus, "cache:miss", handler as never)
+      const unsub = subscribeToEvent(bus, "cache:miss", handler)
       bus.emit("cache:miss", { prompt: "first" })
       expect(handler).toHaveBeenCalledTimes(1)
 
@@ -59,8 +59,8 @@ describe("event-bus", () => {
       const bus = createEventBus()
       const hitHandler = vi.fn()
       const missHandler = vi.fn()
-      subscribeToEvent(bus, "cache:hit", hitHandler as never)
-      subscribeToEvent(bus, "cache:miss", missHandler as never)
+      subscribeToEvent(bus, "cache:hit", hitHandler)
+      subscribeToEvent(bus, "cache:miss", missHandler)
 
       bus.emit("cache:hit", { matchType: "exact", similarity: 1, savedCost: 0 })
       expect(hitHandler).toHaveBeenCalledTimes(1)
