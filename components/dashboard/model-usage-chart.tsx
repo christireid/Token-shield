@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useMemo } from "react"
 import { useDashboard } from "./dashboard-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
@@ -14,26 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
-
-const MODEL_COLORS: Record<string, string> = {
-  "gpt-4o": "hsl(152, 60%, 52%)",
-  "claude-sonnet-4": "hsl(190, 70%, 50%)",
-  "gemini-2.5-flash": "hsl(38, 92%, 50%)",
-  "gpt-4o-mini": "hsl(270, 60%, 60%)",
-  "claude-haiku-3.5": "hsl(0, 72%, 60%)",
-}
-
-const fallbackColors = [
-  "hsl(160, 50%, 45%)",
-  "hsl(200, 60%, 50%)",
-  "hsl(30, 80%, 55%)",
-  "hsl(280, 50%, 55%)",
-  "hsl(350, 60%, 55%)",
-]
-
-function getModelColor(id: string, idx: number): string {
-  return MODEL_COLORS[id] || fallbackColors[idx % fallbackColors.length]
-}
+import { getModelColor } from "@/lib/dashboard-utils"
 
 export function ModelUsageChart() {
   const { data } = useDashboard()
@@ -41,30 +23,45 @@ export function ModelUsageChart() {
   const [sortDir, setSortDir] = React.useState<"asc" | "desc">("desc")
   const [hoveredRow, setHoveredRow] = React.useState<string | null>(null)
 
-  const entries = Object.entries(data.byModel).map(([id, d], idx) => ({
-    id,
-    ...d,
-    color: getModelColor(id, idx),
-  }))
+  const entries = useMemo(
+    () =>
+      Object.entries(data.byModel).map(([id, d], idx) => ({
+        id,
+        ...d,
+        color: getModelColor(id, idx),
+      })),
+    [data.byModel],
+  )
 
-  const sorted = [...entries].sort((a, b) => {
-    const diff = a[sortKey] - b[sortKey]
-    return sortDir === "desc" ? -diff : diff
-  })
+  const sorted = useMemo(
+    () =>
+      [...entries].sort((a, b) => {
+        const diff = a[sortKey] - b[sortKey]
+        return sortDir === "desc" ? -diff : diff
+      }),
+    [entries, sortKey, sortDir],
+  )
 
-  const pieData = entries.map((e) => ({
-    name: e.id,
-    value: e.cost,
-    fill: e.color,
-  }))
+  const pieData = useMemo(
+    () =>
+      entries.map((e) => ({
+        name: e.id,
+        value: e.cost,
+        fill: e.color,
+      })),
+    [entries],
+  )
 
-  const totalCost = entries.reduce((a, e) => a + e.cost, 0)
-  const modelCount = entries.length
-
-  // Find the top model by cost
-  const topModel = entries.length > 0
-    ? entries.reduce((top, e) => (e.cost > top.cost ? e : top), entries[0])
-    : null
+  const { totalCost, modelCount, topModel } = useMemo(() => {
+    const totalCost = entries.reduce((a, e) => a + e.cost, 0)
+    const modelCount = entries.length
+    // Find the top model by cost
+    const topModel =
+      entries.length > 0
+        ? entries.reduce((top, e) => (e.cost > top.cost ? e : top), entries[0])
+        : null
+    return { totalCost, modelCount, topModel }
+  }, [entries])
 
   const handleSort = (key: "cost" | "calls" | "tokens") => {
     if (sortKey === key) {
@@ -241,9 +238,7 @@ export function ModelUsageChart() {
                           style={{
                             backgroundColor: entry.color,
                             boxShadow:
-                              hoveredRow === entry.id
-                                ? `0 0 8px 2px ${entry.color}60`
-                                : "none",
+                              hoveredRow === entry.id ? `0 0 8px 2px ${entry.color}60` : "none",
                           }}
                         />
                         <span className="font-mono text-xs text-foreground">{entry.id}</span>

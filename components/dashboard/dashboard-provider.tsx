@@ -353,7 +353,12 @@ function generateInitialAnomalies(eventIdRef: React.MutableRefObject<number>): A
       timestamp: now - randInt(5, 45) * 60_000,
       type: types[i],
       severity: (["low", "medium", "high"] as const)[randInt(0, 3)],
-      metric: types[i] === "cost_spike" ? "request_cost" : types[i] === "token_spike" ? "token_count" : "cost_delta",
+      metric:
+        types[i] === "cost_spike"
+          ? "request_cost"
+          : types[i] === "token_spike"
+            ? "token_count"
+            : "cost_delta",
       value: rand(0.05, 0.5),
       expected: rand(0.01, 0.08),
       message:
@@ -686,16 +691,30 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
             latencyMs: newLatencyVal,
             errorRate: newErrorRate,
             lastChecked: now,
-            requestCount: ph.requestCount + (ph.provider === "OpenAI" ? 1 : Math.random() < 0.5 ? 1 : 0),
-            status: (newErrorRate > 5 ? "degraded" : newLatencyVal > 500 ? "degraded" : "healthy") as ProviderHealthRecord["status"],
-            uptimePercent: Math.max(95, Math.min(100, ph.uptimePercent * 0.999 + rand(99.5, 100) * 0.001)),
+            requestCount:
+              ph.requestCount + (ph.provider === "OpenAI" ? 1 : Math.random() < 0.5 ? 1 : 0),
+            status: (newErrorRate > 5
+              ? "degraded"
+              : newLatencyVal > 500
+                ? "degraded"
+                : "healthy") as ProviderHealthRecord["status"],
+            uptimePercent: Math.max(
+              95,
+              Math.min(100, ph.uptimePercent * 0.999 + rand(99.5, 100) * 0.001),
+            ),
           }
         })
 
         // Occasionally generate anomaly (2% chance)
         let newAnomalies = prev.anomalies
         if (Math.random() < 0.02) {
-          const anomalyTypes: AnomalyRecord["type"][] = ["cost_spike", "token_spike", "cost_rate_change", "token_rate_change", "cost_percentile"]
+          const anomalyTypes: AnomalyRecord["type"][] = [
+            "cost_spike",
+            "token_spike",
+            "cost_rate_change",
+            "token_rate_change",
+            "cost_percentile",
+          ]
           const type = anomalyTypes[randInt(0, anomalyTypes.length)]
           eventIdRef.current++
           const newAnomaly: AnomalyRecord = {
@@ -725,14 +744,37 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         let newAlerts = prev.alerts
         if (Math.random() < 0.01) {
           const alertTemplates = [
-            { severity: "warning" as const, title: "High latency detected", message: `Provider latency exceeded 400ms for ${PROVIDERS[randInt(0, PROVIDERS.length)].name}.`, source: "Provider Health" },
-            { severity: "critical" as const, title: "Budget threshold exceeded", message: `Spending has reached ${randInt(85, 98)}% of the hourly limit.`, source: "Circuit Breaker" },
-            { severity: "info" as const, title: "Cache efficiency improved", message: `Cache hit rate increased to ${rand(40, 55).toFixed(1)}% in the last 10 minutes.`, source: "Response Cache" },
-            { severity: "warning" as const, title: "Anomaly cluster detected", message: `${randInt(2, 4)} anomalies detected within a 5-minute window.`, source: "Anomaly Detector" },
+            {
+              severity: "warning" as const,
+              title: "High latency detected",
+              message: `Provider latency exceeded 400ms for ${PROVIDERS[randInt(0, PROVIDERS.length)].name}.`,
+              source: "Provider Health",
+            },
+            {
+              severity: "critical" as const,
+              title: "Budget threshold exceeded",
+              message: `Spending has reached ${randInt(85, 98)}% of the hourly limit.`,
+              source: "Circuit Breaker",
+            },
+            {
+              severity: "info" as const,
+              title: "Cache efficiency improved",
+              message: `Cache hit rate increased to ${rand(40, 55).toFixed(1)}% in the last 10 minutes.`,
+              source: "Response Cache",
+            },
+            {
+              severity: "warning" as const,
+              title: "Anomaly cluster detected",
+              message: `${randInt(2, 4)} anomalies detected within a 5-minute window.`,
+              source: "Anomaly Detector",
+            },
           ]
           const template = alertTemplates[randInt(0, alertTemplates.length)]
           eventIdRef.current++
-          newAlerts = [...prev.alerts, { ...template, id: eventIdRef.current, timestamp: now, dismissed: false }].slice(-10)
+          newAlerts = [
+            ...prev.alerts,
+            { ...template, id: eventIdRef.current, timestamp: now, dismissed: false },
+          ].slice(-10)
         }
 
         return {
@@ -869,25 +911,38 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [])
 
-  return (
-    <DashboardContext.Provider
-      value={{
-        data,
-        mode,
-        setMode,
-        timeRange,
-        setTimeRange,
-        updateUserBudget,
-        addUser,
-        removeUser,
-        resetUserSpend,
-        dismissAlert,
-        acknowledgeAnomaly,
-        isPaused,
-        setIsPaused,
-      }}
-    >
-      {children}
-    </DashboardContext.Provider>
+  const contextValue = React.useMemo<DashboardContextValue>(
+    () => ({
+      data,
+      mode,
+      setMode,
+      timeRange,
+      setTimeRange,
+      updateUserBudget,
+      addUser,
+      removeUser,
+      resetUserSpend,
+      dismissAlert,
+      acknowledgeAnomaly,
+      isPaused,
+      setIsPaused,
+    }),
+    [
+      data,
+      mode,
+      setMode,
+      timeRange,
+      setTimeRange,
+      updateUserBudget,
+      addUser,
+      removeUser,
+      resetUserSpend,
+      dismissAlert,
+      acknowledgeAnomaly,
+      isPaused,
+      setIsPaused,
+    ],
   )
+
+  return <DashboardContext.Provider value={contextValue}>{children}</DashboardContext.Provider>
 }

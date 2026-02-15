@@ -5,6 +5,7 @@ import { useDashboard } from "./dashboard-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts"
+import { CHART_MARGINS, GRID_STROKE, GRID_DASH } from "@/lib/chart-theme"
 
 const chartConfig = {
   cumulativeSaved: {
@@ -27,12 +28,16 @@ function formatCompact(value: number): string {
 export function SavingsTimelineChart() {
   const { data } = useDashboard()
 
-  const chartData = data.timeSeries.map((p) => ({
-    time: new Date(p.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    cumulativeSaved: Number(p.cumulativeSaved.toFixed(4)),
-    cumulativeSpent: Number(p.cumulativeSpent.toFixed(4)),
-    wouldHaveSpent: Number((p.cumulativeSpent + p.cumulativeSaved).toFixed(4)),
-  }))
+  const chartData = useMemo(
+    () =>
+      data.timeSeries.map((p) => ({
+        time: new Date(p.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        cumulativeSaved: Number(p.cumulativeSaved.toFixed(4)),
+        cumulativeSpent: Number(p.cumulativeSpent.toFixed(4)),
+        wouldHaveSpent: Number((p.cumulativeSpent + p.cumulativeSaved).toFixed(4)),
+      })),
+    [data.timeSeries],
+  )
 
   const savingsGapPercent = useMemo(() => {
     const wouldHave = data.totalSpent + data.totalSaved
@@ -78,8 +83,12 @@ export function SavingsTimelineChart() {
         </div>
 
         {/* ── Chart ── */}
-        <ChartContainer config={chartConfig} className="aspect-auto h-[280px] w-full md:h-[320px]">
-          <AreaChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+        <ChartContainer
+          config={chartConfig}
+          className="aspect-auto h-[280px] w-full md:h-[320px]"
+          aria-label="Savings over time chart"
+        >
+          <AreaChart data={chartData} margin={CHART_MARGINS}>
             <defs>
               {/* Vivid green gradient for the savings area */}
               <linearGradient id="gradSaved" x1="0" y1="0" x2="0" y2="1">
@@ -108,7 +117,7 @@ export function SavingsTimelineChart() {
                 </feMerge>
               </filter>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 14%, 12%)" />
+            <CartesianGrid strokeDasharray={GRID_DASH} stroke={GRID_STROKE} />
             <XAxis
               dataKey="time"
               tickLine={false}
@@ -191,7 +200,10 @@ export function SavingsTimelineChart() {
           <div className="flex items-center gap-1.5">
             <span
               className="inline-block h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: "hsl(152, 60%, 52%)", boxShadow: "0 0 6px hsl(152, 60%, 52%)" }}
+              style={{
+                backgroundColor: "hsl(152, 60%, 52%)",
+                boxShadow: "0 0 6px hsl(152, 60%, 52%)",
+              }}
             />
             <span>Savings</span>
           </div>

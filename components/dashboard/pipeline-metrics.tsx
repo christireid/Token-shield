@@ -1,22 +1,12 @@
 "use client"
 
+import { useMemo } from "react"
 import { useDashboard, type PipelineStageMetric } from "./dashboard-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { STAGE_COLORS } from "@/lib/dashboard-utils"
+import { useReducedMotion } from "@/hooks/use-reduced-motion"
 import { Activity, AlertTriangle } from "lucide-react"
-
-/* ------------------------------------------------------------------ */
-/*  Stage color mapping                                                */
-/* ------------------------------------------------------------------ */
-
-const STAGE_COLORS: Record<string, string> = {
-  "Circuit Breaker": "hsl(0, 72%, 60%)",
-  "Request Guard": "hsl(38, 92%, 50%)",
-  "Response Cache": "hsl(190, 70%, 50%)",
-  "Context Manager": "hsl(270, 60%, 60%)",
-  "Model Router": "hsl(152, 60%, 52%)",
-  "Prefix Optimizer": "hsl(330, 60%, 55%)",
-}
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -39,9 +29,7 @@ function PipelineBar({ metrics }: { metrics: PipelineStageMetric[] }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-medium text-muted-foreground">
-          Avg pipeline duration
-        </span>
+        <span className="text-[10px] font-medium text-muted-foreground">Avg pipeline duration</span>
         <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
           {totalDuration.toFixed(1)}ms total
         </span>
@@ -79,9 +67,7 @@ function PipelineBar({ metrics }: { metrics: PipelineStageMetric[] }) {
                 className="h-1.5 w-1.5 rounded-full"
                 style={{ backgroundColor: STAGE_COLORS[m.stage] }}
               />
-              <span className="text-[10px] text-muted-foreground">
-                {m.stage}
-              </span>
+              <span className="text-[10px] text-muted-foreground">{m.stage}</span>
               <span className="font-mono text-[10px] tabular-nums text-muted-foreground/60">
                 {pct.toFixed(0)}%
               </span>
@@ -97,7 +83,17 @@ function PipelineBar({ metrics }: { metrics: PipelineStageMetric[] }) {
 /*  Stage row                                                          */
 /* ------------------------------------------------------------------ */
 
-function StageRow({ metric, isTopSaver, index }: { metric: PipelineStageMetric; isTopSaver: boolean; index: number }) {
+function StageRow({
+  metric,
+  isTopSaver,
+  index,
+  reducedMotion,
+}: {
+  metric: PipelineStageMetric
+  isTopSaver: boolean
+  index: number
+  reducedMotion: boolean
+}) {
   const color = STAGE_COLORS[metric.stage] ?? "hsl(215, 15%, 45%)"
 
   return (
@@ -108,26 +104,22 @@ function StageRow({ metric, isTopSaver, index }: { metric: PipelineStageMetric; 
         index % 2 === 1 && "bg-secondary/10",
       )}
       style={{ ["--stage-color" as string]: color }}
-      onMouseEnter={(e) => e.currentTarget.style.borderLeftColor = color}
-      onMouseLeave={(e) => e.currentTarget.style.borderLeftColor = "transparent"}
+      onMouseEnter={(e) => (e.currentTarget.style.borderLeftColor = color)}
+      onMouseLeave={(e) => (e.currentTarget.style.borderLeftColor = "transparent")}
     >
       {/* Stage name with color dot */}
       <div className="flex items-center gap-2 min-w-0">
         <div
           className={cn(
             "h-2 w-2 shrink-0 rounded-full",
-            isTopSaver && "animate-[pulse-glow_2s_ease-in-out_infinite]",
+            isTopSaver && !reducedMotion && "animate-[pulse-glow_2s_ease-in-out_infinite]",
           )}
           style={{
             backgroundColor: color,
-            ...(isTopSaver
-              ? { boxShadow: `0 0 6px 2px ${color}` }
-              : {}),
+            ...(isTopSaver ? { boxShadow: `0 0 6px 2px ${color}` } : {}),
           }}
         />
-        <span className="truncate text-xs font-medium text-foreground">
-          {metric.stage}
-        </span>
+        <span className="truncate text-xs font-medium text-foreground">{metric.stage}</span>
       </div>
 
       {/* Avg Duration */}
@@ -177,14 +169,25 @@ function StageRow({ metric, isTopSaver, index }: { metric: PipelineStageMetric; 
 export function PipelineMetrics() {
   const { data } = useDashboard()
   const metrics = data.pipelineMetrics
+  const reducedMotion = useReducedMotion()
 
-  const totalDuration = metrics.reduce((sum, m) => sum + m.avgDurationMs, 0)
-  const totalExecutions = metrics.reduce((sum, m) => sum + m.totalExecutions, 0)
-  const totalSavings = metrics.reduce((sum, m) => sum + m.totalSavings, 0)
+  const totalDuration = useMemo(
+    () => metrics.reduce((sum, m) => sum + m.avgDurationMs, 0),
+    [metrics],
+  )
+  const totalExecutions = useMemo(
+    () => metrics.reduce((sum, m) => sum + m.totalExecutions, 0),
+    [metrics],
+  )
+  const totalSavings = useMemo(() => metrics.reduce((sum, m) => sum + m.totalSavings, 0), [metrics])
 
-  const topSaverStage = metrics.length > 0
-    ? metrics.reduce((best, m) => (m.totalSavings > best.totalSavings ? m : best)).stage
-    : ""
+  const topSaverStage = useMemo(
+    () =>
+      metrics.length > 0
+        ? metrics.reduce((best, m) => (m.totalSavings > best.totalSavings ? m : best)).stage
+        : "",
+    [metrics],
+  )
 
   return (
     <Card className="border-border/40 bg-card/50">
@@ -246,6 +249,7 @@ export function PipelineMetrics() {
                 metric={m}
                 isTopSaver={m.stage === topSaverStage}
                 index={idx}
+                reducedMotion={reducedMotion}
               />
             ))}
           </div>

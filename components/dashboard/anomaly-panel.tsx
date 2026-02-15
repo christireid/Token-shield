@@ -8,53 +8,13 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { AlertTriangle, Check, Activity, ShieldAlert, ShieldCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-/* ------------------------------------------------------------------ */
-/*  Constants                                                          */
-/* ------------------------------------------------------------------ */
-
-const SEVERITY_DOT_COLOR: Record<AnomalyRecord["severity"], string> = {
-  high: "bg-[hsl(0,72%,51%)]",
-  medium: "bg-[hsl(38,92%,50%)]",
-  low: "bg-[hsl(152,60%,52%)]",
-}
-
-const SEVERITY_DOT_ANIMATION: Record<AnomalyRecord["severity"], string> = {
-  high: "animate-pulse",
-  medium: "animate-pulse [animation-duration:2.5s]",
-  low: "",
-}
-
-const TYPE_BADGE_COLOR: Record<AnomalyRecord["type"], string> = {
-  cost_spike: "border-[hsl(0,72%,51%)]/30 bg-[hsl(0,72%,51%)]/10 text-[hsl(0,72%,65%)]",
-  token_spike: "border-[hsl(270,60%,60%)]/30 bg-[hsl(270,60%,60%)]/10 text-[hsl(270,60%,75%)]",
-  cost_rate_change: "border-[hsl(38,92%,50%)]/30 bg-[hsl(38,92%,50%)]/10 text-[hsl(38,92%,65%)]",
-  token_rate_change: "border-[hsl(190,70%,50%)]/30 bg-[hsl(190,70%,50%)]/10 text-[hsl(190,70%,65%)]",
-  cost_percentile: "border-[hsl(25,95%,53%)]/30 bg-[hsl(25,95%,53%)]/10 text-[hsl(25,95%,65%)]",
-}
-
-/* ------------------------------------------------------------------ */
-/*  Helpers                                                            */
-/* ------------------------------------------------------------------ */
-
-function formatRelativeTime(ts: number): string {
-  const diff = Math.floor((Date.now() - ts) / 1000)
-  if (diff < 5) return "just now"
-  if (diff < 60) return `${diff}s ago`
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  return `${Math.floor(diff / 3600)}h ago`
-}
-
-function formatAnomalyType(type: AnomalyRecord["type"]): string {
-  const labels: Record<AnomalyRecord["type"], string> = {
-    cost_spike: "Cost Spike",
-    token_spike: "Token Spike",
-    cost_rate_change: "Cost Rate Change",
-    token_rate_change: "Token Rate Change",
-    cost_percentile: "Cost Percentile",
-  }
-  return labels[type]
-}
+import {
+  formatRelativeTime,
+  SEVERITY_DOT_COLOR,
+  SEVERITY_DOT_ANIMATION,
+  ANOMALY_TYPE_BADGE_COLOR,
+  ANOMALY_TYPE_LABELS,
+} from "@/lib/dashboard-utils"
 
 /* ------------------------------------------------------------------ */
 /*  Summary stats bar                                                  */
@@ -101,9 +61,7 @@ function SummaryStats({ anomalies }: { anomalies: AnomalyRecord[] }) {
         </div>
         <div className="flex items-center gap-1 rounded-md bg-[hsl(38,92%,50%)]/5 px-1.5 py-0.5">
           <div className="h-2 w-2 rounded-full bg-[hsl(38,92%,50%)]" />
-          <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-            {medium}
-          </span>
+          <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{medium}</span>
         </div>
         <div className="flex items-center gap-1 rounded-md bg-[hsl(152,60%,52%)]/5 px-1.5 py-0.5">
           <div className="h-2 w-2 rounded-full bg-[hsl(152,60%,52%)]" />
@@ -118,7 +76,7 @@ function SummaryStats({ anomalies }: { anomalies: AnomalyRecord[] }) {
 /*  Anomaly row                                                        */
 /* ------------------------------------------------------------------ */
 
-function AnomalyRow({
+const AnomalyRow = React.memo(function AnomalyRow({
   anomaly,
   onAcknowledge,
 }: {
@@ -152,10 +110,10 @@ function AnomalyRow({
             variant="outline"
             className={cn(
               "shrink-0 rounded px-1.5 py-0 text-[10px] font-medium",
-              TYPE_BADGE_COLOR[anomaly.type],
+              ANOMALY_TYPE_BADGE_COLOR[anomaly.type],
             )}
           >
-            {formatAnomalyType(anomaly.type)}
+            {ANOMALY_TYPE_LABELS[anomaly.type]}
           </Badge>
           <span className="truncate text-xs text-muted-foreground">{anomaly.message}</span>
         </div>
@@ -186,7 +144,7 @@ function AnomalyRow({
       </div>
     </div>
   )
-}
+})
 
 /* ------------------------------------------------------------------ */
 /*  Main component                                                     */
@@ -205,9 +163,7 @@ export function AnomalyPanel() {
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-sm font-medium text-foreground">
-              Anomaly Detection
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-foreground">Anomaly Detection</CardTitle>
             <CardDescription className="text-xs">
               AI-powered spending anomaly detection
             </CardDescription>
@@ -225,11 +181,7 @@ export function AnomalyPanel() {
         <ScrollArea className="h-[300px]">
           <div className="flex flex-col gap-1">
             {displayAnomalies.map((anomaly) => (
-              <AnomalyRow
-                key={anomaly.id}
-                anomaly={anomaly}
-                onAcknowledge={acknowledgeAnomaly}
-              />
+              <AnomalyRow key={anomaly.id} anomaly={anomaly} onAcknowledge={acknowledgeAnomaly} />
             ))}
             {displayAnomalies.length === 0 && (
               <div className="flex h-32 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border/40 bg-secondary/10">

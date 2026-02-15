@@ -1,6 +1,8 @@
 "use client"
 
+import { memo, useMemo } from "react"
 import { useDashboard } from "./dashboard-provider"
+import { useReducedMotion } from "@/hooks/use-reduced-motion"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
@@ -22,7 +24,7 @@ interface MiniBarProps {
   max: number | null
 }
 
-function MiniBar({ label, value, max }: MiniBarProps) {
+const MiniBar = memo(function MiniBar({ label, value, max }: MiniBarProps) {
   if (value === null || max === null) return null
   const percent = max > 0 ? Math.min(100, (1 - value / max) * 100) : 0
   const remaining = value
@@ -48,11 +50,12 @@ function MiniBar({ label, value, max }: MiniBarProps) {
       </div>
     </div>
   )
-}
+})
 
 export function BudgetGauge() {
   const { data } = useDashboard()
   const { budget } = data
+  const reducedMotion = useReducedMotion()
 
   const percent = Math.min(100, budget.percentUsed)
   const gaugeColor = getGaugeColor(percent)
@@ -80,25 +83,33 @@ export function BudgetGauge() {
   }
 
   // Tick marks at 0%, 25%, 50%, 75%, 100%
-  const tickPercents = [0, 25, 50, 75, 100]
-  const tickLength = 8
-  const ticks = tickPercents.map((tp) => {
-    const angle = startAngle + (totalAngle * tp) / 100
-    const inner = polarToCartesian(angle)
-    const outerRadius = radius + tickLength
-    const rad = ((angle - 90) * Math.PI) / 180
-    const outer = { x: cx + outerRadius * Math.cos(rad), y: cy + outerRadius * Math.sin(rad) }
-    return { percent: tp, inner, outer, angle }
-  })
+  const { ticks, labelStartPos, labelEndPos } = useMemo(() => {
+    const tickPercents = [0, 25, 50, 75, 100]
+    const tickLength = 8
+    const ticks = tickPercents.map((tp) => {
+      const angle = startAngle + (totalAngle * tp) / 100
+      const inner = polarToCartesian(angle)
+      const outerRadius = radius + tickLength
+      const rad = ((angle - 90) * Math.PI) / 180
+      const outer = { x: cx + outerRadius * Math.cos(rad), y: cy + outerRadius * Math.sin(rad) }
+      return { percent: tp, inner, outer, angle }
+    })
 
-  // Label positions (slightly further out than tick marks)
-  const labelRadius = radius + tickLength + 10
-  const labelStart = polarToCartesian(startAngle)
-  const labelEnd = polarToCartesian(endAngle)
-  const labelStartRad = ((startAngle - 90) * Math.PI) / 180
-  const labelEndRad = ((endAngle - 90) * Math.PI) / 180
-  const labelStartPos = { x: cx + labelRadius * Math.cos(labelStartRad), y: cy + labelRadius * Math.sin(labelStartRad) }
-  const labelEndPos = { x: cx + labelRadius * Math.cos(labelEndRad), y: cy + labelRadius * Math.sin(labelEndRad) }
+    // Label positions (slightly further out than tick marks)
+    const labelRadius = radius + tickLength + 10
+    const labelStartRad = ((startAngle - 90) * Math.PI) / 180
+    const labelEndRad = ((endAngle - 90) * Math.PI) / 180
+    const labelStartPos = {
+      x: cx + labelRadius * Math.cos(labelStartRad),
+      y: cy + labelRadius * Math.sin(labelStartRad),
+    }
+    const labelEndPos = {
+      x: cx + labelRadius * Math.cos(labelEndRad),
+      y: cy + labelRadius * Math.sin(labelEndRad),
+    }
+
+    return { ticks, labelStartPos, labelEndPos }
+  }, [percent])
 
   return (
     <>
@@ -112,7 +123,7 @@ export function BudgetGauge() {
         className={cn(
           "border-border/40 bg-card/50 transition-all",
           budget.isOverBudget && "border-[hsl(0,72%,51%)]/40 shadow-[0_0_20px_hsl(0,72%,51%,0.1)]",
-          budget.isOverBudget && "animate-[budget-pulse_2s_ease-in-out_infinite]",
+          budget.isOverBudget && !reducedMotion && "animate-[budget-pulse_2s_ease-in-out_infinite]",
         )}
       >
         <CardHeader className="pb-2">

@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import { DashboardProvider } from "./dashboard-provider"
 import { DashboardHeader } from "./dashboard-header"
 import { AlertBanner } from "./alert-banner"
@@ -13,6 +14,7 @@ import { ProviderHealth } from "./provider-health"
 import { EventFeed } from "./event-feed"
 import { BudgetGauge } from "./budget-gauge"
 import { UserBudgetTable } from "./user-budget-table"
+import { useStaggeredReveal } from "@/hooks/use-staggered-reveal"
 
 function SectionHeader({ title }: { title: string }) {
   return (
@@ -22,6 +24,30 @@ function SectionHeader({ title }: { title: string }) {
       </span>
       <div className="h-px bg-border/20 flex-1" />
     </div>
+  )
+}
+
+function RevealSection({
+  order,
+  children,
+  ariaLabel,
+}: {
+  order: number
+  children: React.ReactNode
+  ariaLabel?: string
+}) {
+  const visible = useStaggeredReveal(order)
+  return (
+    <section
+      aria-label={ariaLabel}
+      className="transition-all duration-500 ease-out"
+      style={{
+        opacity: visible ? 1 : 0,
+        transform: visible ? "translateY(0)" : "translateY(12px)",
+      }}
+    >
+      {children}
+    </section>
   )
 }
 
@@ -53,67 +79,73 @@ export function DashboardShell() {
             <AlertBanner />
 
             {/* KPI row */}
-            <section aria-label="Key performance indicators">
+            <RevealSection order={1} ariaLabel="Key performance indicators">
               <KpiCards />
-            </section>
+            </RevealSection>
 
             {/* --- Performance --- */}
             <SectionHeader title="Performance" />
 
             {/* Savings timeline - full width */}
-            <section aria-label="Savings over time">
+            <RevealSection order={2} ariaLabel="Savings over time">
               <SavingsTimelineChart />
-            </section>
+            </RevealSection>
 
             {/* --- Cost Analytics --- */}
             <SectionHeader title="Cost Analytics" />
 
             {/* Two-column: Module breakdown + Model usage */}
-            <div className="grid gap-6 lg:grid-cols-2">
-              <section aria-label="Module savings breakdown">
-                <ModuleBreakdownChart />
-              </section>
-              <section aria-label="Model usage distribution">
-                <ModelUsageChart />
-              </section>
-            </div>
+            <RevealSection order={3} ariaLabel="Cost analytics breakdown">
+              <div className="grid gap-6 lg:grid-cols-2">
+                <section aria-label="Module savings breakdown">
+                  <ModuleBreakdownChart />
+                </section>
+                <section aria-label="Model usage distribution">
+                  <ModelUsageChart />
+                </section>
+              </div>
+            </RevealSection>
 
             {/* --- Infrastructure --- */}
             <SectionHeader title="Infrastructure" />
 
             {/* Two-column: Pipeline metrics + Provider health */}
-            <div className="grid gap-6 lg:grid-cols-2">
-              <section aria-label="Pipeline performance">
-                <PipelineMetrics />
-              </section>
-              <section aria-label="Provider health">
-                <ProviderHealth />
-              </section>
-            </div>
+            <RevealSection order={4} ariaLabel="Infrastructure metrics">
+              <div className="grid gap-6 lg:grid-cols-2">
+                <section aria-label="Pipeline performance">
+                  <PipelineMetrics />
+                </section>
+                <section aria-label="Provider health">
+                  <ProviderHealth />
+                </section>
+              </div>
+            </RevealSection>
 
             {/* --- Activity & Security --- */}
             <SectionHeader title="Activity & Security" />
 
             {/* Three-column: Event feed + Anomaly detection + Budget gauge */}
-            <div className="grid gap-6 lg:grid-cols-[1fr_1fr_380px]">
-              <section aria-label="Live event feed">
-                <EventFeed />
-              </section>
-              <section aria-label="Anomaly detection">
-                <AnomalyPanel />
-              </section>
-              <section aria-label="Budget utilization">
-                <BudgetGauge />
-              </section>
-            </div>
+            <RevealSection order={5} ariaLabel="Activity and security overview">
+              <div className="grid gap-6 lg:grid-cols-[1fr_1fr_380px]">
+                <section aria-label="Live event feed">
+                  <EventFeed />
+                </section>
+                <section aria-label="Anomaly detection">
+                  <AnomalyPanel />
+                </section>
+                <section aria-label="Budget utilization">
+                  <BudgetGauge />
+                </section>
+              </div>
+            </RevealSection>
 
             {/* --- User Management --- */}
             <SectionHeader title="User Management" />
 
             {/* User budget management - full width */}
-            <section aria-label="User budget management">
+            <RevealSection order={6} ariaLabel="User budget management">
               <UserBudgetTable />
-            </section>
+            </RevealSection>
           </div>
         </main>
       </div>

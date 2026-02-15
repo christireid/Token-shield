@@ -8,42 +8,12 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Pause, Play } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-const EVENT_COLORS: Record<DashboardEvent["type"], string> = {
-  "cache:hit": "bg-[hsl(190,70%,50%)]",
-  "cache:miss": "bg-[hsl(215,15%,45%)]",
-  "request:blocked": "bg-[hsl(0,72%,51%)]",
-  "router:downgraded": "bg-[hsl(270,60%,60%)]",
-  "context:trimmed": "bg-[hsl(38,92%,50%)]",
-  "prefix:optimized": "bg-[hsl(152,60%,52%)]",
-  "ledger:entry": "bg-[hsl(152,60%,52%)]",
-  "breaker:warning": "bg-[hsl(25,95%,53%)]",
-}
-
-const EVENT_BADGE_COLORS: Record<DashboardEvent["type"], string> = {
-  "cache:hit": "border-[hsl(190,70%,50%)]/30 bg-[hsl(190,70%,50%)]/10 text-[hsl(190,70%,65%)]",
-  "cache:miss": "border-border/30 bg-secondary/30 text-muted-foreground",
-  "request:blocked": "border-[hsl(0,72%,51%)]/30 bg-[hsl(0,72%,51%)]/10 text-[hsl(0,72%,65%)]",
-  "router:downgraded":
-    "border-[hsl(270,60%,60%)]/30 bg-[hsl(270,60%,60%)]/10 text-[hsl(270,60%,75%)]",
-  "context:trimmed": "border-[hsl(38,92%,50%)]/30 bg-[hsl(38,92%,50%)]/10 text-[hsl(38,92%,65%)]",
-  "prefix:optimized":
-    "border-[hsl(152,60%,52%)]/30 bg-[hsl(152,60%,52%)]/10 text-[hsl(152,60%,65%)]",
-  "ledger:entry": "border-[hsl(152,60%,52%)]/30 bg-[hsl(152,60%,52%)]/10 text-[hsl(152,60%,65%)]",
-  "breaker:warning": "border-[hsl(25,95%,53%)]/30 bg-[hsl(25,95%,53%)]/10 text-[hsl(25,95%,65%)]",
-}
-
-function formatRelativeTime(ts: number): string {
-  const diff = Math.floor((Date.now() - ts) / 1000)
-  if (diff < 5) return "just now"
-  if (diff < 60) return `${diff}s ago`
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  return `${Math.floor(diff / 3600)}h ago`
-}
-
-function formatType(type: string): string {
-  return type.replace(":", " ").replace(/\b\w/g, (c) => c.toUpperCase())
-}
+import {
+  formatRelativeTime,
+  formatEventType,
+  EVENT_DOT_COLORS,
+  EVENT_BADGE_COLORS,
+} from "@/lib/dashboard-utils"
 
 export function EventFeed() {
   const { data } = useDashboard()
@@ -52,7 +22,7 @@ export function EventFeed() {
   const scrollRef = React.useRef<HTMLDivElement>(null)
 
   const events = paused ? frozenEvents : data.events
-  const displayEvents = [...events].reverse()
+  const displayEvents = React.useMemo(() => [...events].reverse(), [events])
 
   React.useEffect(() => {
     if (paused) {
@@ -97,7 +67,7 @@ export function EventFeed() {
       </CardHeader>
       <CardContent className="p-0">
         <ScrollArea className="h-[350px] px-4 pb-4" ref={scrollRef}>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1" role="log" aria-live="polite">
             {displayEvents.map((ev, index) => {
               const isLast = index === displayEvents.length - 1
               return (
@@ -118,7 +88,7 @@ export function EventFeed() {
                     <div
                       className={cn(
                         "relative z-10 h-2 w-2 rounded-full ring-2 ring-background",
-                        EVENT_COLORS[ev.type],
+                        EVENT_DOT_COLORS[ev.type],
                       )}
                     />
                   </div>
@@ -133,7 +103,7 @@ export function EventFeed() {
                           EVENT_BADGE_COLORS[ev.type],
                         )}
                       >
-                        {formatType(ev.type)}
+                        {formatEventType(ev.type)}
                       </Badge>
                       <span className="truncate text-xs text-muted-foreground">{ev.message}</span>
                     </div>

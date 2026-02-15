@@ -4,6 +4,8 @@ import { useDashboard, type DashboardAlert } from "./dashboard-provider"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { formatRelativeTime, ALERT_SEVERITY_CONFIG } from "@/lib/dashboard-utils"
+import { useReducedMotion } from "@/hooks/use-reduced-motion"
 import { Info, AlertTriangle, AlertOctagon, X } from "lucide-react"
 
 /* ------------------------------------------------------------------ */
@@ -22,45 +24,16 @@ const SEVERITY_CONFIG: Record<
 > = {
   info: {
     icon: <Info className="h-3.5 w-3.5" />,
-    containerClass: "bg-blue-500/5 border-blue-500/20",
-    iconClass: "text-blue-400",
-    titleClass: "text-blue-300",
-    badgeClass:
-      "border-blue-500/30 bg-blue-500/10 text-blue-400",
+    ...ALERT_SEVERITY_CONFIG.info,
   },
   warning: {
     icon: <AlertTriangle className="h-3.5 w-3.5" />,
-    containerClass: "bg-[hsl(38,92%,50%)]/5 border-[hsl(38,92%,50%)]/20",
-    iconClass: "text-[hsl(38,92%,60%)]",
-    titleClass: "text-[hsl(38,92%,65%)]",
-    badgeClass:
-      "border-[hsl(38,92%,50%)]/30 bg-[hsl(38,92%,50%)]/10 text-[hsl(38,92%,65%)]",
+    ...ALERT_SEVERITY_CONFIG.warning,
   },
   critical: {
     icon: <AlertOctagon className="h-3.5 w-3.5" />,
-    containerClass: "bg-[hsl(0,72%,51%)]/5 border-[hsl(0,72%,51%)]/20",
-    iconClass: "text-[hsl(0,72%,60%)]",
-    titleClass: "text-[hsl(0,72%,65%)]",
-    badgeClass:
-      "border-[hsl(0,72%,51%)]/30 bg-[hsl(0,72%,51%)]/10 text-[hsl(0,72%,65%)]",
+    ...ALERT_SEVERITY_CONFIG.critical,
   },
-}
-
-/* ------------------------------------------------------------------ */
-/*  Relative time helper                                               */
-/* ------------------------------------------------------------------ */
-
-function formatRelativeTime(timestamp: number): string {
-  const now = Date.now()
-  const diffMs = now - timestamp
-  const diffSec = Math.floor(diffMs / 1000)
-  if (diffSec < 60) return `${diffSec}s ago`
-  const diffMin = Math.floor(diffSec / 60)
-  if (diffMin < 60) return `${diffMin}m ago`
-  const diffHr = Math.floor(diffMin / 60)
-  if (diffHr < 24) return `${diffHr}h ago`
-  const diffDay = Math.floor(diffHr / 24)
-  return `${diffDay}d ago`
 }
 
 /* ------------------------------------------------------------------ */
@@ -70,18 +43,23 @@ function formatRelativeTime(timestamp: number): string {
 function AlertRow({
   alert,
   onDismiss,
+  reducedMotion,
 }: {
   alert: DashboardAlert
   onDismiss: (id: number) => void
+  reducedMotion: boolean
 }) {
   const config = SEVERITY_CONFIG[alert.severity]
+  const isCritical = alert.severity === "critical"
 
   return (
     <div
+      role={isCritical ? "alert" : undefined}
+      aria-live={isCritical ? "assertive" : "polite"}
       className={cn(
         "flex items-center gap-3 rounded-md border px-3 py-2",
         config.containerClass,
-        alert.severity === "critical" && "animate-pulse",
+        isCritical && !reducedMotion && "animate-pulse",
       )}
     >
       {/* Severity icon */}
@@ -89,26 +67,14 @@ function AlertRow({
 
       {/* Title + message */}
       <div className="min-w-0 flex-1 flex items-center gap-2 overflow-x-auto">
-        <span
-          className={cn(
-            "shrink-0 text-xs font-bold",
-            config.titleClass,
-          )}
-        >
-          {alert.title}
-        </span>
-        <span className="truncate text-xs text-muted-foreground">
-          {alert.message}
-        </span>
+        <span className={cn("shrink-0 text-xs font-bold", config.titleClass)}>{alert.title}</span>
+        <span className="truncate text-xs text-muted-foreground">{alert.message}</span>
       </div>
 
       {/* Source badge */}
       <Badge
         variant="outline"
-        className={cn(
-          "shrink-0 rounded px-1.5 py-0 text-[10px] font-medium",
-          config.badgeClass,
-        )}
+        className={cn("shrink-0 rounded px-1.5 py-0 text-[10px] font-medium", config.badgeClass)}
       >
         {alert.source}
       </Badge>
@@ -138,13 +104,17 @@ function AlertRow({
 
 export function AlertBanner() {
   const { data, dismissAlert } = useDashboard()
+  const reducedMotion = useReducedMotion()
 
   const activeAlerts = data.alerts.filter((a) => !a.dismissed)
 
   if (activeAlerts.length === 0) return null
 
   return (
-    <section aria-label="Active alerts" className="flex flex-col gap-1.5 animate-in fade-in-0 slide-in-from-top-2 duration-300">
+    <section
+      aria-label="Active alerts"
+      className="flex flex-col gap-1.5 animate-in fade-in-0 slide-in-from-top-2 duration-300"
+    >
       {/* Count indicator when more than 2 alerts */}
       {activeAlerts.length > 2 && (
         <div className="flex items-center gap-1.5 px-1">
@@ -157,7 +127,12 @@ export function AlertBanner() {
 
       {/* Alert rows stacked vertically */}
       {activeAlerts.map((alert) => (
-        <AlertRow key={alert.id} alert={alert} onDismiss={dismissAlert} />
+        <AlertRow
+          key={alert.id}
+          alert={alert}
+          onDismiss={dismissAlert}
+          reducedMotion={reducedMotion}
+        />
       ))}
     </section>
   )

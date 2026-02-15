@@ -1,25 +1,12 @@
 "use client"
 
+import { useMemo } from "react"
 import { useDashboard } from "./dashboard-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell } from "recharts"
-
-const MODULE_COLORS: Record<string, string> = {
-  guard: "hsl(0, 72%, 60%)",
-  cache: "hsl(190, 70%, 50%)",
-  context: "hsl(38, 92%, 50%)",
-  router: "hsl(270, 60%, 60%)",
-  prefix: "hsl(152, 60%, 52%)",
-}
-
-const MODULE_LABELS: Record<string, string> = {
-  guard: "Request Guard",
-  cache: "Response Cache",
-  context: "Context Manager",
-  router: "Model Router",
-  prefix: "Prefix Optimizer",
-}
+import { MODULE_COLORS, MODULE_LABELS } from "@/lib/dashboard-utils"
+import { CHART_MARGINS, GRID_STROKE, GRID_DASH } from "@/lib/chart-theme"
 
 const chartConfig = Object.fromEntries(
   Object.entries(MODULE_LABELS).map(([key, label]) => [key, { label, color: MODULE_COLORS[key] }]),
@@ -28,16 +15,18 @@ const chartConfig = Object.fromEntries(
 export function ModuleBreakdownChart() {
   const { data } = useDashboard()
 
-  const total = Object.values(data.byModule).reduce((a, b) => a + b, 0)
-
-  const chartData = Object.entries(data.byModule)
-    .map(([key, value]) => ({
-      module: MODULE_LABELS[key] || key,
-      key,
-      savings: Number(value.toFixed(4)),
-      percent: total > 0 ? ((value / total) * 100).toFixed(1) : "0.0",
-    }))
-    .sort((a, b) => b.savings - a.savings)
+  const { total, chartData } = useMemo(() => {
+    const t = Object.values(data.byModule).reduce((a, b) => a + b, 0)
+    const cd = Object.entries(data.byModule)
+      .map(([key, value]) => ({
+        module: MODULE_LABELS[key] || key,
+        key,
+        savings: Number(value.toFixed(4)),
+        percent: t > 0 ? ((value / t) * 100).toFixed(1) : "0.0",
+      }))
+      .sort((a, b) => b.savings - a.savings)
+    return { total: t, chartData: cd }
+  }, [data.byModule])
 
   return (
     <Card className="border-border/40 bg-card/50">
@@ -57,11 +46,7 @@ export function ModuleBreakdownChart() {
         </div>
 
         <ChartContainer config={chartConfig} className="aspect-auto h-[280px] w-full md:h-[320px]">
-          <BarChart
-            data={chartData}
-            layout="vertical"
-            margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
-          >
+          <BarChart data={chartData} layout="vertical" margin={CHART_MARGINS}>
             <defs>
               {/* Gradient fills for each module */}
               {Object.entries(MODULE_COLORS).map(([key, color]) => (
@@ -79,7 +64,7 @@ export function ModuleBreakdownChart() {
                 </feMerge>
               </filter>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 14%, 12%)" horizontal={false} />
+            <CartesianGrid strokeDasharray={GRID_DASH} stroke={GRID_STROKE} horizontal={false} />
             <XAxis
               type="number"
               tickLine={false}
@@ -112,17 +97,9 @@ export function ModuleBreakdownChart() {
                 />
               }
             />
-            <Bar
-              dataKey="savings"
-              radius={[0, 4, 4, 0]}
-              maxBarSize={28}
-              filter="url(#bar-glow)"
-            >
+            <Bar dataKey="savings" radius={[0, 4, 4, 0]} maxBarSize={28} filter="url(#bar-glow)">
               {chartData.map((entry) => (
-                <Cell
-                  key={entry.key}
-                  fill={`url(#gradient-${entry.key})`}
-                />
+                <Cell key={entry.key} fill={`url(#gradient-${entry.key})`} />
               ))}
             </Bar>
           </BarChart>
