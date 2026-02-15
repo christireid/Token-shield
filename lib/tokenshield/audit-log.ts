@@ -456,23 +456,27 @@ export class AuditLog {
    * Export as JSON for compliance reporting.
    */
   exportJSON(): string {
+    const entryCount = this.entries.length
     const integrity = this.verifyIntegrity()
-    return JSON.stringify(
+    const result = JSON.stringify(
       {
         exportedAt: new Date().toISOString(),
         integrity,
-        totalEntries: this.entries.length,
-        entries: this.entries,
+        totalEntries: entryCount,
+        entries: [...this.entries],
       },
       null,
       2,
     )
+    this.logExportRequested("JSON", entryCount)
+    return result
   }
 
   /**
    * Export as CSV for spreadsheet analysis.
    */
   exportCSV(): string {
+    const entryCount = this.entries.length
     const headers = [
       "seq",
       "timestamp",
@@ -507,7 +511,9 @@ export class AuditLog {
         })
         .join(","),
     )
-    return [headers.join(","), ...rows].join("\n")
+    const result = [headers.join(","), ...rows].join("\n")
+    this.logExportRequested("CSV", entryCount)
+    return result
   }
 
   /**
@@ -528,8 +534,8 @@ export class AuditLog {
         }
         return stored.length
       }
-    } catch {
-      /* IDB not available */
+    } catch (err) {
+      this.config.onPersistError(err)
     }
     return 0
   }

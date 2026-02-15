@@ -445,6 +445,7 @@ export function tokenShieldMiddleware(
       pluginCleanups.length = 0
       loggerCleanup?.()
       loggerCleanup = null
+      cache?.dispose()
     },
   }
 }

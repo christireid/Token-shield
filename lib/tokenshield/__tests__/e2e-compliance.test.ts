@@ -120,7 +120,7 @@ describe("E2E License + Audit Compliance", () => {
     // 8. Export as CSV
     const csvExport = auditLog.exportCSV()
     const csvLines = csvExport.split("\n")
-    expect(csvLines).toHaveLength(6) // header + 5 entries
+    expect(csvLines).toHaveLength(7) // header + 5 original entries + 1 export_requested from exportJSON
 
     // 9. Verify filtering
     const warnAndAbove = auditLog.getEntries({ severity: "warn" })

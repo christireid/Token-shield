@@ -559,6 +559,17 @@ export class ResponseCache {
   }
 
   /**
+   * Dispose the cache instance, releasing memory and clearing internal state.
+   * Does not wipe persisted IndexedDB data — call clear() first if needed.
+   */
+  dispose(): void {
+    this.memoryCache.clear()
+    this.holoEngine = null
+    this.totalLookups = 0
+    this.totalHits = 0
+  }
+
+  /**
    * Clear all cached entries.
    */
   async clear(): Promise<void> {
