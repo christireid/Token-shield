@@ -12,6 +12,7 @@ import {
   setLicensePublicKey,
   setLicensePrivateKey,
   generateLicenseKeyPair,
+  configureLicenseKeys,
   type LicenseTier,
 } from "../license"
 
@@ -464,6 +465,73 @@ describe("license", () => {
       const info = await activateLicense(key)
       expect(info.tier).toBe("pro")
       expect(info.valid).toBe(true)
+    })
+
+    it("rejects ECDSA key with corrupted signature", async () => {
+      const pair = await generateLicenseKeyPair()
+      await setLicensePrivateKey(pair.privateKey)
+      await setLicensePublicKey(pair.publicKey)
+
+      const key = await generateTestKey("enterprise", "holder", 365)
+      const decoded = JSON.parse(atob(key))
+      // Corrupt the signature by flipping characters
+      decoded.signature = decoded.signature.slice(0, -4) + "XXXX"
+      const corrupted = btoa(JSON.stringify(decoded))
+
+      const info = await activateLicense(corrupted)
+      expect(info.valid).toBe(false)
+      expect(info.tier).toBe("community")
+    })
+
+    it("rejects ECDSA key with empty signature after prefix", async () => {
+      const pair = await generateLicenseKeyPair()
+      await setLicensePublicKey(pair.publicKey)
+
+      const payload = { tier: "enterprise", expiresAt: Date.now() + 86400000, holder: "test" }
+      const forged = btoa(JSON.stringify({ payload, signature: "ecdsa:" }))
+
+      const info = await activateLicense(forged)
+      expect(info.valid).toBe(false)
+    })
+
+    it("configureLicenseKeys convenience wrapper works", async () => {
+      const pair = await generateLicenseKeyPair()
+      await configureLicenseKeys({ publicKey: pair.publicKey, privateKey: pair.privateKey })
+
+      const key = await generateTestKey("team", "convenience", 365)
+      const info = await activateLicense(key)
+      expect(info.tier).toBe("team")
+      expect(info.valid).toBe(true)
+    })
+
+    it("configureLicenseKeys works with public key only", async () => {
+      const pair = await generateLicenseKeyPair()
+      await configureLicenseKeys({ publicKey: pair.publicKey })
+
+      // Without private key, generateTestKey falls back to HMAC/unsigned
+      // but setLicensePublicKey is set for verification
+      const unsigned = btoa(JSON.stringify({ tier: "pro", expiresAt: Date.now() + 86400000, holder: "test" }))
+      const info = await activateLicense(unsigned)
+      // Should fail because public key is set but key has no signature
+      expect(info.valid).toBe(false)
+    })
+  })
+
+  describe("generateTestKey signing option", () => {
+    it("explicit ecdsa signing throws without private key", async () => {
+      await expect(
+        generateTestKey("pro", "test", 365, undefined, { signing: "ecdsa" })
+      ).rejects.toThrow("ECDSA signing requested")
+    })
+
+    it("explicit hmac signing uses HMAC even when ECDSA is available", async () => {
+      const pair = await generateLicenseKeyPair()
+      await setLicensePrivateKey(pair.privateKey)
+      setLicenseSecret("hmac-test")
+
+      const key = await generateTestKey("pro", "test", 365, undefined, { signing: "hmac" })
+      const decoded = JSON.parse(atob(key))
+      expect(decoded.signature).toMatch(/^sha256:/)
     })
   })
 })

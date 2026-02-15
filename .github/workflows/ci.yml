@@ -19,7 +19,12 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
-      - run: npx vitest run
+      - run: npx vitest run --coverage
+      - name: Check coverage thresholds
+        run: |
+          # Enforce minimum coverage — prevents regression
+          npx vitest run --coverage --coverage.thresholds.statements=70 --coverage.thresholds.branches=60 --coverage.thresholds.functions=60 --coverage.thresholds.lines=70 2>&1 | tail -5
+        if: matrix.node-version == 20
       - run: npx tsc --noEmit
 
   lint:

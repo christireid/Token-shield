@@ -59,6 +59,7 @@ import type {
 } from "./middleware-types"
 import { buildTransformParams } from "./middleware-transform"
 import { buildWrapGenerate, buildWrapStream } from "./middleware-wrap"
+import { initializePlugins, type PluginCleanup } from "./middleware-plugin"
 
 // Re-export types from middleware-types so existing import paths continue to work
 export type {
@@ -173,6 +174,8 @@ export function tokenShieldMiddleware(
     "stream:abort",
     "stream:complete",
     "anomaly:detected",
+    "compressor:applied",
+    "delta:applied",
   ]
   const forwardingCleanups: Array<() => void> = []
   for (const name of EVENT_NAMES) {
@@ -283,6 +286,22 @@ export function tokenShieldMiddleware(
         String(data.reason ?? "complexity"),
       )
     })
+    on("compressor:applied", (d) => {
+      const data = d as Record<string, unknown>
+      auditLog.logCompressorApplied(
+        Number(data.savedTokens ?? 0),
+        Number(data.originalTokens ?? 0),
+        Number(data.compressedTokens ?? 0),
+      )
+    })
+    on("delta:applied", (d) => {
+      const data = d as Record<string, unknown>
+      auditLog.logDeltaApplied(
+        Number(data.savedTokens ?? 0),
+        Number(data.originalTokens ?? 0),
+        Number(data.encodedTokens ?? 0),
+      )
+    })
   }
 
   // Auto-hydrate audit log from IndexedDB if persistence is enabled
@@ -332,6 +351,14 @@ export function tokenShieldMiddleware(
     auditLog,
   }
 
+  // Initialize registered plugins
+  const pluginCleanups: PluginCleanup[] = initializePlugins({
+    events: instanceEvents,
+    log,
+    auditLog,
+    config: config as unknown as Record<string, unknown>,
+  })
+
   return {
     ledger,
     cache,
@@ -376,6 +403,8 @@ export function tokenShieldMiddleware(
       forwardingCleanups.length = 0
       for (const cleanup of auditCleanups) cleanup()
       auditCleanups.length = 0
+      for (const cleanup of pluginCleanups) cleanup()
+      pluginCleanups.length = 0
       loggerCleanup?.()
       loggerCleanup = null
     },

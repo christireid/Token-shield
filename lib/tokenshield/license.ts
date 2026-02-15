@@ -90,34 +90,31 @@ const ALG_SHA256 = "sha256:"
 const ALG_DJB2 = "djb2:"
 
 /**
- * Compute HMAC hex digest using the best available algorithm.
- * Returns a prefixed string ("sha256:..." or "djb2:...") so that
- * verification can detect the algorithm used and verify accordingly.
+ * Compute HMAC-SHA256 hex digest via Web Crypto.
+ * Always uses SHA-256 — requires Web Crypto API (Node 18+, all modern browsers).
+ * Returns a prefixed string "sha256:..." for algorithm detection during verification.
  */
 async function hmacSign(secret: string, message: string): Promise<string> {
-  if (
-    typeof globalThis !== "undefined" &&
-    typeof globalThis.crypto?.subtle?.importKey === "function"
-  ) {
-    const enc = new TextEncoder()
-    const key = await globalThis.crypto.subtle.importKey(
-      "raw",
-      enc.encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"],
-    )
-    const sig = await globalThis.crypto.subtle.sign("HMAC", key, enc.encode(message))
-    const hex = Array.from(new Uint8Array(sig))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("")
-    return ALG_SHA256 + hex
-  }
-  // Fallback: keyed djb2 (not cryptographically strong, but better than nothing)
-  return ALG_DJB2 + djb2Raw(secret, message)
+  const enc = new TextEncoder()
+  const key = await globalThis.crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  )
+  const sig = await globalThis.crypto.subtle.sign("HMAC", key, enc.encode(message))
+  const hex = Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+  return ALG_SHA256 + hex
 }
 
-/** Synchronous HMAC for environments without Web Crypto. Always uses djb2. */
+/**
+ * Synchronous HMAC using djb2 — **deprecated**, use async `hmacSign()` instead.
+ * Retained only for `generateTestKeySync()` backward compatibility.
+ * @deprecated Prefer async `generateTestKey()` which uses HMAC-SHA256.
+ */
 function hmacSignSync(secret: string, message: string): string {
   return ALG_DJB2 + djb2Raw(secret, message)
 }
@@ -143,7 +140,7 @@ async function hmacVerify(secret: string, message: string, signature: string): P
   return signature === sha256Sig.slice(ALG_SHA256.length)
 }
 
-/** Simple keyed hash using djb2 — used as fallback only. */
+/** Simple keyed hash using djb2 — NOT cryptographically secure. Used only for legacy compat and sync fallback. */
 function djb2Raw(secret: string, message: string): string {
   const input = `${secret}:${message}`
   let hash = 5381
@@ -269,6 +266,23 @@ async function ecdsaVerify(payload: string, signature: string): Promise<boolean>
     )
   } catch {
     return false
+  }
+}
+
+/**
+ * Convenience wrapper to configure ECDSA license keys in a single call.
+ * Reduces the 2-3 step ECDSA setup to one function call.
+ *
+ * @param opts.publicKey  - JWK public key for verification (required)
+ * @param opts.privateKey - JWK private key for signing (optional, server-side only)
+ */
+export async function configureLicenseKeys(opts: {
+  publicKey: JsonWebKey
+  privateKey?: JsonWebKey
+}): Promise<void> {
+  await setLicensePublicKey(opts.publicKey)
+  if (opts.privateKey) {
+    await setLicensePrivateKey(opts.privateKey)
   }
 }
 
@@ -474,6 +488,7 @@ export async function generateTestKey(
   holder: string = "test",
   expiresInDays: number = 365,
   secret?: string,
+  opts?: { signing?: "ecdsa" | "hmac" | "auto" },
 ): Promise<string> {
   const payload: LicenseKeyPayload = {
     tier,
@@ -481,10 +496,17 @@ export async function generateTestKey(
     holder,
   }
 
-  // Prefer ECDSA if private key is available
-  if (_ecPrivateKey) {
+  const signingMode = opts?.signing ?? "auto"
+
+  // ECDSA signing: explicit or auto-detect
+  if ((signingMode === "ecdsa" || signingMode === "auto") && _ecPrivateKey) {
     const rawSig = await ecdsaSign(JSON.stringify(payload))
     return btoa(JSON.stringify({ payload, signature: "ecdsa:" + rawSig }))
+  }
+
+  // HMAC signing: explicit or auto-detect
+  if (signingMode === "ecdsa") {
+    throw new Error("ECDSA signing requested but no private key is configured. Call setLicensePrivateKey() first.")
   }
 
   const signingKey = secret ?? _signingSecret
@@ -499,7 +521,8 @@ export async function generateTestKey(
 
 /**
  * Generate a signed key synchronously (for tests without async support).
- * Uses djb2-based HMAC as fallback.
+ * Uses djb2-based HMAC which is NOT cryptographically secure.
+ * @deprecated Prefer `generateTestKey()` (async) which uses HMAC-SHA256 or ECDSA.
  */
 export function generateTestKeySync(
   tier: LicenseTier,

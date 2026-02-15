@@ -29,6 +29,8 @@ export type AuditEventType =
   | "config_changed"
   | "license_activated"
   | "export_requested"
+  | "compressor_applied"
+  | "delta_applied"
 
 export type AuditSeverity = "info" | "warn" | "error" | "critical"
 
@@ -157,6 +159,10 @@ export class AuditLog {
   private persistTimer: ReturnType<typeof setTimeout> | null = null
   /** True when entries have been pruned — first entry's prevHash won't match "genesis" */
   private pruned = false
+  /** Cached integrity result — invalidated on any mutation */
+  private _integrityCache: { valid: boolean; brokenAt?: number; pruned?: boolean; verifiedFrom?: number } | null = null
+  /** Seq at which the integrity cache was last computed */
+  private _integrityCacheSeq = -1
 
   constructor(config: AuditLogConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
@@ -314,6 +320,26 @@ export class AuditLog {
     )
   }
 
+  logCompressorApplied(savedTokens: number, originalTokens: number, compressedTokens: number): AuditEntry {
+    return this.record(
+      "compressor_applied",
+      "info",
+      "prompt-compressor",
+      `Compressor saved ${savedTokens} tokens (${originalTokens} → ${compressedTokens})`,
+      { savedTokens, originalTokens, compressedTokens },
+    )
+  }
+
+  logDeltaApplied(savedTokens: number, originalTokens: number, encodedTokens: number): AuditEntry {
+    return this.record(
+      "delta_applied",
+      "info",
+      "delta-encoder",
+      `Delta encoder saved ${savedTokens} tokens (${originalTokens} → ${encodedTokens})`,
+      { savedTokens, originalTokens, encodedTokens },
+    )
+  }
+
   logConfigChanged(field: string, oldValue: unknown, newValue: unknown): AuditEntry {
     return this.record("config_changed", "warn", "config", `Config changed: ${field}`, {
       field,
@@ -327,27 +353,43 @@ export class AuditLog {
    * Returns true if no entries have been tampered with.
    */
   verifyIntegrity(): { valid: boolean; brokenAt?: number; pruned?: boolean; verifiedFrom?: number } {
-    if (this.entries.length === 0) return { valid: true }
+    // Return cached result if the chain hasn't changed since last verification
+    if (this._integrityCache && this._integrityCacheSeq === this.seq) {
+      return this._integrityCache
+    }
+
+    if (this.entries.length === 0) {
+      this._integrityCache = { valid: true }
+      this._integrityCacheSeq = this.seq
+      return this._integrityCache
+    }
 
     // For pruned chains, the first entry's prevHash won't be "genesis"
     // — start verification from the first available entry's recorded prevHash.
     let prevHash = this.pruned ? this.entries[0].prevHash : "genesis"
     for (const entry of this.entries) {
       if (entry.prevHash !== prevHash) {
-        return { valid: false, brokenAt: entry.seq }
+        this._integrityCache = { valid: false, brokenAt: entry.seq }
+        this._integrityCacheSeq = this.seq
+        return this._integrityCache
       }
       const content = `${entry.seq}|${entry.timestamp}|${entry.eventType}|${entry.module}|${entry.description}|${JSON.stringify(entry.data)}`
       const expectedHash = computeHashSync(`${prevHash}|${content}`)
       if (entry.hash !== expectedHash) {
-        return { valid: false, brokenAt: entry.seq }
+        this._integrityCache = { valid: false, brokenAt: entry.seq }
+        this._integrityCacheSeq = this.seq
+        return this._integrityCache
       }
       prevHash = entry.hash
     }
 
     if (this.pruned) {
-      return { valid: true, pruned: true, verifiedFrom: this.entries[0].seq }
+      this._integrityCache = { valid: true, pruned: true, verifiedFrom: this.entries[0].seq }
+    } else {
+      this._integrityCache = { valid: true }
     }
-    return { valid: true }
+    this._integrityCacheSeq = this.seq
+    return this._integrityCache
   }
 
   /**
@@ -439,6 +481,8 @@ export class AuditLog {
       const stored = await get<AuditEntry[]>(this.config.storageKey)
       if (stored && Array.isArray(stored)) {
         this.entries = stored
+        this._integrityCache = null
+        this._integrityCacheSeq = -1
         if (stored.length > 0) {
           const last = stored[stored.length - 1]
           this.seq = last.seq
@@ -467,6 +511,8 @@ export class AuditLog {
     this.seq = 0
     this.lastHash = "genesis"
     this.pruned = false
+    this._integrityCache = null
+    this._integrityCacheSeq = -1
     if (this.config.persist) {
       try {
         await set(this.config.storageKey, [])

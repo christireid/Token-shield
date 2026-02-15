@@ -37,6 +37,8 @@ export type TokenShieldEvents = {
   "stream:abort": { inputTokens: number; outputTokens: number; estimatedCost: number }
   "stream:complete": { inputTokens: number; outputTokens: number; totalCost: number }
   "anomaly:detected": AnomalyEvent
+  "compressor:applied": { savedTokens: number; originalTokens: number; compressedTokens: number }
+  "delta:applied": { savedTokens: number; originalTokens: number; encodedTokens: number }
 }
 
 export type EventBus = ReturnType<typeof mitt<TokenShieldEvents>>

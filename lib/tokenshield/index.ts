@@ -168,6 +168,17 @@ export {
 // Middleware Health Check
 export { type HealthCheckResult } from "./middleware-types"
 
+// Middleware Plugin Registry
+export {
+  registerPlugin,
+  unregisterPlugin,
+  getRegisteredPlugins,
+  clearPlugins,
+  type MiddlewarePlugin,
+  type PluginContext,
+  type PluginCleanup,
+} from "./middleware-plugin"
+
 // Quick-Start Factory
 export { createTokenShield } from "./create-token-shield"
 
@@ -200,6 +211,10 @@ export {
 
 // Dashboard Component
 export { TokenShieldDashboard, type TokenShieldDashboardProps } from "./dashboard"
+export { type SavingsAttribution } from "./dashboard-sections"
+
+// License Activation Component
+export { LicenseActivation, type LicenseActivationProps } from "./license-activation"
 
 // Pricing Registry
 export {
@@ -413,6 +428,7 @@ export {
   setLicensePublicKey,
   setLicensePrivateKey,
   generateLicenseKeyPair,
+  configureLicenseKeys,
   type LicenseTier,
   type LicenseInfo,
 } from "./license"

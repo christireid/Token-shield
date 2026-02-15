@@ -38,6 +38,8 @@ import {
   ProviderHealthSection,
   PipelineMetricsSection,
   AuditLogSection,
+  SavingsAttributionSection,
+  type SavingsAttribution,
 } from "./dashboard-sections"
 import type { AuditLog } from "./audit-log"
 
@@ -77,6 +79,8 @@ export interface TokenShieldDashboardProps {
   providerAdapter?: ProviderAdapter
   /** Optional audit log instance for compliance monitoring */
   auditLog?: AuditLog
+  /** Optional per-module savings attribution data for breakdown visualization */
+  savingsAttribution?: SavingsAttribution
   /** CSS class name for the outer container */
   className?: string
   /** Inline styles for the outer container */
@@ -96,6 +100,7 @@ export function TokenShieldDashboard({
   showPipeline = true,
   providerAdapter,
   auditLog,
+  savingsAttribution,
   className,
   style,
 }: TokenShieldDashboardProps) {
@@ -148,6 +153,12 @@ export function TokenShieldDashboard({
         {showPipeline && (
           <OptionalSection>
             <PipelineMetricsSection />
+          </OptionalSection>
+        )}
+
+        {savingsAttribution && (
+          <OptionalSection>
+            <SavingsAttributionSection attribution={savingsAttribution} />
           </OptionalSection>
         )}
 

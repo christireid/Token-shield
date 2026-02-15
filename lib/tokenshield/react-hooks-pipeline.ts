@@ -221,6 +221,8 @@ export function useEventLog(maxEntries = 50): EventLogEntry[] {
       "stream:chunk",
       "stream:abort",
       "stream:complete",
+      "compressor:applied",
+      "delta:applied",
     ]
 
     const handlers: Array<() => void> = []

@@ -234,6 +234,9 @@ export const EVENT_COLORS: Record<string, string> = {
   "context:trimmed": "#f59e0b",
   "router:downgraded": "#f59e0b",
   "stream:chunk": "#f59e0b",
+  // Blue: optimization events
+  "compressor:applied": "#3b82f6",
+  "delta:applied": "#8b5cf6",
   // Red: blocked / tripped / exceeded
   "request:blocked": "#ef4444",
   "breaker:tripped": "#ef4444",
@@ -289,6 +292,10 @@ export function summarizeEventData(type: string, data: Record<string, unknown>):
         return `tokens: ${data.outputTokens ?? "?"}, est: ${typeof data.estimatedCost === "number" ? formatDollars(data.estimatedCost) : "?"}`
       case "stream:complete":
         return `cost: ${typeof data.totalCost === "number" ? formatDollars(data.totalCost) : "?"}`
+      case "compressor:applied":
+        return `saved: ${data.savedTokens ?? "?"} tokens (${data.originalTokens} → ${data.compressedTokens})`
+      case "delta:applied":
+        return `saved: ${data.savedTokens ?? "?"} tokens (${data.originalTokens} → ${data.encodedTokens})`
       default: {
         // Fallback: show first 2 keys
         const keys = Object.keys(data).slice(0, 2)
@@ -571,6 +578,93 @@ export function PipelineMetricsSection() {
           at {formatTime(metrics.lastEvent.timestamp)}
         </div>
       )}
+    </div>
+  )
+}
+
+// -------------------------------------------------------
+// Savings Attribution Section
+// -------------------------------------------------------
+
+const MODULE_COLORS: Record<string, string> = {
+  cache: "#22c55e",
+  compressor: "#3b82f6",
+  delta: "#8b5cf6",
+  router: "#f59e0b",
+  context: "#06b6d4",
+  prefix: "#ec4899",
+}
+
+export interface SavingsAttribution {
+  cache: number
+  compressor: number
+  delta: number
+  router: number
+  context: number
+  prefix: number
+}
+
+export function SavingsAttributionSection({ attribution }: { attribution: SavingsAttribution }) {
+  const entries = useMemo(() => {
+    return Object.entries(attribution)
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1])
+  }, [attribution])
+
+  const total = useMemo(() => entries.reduce((sum, [, v]) => sum + v, 0), [entries])
+
+  if (total === 0) {
+    return (
+      <div>
+        <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}>Savings Attribution</h3>
+        <div style={{ fontSize: 12, color: "#9ca3af" }}>No savings recorded yet.</div>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}>
+        Savings Attribution
+        <span style={{ fontWeight: 400, fontSize: 12, marginLeft: 8, color: "#6b7280" }}>
+          Total: {formatDollars(total)}
+        </span>
+      </h3>
+
+      {/* Stacked bar */}
+      <div style={{ display: "flex", height: 12, borderRadius: 6, overflow: "hidden", marginBottom: 12 }}>
+        {entries.map(([module, value]) => (
+          <div
+            key={module}
+            title={`${module}: ${formatDollars(value)} (${((value / total) * 100).toFixed(1)}%)`}
+            style={{
+              width: `${(value / total) * 100}%`,
+              background: MODULE_COLORS[module] ?? "#6b7280",
+              transition: "width 0.3s ease",
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Legend + details */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+        {entries.map(([module, value]) => (
+          <div key={module} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 2,
+                background: MODULE_COLORS[module] ?? "#6b7280",
+              }}
+            />
+            <span style={{ fontWeight: 500 }}>{module}</span>
+            <span style={{ color: "#6b7280" }}>
+              {formatDollars(value)} ({((value / total) * 100).toFixed(0)}%)
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

@@ -4,6 +4,29 @@ All notable changes to Token Shield will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-02-15
+
+### Added
+
+- **Middleware plugin registry**: New `registerPlugin()`, `unregisterPlugin()`, and `getRegisteredPlugins()` APIs enable third-party plugins that auto-wire event handlers and lifecycle hooks. Plugins are initialized during middleware creation and cleaned up on dispose.
+- **Subpath exports for tree-shaking**: New package.json exports map enables granular imports: `@tokenshield/ai-sdk/license`, `@tokenshield/ai-sdk/audit-log`, `@tokenshield/ai-sdk/compressor`, `@tokenshield/ai-sdk/delta-encoder`, `@tokenshield/ai-sdk/middleware`. Each subpath produces a separate chunk for minimal bundle sizes.
+- **Compressor/delta event bus emissions**: New `compressor:applied` and `delta:applied` events are emitted to the event bus when savings > 0, enabling telemetry subscribers and audit log recording. Both events include `savedTokens`, `originalTokens`, and compressed/encoded token counts.
+- **ECDSA convenience wrapper**: New `configureLicenseKeys({ publicKey, privateKey? })` function reduces ECDSA setup from 2-3 separate calls to a single function call.
+- **Savings attribution dashboard**: New `SavingsAttributionSection` component with stacked bar visualization and per-module breakdown (cache, compressor, delta, router, context, prefix). New `savingsAttribution` prop on `TokenShieldDashboard`.
+- **License activation component**: New `LicenseActivation` React component for self-serve key input, validation feedback, tier display, and feature unlock confirmation. Includes real-time module list.
+- **Delta encoder re-export alias**: New `delta-encoder.ts` provides the shorter import path `./delta-encoder` for naming consistency with other modules.
+- **Coverage threshold enforcement**: CI now enforces minimum coverage thresholds (70% statements/lines, 60% branches/functions) on Node 20 to prevent coverage regression.
+- **Negative ECDSA tests**: New tests for corrupted signatures, empty signature after prefix, and `configureLicenseKeys` convenience wrapper.
+- **Plugin registry tests**: 10 tests covering registration, deduplication, cleanup, event auto-wiring, and graceful error handling.
+- **generateTestKey signing option**: New `opts.signing` parameter (`"ecdsa" | "hmac" | "auto"`) for explicit algorithm selection. Throws if ECDSA requested without private key.
+
+### Changed
+
+- **HMAC signing always uses SHA-256**: `hmacSign()` no longer falls back to djb2 — requires Web Crypto API (Node 18+, all modern browsers). The djb2 path is retained only for backward-compatible signature verification and deprecated `generateTestKeySync()`.
+- **generateTestKeySync deprecated**: Marked as `@deprecated` in JSDoc. Prefer async `generateTestKey()` which uses HMAC-SHA256 or ECDSA.
+- **verifyIntegrity() caching**: Integrity results are now cached and only recomputed when new entries are added, eliminating O(n) overhead on dashboard re-renders.
+- **Version bump**: 0.3.0 → 0.4.0
+
 ## [0.3.0] - 2026-02-15
 
 ### Added

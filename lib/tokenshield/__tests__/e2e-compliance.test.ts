@@ -51,7 +51,6 @@ describe("E2E License + Audit Compliance", () => {
       outputTokens: 200,
       cost: 0.005,
       saved: 0.001,
-      feature: "chat",
     })
 
     // 4b. Cache hit
@@ -59,7 +58,6 @@ describe("E2E License + Audit Compliance", () => {
       matchType: "fuzzy" as const,
       similarity: 0.93,
       savedCost: 0.005,
-      prompt: "What is machine learning?",
     })
 
     // 4c. Another API call
@@ -69,7 +67,6 @@ describe("E2E License + Audit Compliance", () => {
       outputTokens: 100,
       cost: 0.0001,
       saved: 0,
-      feature: "chat",
     })
 
     // 4d. Request blocked
@@ -80,13 +77,14 @@ describe("E2E License + Audit Compliance", () => {
 
     // 4e. Anomaly detected
     mw.events.emit("anomaly:detected", {
-      type: "cost",
-      metric: "cost",
+      type: "cost_spike",
       value: 0.5,
       mean: 0.01,
-      stdDev: 0.005,
+      deviation: 0.005,
       zScore: 98.0,
-      model: "gpt-4o",
+      timestamp: Date.now(),
+      detectionMethod: "z-score",
+      severity: "critical",
     })
 
     // 5. Verify audit log captured all events
@@ -181,7 +179,6 @@ describe("E2E License + Audit Compliance", () => {
         outputTokens: 50 + i,
         cost: 0.001 * i,
         saved: 0,
-        feature: "test",
       })
     }
 

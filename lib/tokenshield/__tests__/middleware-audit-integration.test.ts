@@ -36,7 +36,6 @@ describe("Middleware Audit Log Integration", () => {
       outputTokens: 500,
       cost: 0.0125,
       saved: 0.002,
-      feature: "",
     })
     const entries = auditLog.getEntries({ eventType: "api_call" })
     expect(entries).toHaveLength(1)
@@ -53,7 +52,6 @@ describe("Middleware Audit Log Integration", () => {
       matchType: "fuzzy" as const,
       similarity: 0.92,
       savedCost: 0.005,
-      prompt: "test prompt",
     })
     const entries = auditLog.getEntries({ eventType: "cache_hit" })
     expect(entries).toHaveLength(1)
@@ -78,9 +76,9 @@ describe("Middleware Audit Log Integration", () => {
     const mw = tokenShieldMiddleware({ auditLog })
     mw.events.emit("breaker:tripped", {
       limitType: "hourly",
-      threshold: 5,
-      actual: 7.2,
-      tripped: true,
+      currentSpend: 7.2,
+      limit: 5,
+      action: "blocked",
     })
     const entries = auditLog.getEntries({ eventType: "breaker_tripped" })
     expect(entries).toHaveLength(1)
@@ -93,9 +91,9 @@ describe("Middleware Audit Log Integration", () => {
     const mw = tokenShieldMiddleware({ auditLog })
     mw.events.emit("userBudget:exceeded", {
       userId: "user-123",
+      limitType: "daily",
+      currentSpend: 12.5,
       limit: 10,
-      spent: 12.5,
-      period: "daily",
     })
     const entries = auditLog.getEntries({ eventType: "budget_exceeded" })
     expect(entries).toHaveLength(1)
@@ -107,18 +105,19 @@ describe("Middleware Audit Log Integration", () => {
   it("audit log records anomaly:detected events", () => {
     const mw = tokenShieldMiddleware({ auditLog })
     mw.events.emit("anomaly:detected", {
-      type: "cost",
-      metric: "cost",
+      type: "cost_spike",
       value: 0.5,
       mean: 0.1,
-      stdDev: 0.05,
+      deviation: 0.05,
       zScore: 8.0,
-      model: "gpt-4o",
+      timestamp: Date.now(),
+      detectionMethod: "z-score",
+      severity: "critical",
     })
     const entries = auditLog.getEntries({ eventType: "anomaly_detected" })
     expect(entries).toHaveLength(1)
     expect(entries[0].severity).toBe("warn")
-    expect(entries[0].model).toBe("gpt-4o")
+    expect(entries[0].data.value).toBe(0.5)
     mw.dispose()
   })
 
@@ -148,7 +147,6 @@ describe("Middleware Audit Log Integration", () => {
       outputTokens: 500,
       cost: 0.01,
       saved: 0,
-      feature: "",
     })
     expect(auditLog.size).toBe(0)
   })
@@ -162,13 +160,11 @@ describe("Middleware Audit Log Integration", () => {
       outputTokens: 500,
       cost: 0.01,
       saved: 0,
-      feature: "",
     })
     mw.events.emit("cache:hit", {
       matchType: "exact" as const,
       similarity: 1,
       savedCost: 0.01,
-      prompt: "Hello",
     })
     mw.events.emit("request:blocked", {
       reason: "debounce",
@@ -192,7 +188,6 @@ describe("Middleware Audit Log Integration", () => {
       outputTokens: 50,
       cost: 0.001,
       saved: 0,
-      feature: "",
     })
 
     expect(log1.size).toBe(1)

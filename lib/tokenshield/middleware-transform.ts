@@ -391,6 +391,16 @@ export function buildTransformParams(ctx: MiddlewareContext) {
               role: m.role as ChatMessage["role"],
               content: m.content,
             }))
+            try {
+              const compressedTokens = originalInputTokens - compResult.totalSavedTokens
+              instanceEvents.emit("compressor:applied", {
+                savedTokens: compResult.totalSavedTokens,
+                originalTokens: originalInputTokens,
+                compressedTokens,
+              })
+            } catch {
+              /* non-fatal */
+            }
           }
         } catch {
           /* non-fatal: compression failed, proceed with original */
@@ -412,6 +422,19 @@ export function buildTransformParams(ctx: MiddlewareContext) {
               role: m.role as ChatMessage["role"],
               content: m.content,
             }))
+            try {
+              const currentTokens = workingMessages.reduce(
+                (sum, m) => sum + countTokens(m.content) + MSG_OVERHEAD_TOKENS,
+                0,
+              )
+              instanceEvents.emit("delta:applied", {
+                savedTokens: deltaResult.savedTokens,
+                originalTokens: currentTokens + deltaResult.savedTokens,
+                encodedTokens: currentTokens,
+              })
+            } catch {
+              /* non-fatal */
+            }
           }
         } catch {
           /* non-fatal: delta encoding failed, proceed with original */
