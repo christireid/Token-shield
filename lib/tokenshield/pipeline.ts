@@ -59,7 +59,7 @@ export type PipelineHook = {
 /** Stage 1: Circuit breaker -- blocks when session/time spending limits are exceeded. */
 export function createBreakerStage(
   breaker: CostCircuitBreaker,
-  config: { reserveForOutput: number }
+  config: { reserveForOutput: number },
 ): PipelineStage {
   return {
     name: "breaker",
@@ -81,7 +81,7 @@ export function createBreakerStage(
 export function createBudgetStage(
   manager: UserBudgetManager,
   getUserId: () => string,
-  config: { reserveForOutput: number }
+  config: { reserveForOutput: number },
 ): PipelineStage {
   return {
     name: "budget",
@@ -102,7 +102,12 @@ export function createBudgetStage(
       }
       ctx.meta.userId = userId
       const estimatedInput = ctx.lastUserText ? countTokens(ctx.lastUserText) : 0
-      const budgetCheck = manager.check(userId, ctx.modelId, estimatedInput, config.reserveForOutput)
+      const budgetCheck = manager.check(
+        userId,
+        ctx.modelId,
+        estimatedInput,
+        config.reserveForOutput,
+      )
       if (!budgetCheck.allowed) {
         ctx.aborted = true
         ctx.abortReason = budgetCheck.reason ?? "User budget exceeded"
@@ -110,7 +115,11 @@ export function createBudgetStage(
       }
       // Store estimated inflight cost
       try {
-        ctx.meta.userBudgetInflight = estimateCost(ctx.modelId, estimatedInput, config.reserveForOutput).totalCost
+        ctx.meta.userBudgetInflight = estimateCost(
+          ctx.modelId,
+          estimatedInput,
+          config.reserveForOutput,
+        ).totalCost
       } catch {
         ctx.meta.userBudgetInflight = 0
       }
@@ -167,7 +176,10 @@ export function createCacheStage(cache: ResponseCache): PipelineStage {
 }
 
 /** Stage 5: Context trim -- fits conversation history within a token budget. */
-export function createContextStage(config: { maxInputTokens: number; reserveForOutput: number }): PipelineStage {
+export function createContextStage(config: {
+  maxInputTokens: number
+  reserveForOutput: number
+}): PipelineStage {
   return {
     name: "context",
     execute(ctx) {
@@ -177,8 +189,8 @@ export function createContextStage(config: { maxInputTokens: number; reserveForO
         reservedForOutput: config.reserveForOutput,
       }
       const trimResult = fitToBudget(
-        ctx.messages.map((m) => ({ ...m } as Message)),
-        budget
+        ctx.messages.map((m) => ({ ...m }) as Message),
+        budget,
       )
       if (trimResult.evictedTokens > 0) {
         ctx.meta.contextSaved = trimResult.evictedTokens
@@ -194,7 +206,7 @@ export function createContextStage(config: { maxInputTokens: number; reserveForO
 
 /** Stage 6: Model router -- routes to the cheapest model that handles the task's complexity. */
 export function createRouterStage(
-  tiers: Array<{ modelId: string; maxComplexity: number }>
+  tiers: Array<{ modelId: string; maxComplexity: number }>,
 ): PipelineStage {
   return {
     name: "router",
@@ -235,10 +247,13 @@ export function createPrefixStage(provider: string): PipelineStage {
       const pricing = MODEL_PRICING[ctx.modelId]
       if (!pricing) return ctx
       const optimized = optimizePrefix(
-        ctx.messages.map((m) => ({ role: m.role as "system" | "user" | "assistant", content: m.content })),
+        ctx.messages.map((m) => ({
+          role: m.role as "system" | "user" | "assistant",
+          content: m.content,
+        })),
         ctx.modelId,
         pricing.inputPerMillion,
-        { provider: provider as "openai" | "anthropic" | "google" | "auto" }
+        { provider: provider as "openai" | "anthropic" | "google" | "auto" },
       )
       if (optimized.estimatedPrefixSavings > 0) {
         ctx.meta.prefixSaved = optimized.estimatedPrefixSavings
@@ -289,7 +304,11 @@ export class Pipeline {
       if (ctx.aborted) break
 
       for (const hook of this.hooks) {
-        try { hook.beforeStage?.(stage.name, ctx) } catch { /* hook errors are swallowed */ }
+        try {
+          hook.beforeStage?.(stage.name, ctx)
+        } catch {
+          /* hook errors are swallowed */
+        }
       }
 
       const start = Date.now()
@@ -298,7 +317,11 @@ export class Pipeline {
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err))
         for (const hook of this.hooks) {
-          try { hook.onError?.(stage.name, error, ctx) } catch { /* swallow */ }
+          try {
+            hook.onError?.(stage.name, error, ctx)
+          } catch {
+            /* swallow */
+          }
         }
         // Stage errors abort the pipeline
         ctx.aborted = true
@@ -308,7 +331,11 @@ export class Pipeline {
       const durationMs = Date.now() - start
 
       for (const hook of this.hooks) {
-        try { hook.afterStage?.(stage.name, ctx, durationMs) } catch { /* swallow */ }
+        try {
+          hook.afterStage?.(stage.name, ctx, durationMs)
+        } catch {
+          /* swallow */
+        }
       }
     }
     return ctx

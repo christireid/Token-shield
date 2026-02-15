@@ -24,14 +24,55 @@ import { bench, benchAsync, type BenchmarkResult } from "./benchmark"
 
 export function generateWords(count: number): string {
   const vocabulary = [
-    "the", "quick", "brown", "fox", "jumps", "over", "lazy", "dog",
-    "a", "simple", "test", "of", "token", "counting", "performance",
-    "with", "various", "words", "that", "simulate", "real", "prompts",
-    "for", "language", "model", "API", "calls", "including", "some",
-    "technical", "vocabulary", "like", "transformer", "attention",
-    "mechanism", "gradient", "descent", "backpropagation", "neural",
-    "network", "embedding", "vector", "representation", "semantic",
-    "analysis", "natural", "language", "processing", "inference",
+    "the",
+    "quick",
+    "brown",
+    "fox",
+    "jumps",
+    "over",
+    "lazy",
+    "dog",
+    "a",
+    "simple",
+    "test",
+    "of",
+    "token",
+    "counting",
+    "performance",
+    "with",
+    "various",
+    "words",
+    "that",
+    "simulate",
+    "real",
+    "prompts",
+    "for",
+    "language",
+    "model",
+    "API",
+    "calls",
+    "including",
+    "some",
+    "technical",
+    "vocabulary",
+    "like",
+    "transformer",
+    "attention",
+    "mechanism",
+    "gradient",
+    "descent",
+    "backpropagation",
+    "neural",
+    "network",
+    "embedding",
+    "vector",
+    "representation",
+    "semantic",
+    "analysis",
+    "natural",
+    "language",
+    "processing",
+    "inference",
   ]
   const words: string[] = []
   for (let i = 0; i < count; i++) {
@@ -55,9 +96,7 @@ export function generateChatMessages(count: number): ChatMessage[] {
 }
 
 export function generateContextMessages(count: number): Message[] {
-  const messages: Message[] = [
-    { role: "system", content: "You are a helpful assistant." },
-  ]
+  const messages: Message[] = [{ role: "system", content: "You are a helpful assistant." }]
   for (let i = 0; i < count; i++) {
     const role: Message["role"] = i % 2 === 0 ? "user" : "assistant"
     messages.push({
@@ -113,31 +152,31 @@ export async function runAllBenchmarks(): Promise<BenchmarkResult[]> {
   results.push(
     bench("countExactTokens (10 words)", () => {
       countExactTokens(text10)
-    })
+    }),
   )
 
   results.push(
     bench("countExactTokens (100 words)", () => {
       countExactTokens(text100)
-    })
+    }),
   )
 
   results.push(
     bench("countExactTokens (1000 words)", () => {
       countExactTokens(text1000)
-    })
+    }),
   )
 
   results.push(
     bench("countChatTokens (5 messages)", () => {
       countChatTokens(chatMessages5)
-    })
+    }),
   )
 
   results.push(
     bench("countChatTokens (20 messages)", () => {
       countChatTokens(chatMessages20)
-    })
+    }),
   )
 
   // ==========================================================
@@ -147,19 +186,19 @@ export async function runAllBenchmarks(): Promise<BenchmarkResult[]> {
   results.push(
     bench("estimateCost (gpt-4o)", () => {
       estimateCost("gpt-4o", 1000, 500)
-    })
+    }),
   )
 
   results.push(
     bench("estimateCost (claude-sonnet-4.5)", () => {
       estimateCost("claude-sonnet-4.5", 1000, 500)
-    })
+    }),
   )
 
   results.push(
     bench("compareCosts (all models)", () => {
       compareCosts(1000, 500)
-    })
+    }),
   )
 
   // ==========================================================
@@ -169,25 +208,25 @@ export async function runAllBenchmarks(): Promise<BenchmarkResult[]> {
   results.push(
     bench("analyzeComplexity (simple)", () => {
       analyzeComplexity(simplePrompt)
-    })
+    }),
   )
 
   results.push(
     bench("analyzeComplexity (complex)", () => {
       analyzeComplexity(complexPrompt)
-    })
+    }),
   )
 
   results.push(
     bench("routeToModel (simple prompt)", () => {
       routeToModel(simplePrompt, "gpt-4o")
-    })
+    }),
   )
 
   results.push(
     bench("routeToModel (complex prompt)", () => {
       routeToModel(complexPrompt, "gpt-4o")
-    })
+    }),
   )
 
   // ==========================================================
@@ -207,32 +246,26 @@ export async function runAllBenchmarks(): Promise<BenchmarkResult[]> {
       `This is the cached response for prompt ${i}.`,
       "gpt-4o",
       50,
-      30
+      30,
     )
   }
 
   results.push(
     await benchAsync("cache store", async () => {
-      await cache.store(
-        "benchmark prompt for store test",
-        "benchmark response",
-        "gpt-4o",
-        100,
-        50
-      )
-    })
+      await cache.store("benchmark prompt for store test", "benchmark response", "gpt-4o", 100, 50)
+    }),
   )
 
   results.push(
     await benchAsync("cache lookup (exact hit)", async () => {
       await cache.lookup("cached prompt number 42: " + generateWords(10), "gpt-4o")
-    })
+    }),
   )
 
   results.push(
     await benchAsync("cache lookup (miss)", async () => {
       await cache.lookup("this prompt is definitely not cached anywhere at all", "gpt-4o")
-    })
+    }),
   )
 
   results.push(
@@ -240,7 +273,7 @@ export async function runAllBenchmarks(): Promise<BenchmarkResult[]> {
       const prompt = "round-trip cache benchmark prompt"
       await cache.store(prompt, "round-trip response", "gpt-4o", 80, 40)
       await cache.lookup(prompt, "gpt-4o")
-    })
+    }),
   )
 
   // ==========================================================
@@ -250,25 +283,25 @@ export async function runAllBenchmarks(): Promise<BenchmarkResult[]> {
   results.push(
     bench("fitToBudget (10 messages)", () => {
       fitToBudget(contextMessages10, budget)
-    })
+    }),
   )
 
   results.push(
     bench("fitToBudget (50 messages)", () => {
       fitToBudget(contextMessages50, budget)
-    })
+    }),
   )
 
   results.push(
     bench("fitToBudget (100 messages, tight)", () => {
       fitToBudget(contextMessages100, tightBudget)
-    })
+    }),
   )
 
   results.push(
     bench("smartFit (50 messages)", () => {
       smartFit(contextMessages50, budget)
-    })
+    }),
   )
 
   // ==========================================================
@@ -285,13 +318,13 @@ export async function runAllBenchmarks(): Promise<BenchmarkResult[]> {
   results.push(
     bench("optimizePrefix (4 messages, openai)", () => {
       optimizePrefix(prefixMessages, "gpt-4o", 2.5)
-    })
+    }),
   )
 
   results.push(
     bench("optimizePrefix (4 messages, anthropic)", () => {
       optimizePrefix(prefixMessages, "claude-sonnet-4.5", 3.0, { provider: "anthropic" })
-    })
+    }),
   )
 
   // ==========================================================
@@ -309,7 +342,7 @@ export async function runAllBenchmarks(): Promise<BenchmarkResult[]> {
         deduplicateInFlight: false,
       })
       guard.check("What is the capital of France?", 500)
-    })
+    }),
   )
 
   // ==========================================================
@@ -325,13 +358,13 @@ export async function runAllBenchmarks(): Promise<BenchmarkResult[]> {
   results.push(
     bench("CostCircuitBreaker.check", () => {
       breaker.check("gpt-4o", 1000, 500)
-    })
+    }),
   )
 
   results.push(
     bench("CostCircuitBreaker.recordSpend", () => {
       breaker.recordSpend(0.001, "gpt-4o")
-    })
+    }),
   )
 
   // ==========================================================
@@ -349,13 +382,13 @@ export async function runAllBenchmarks(): Promise<BenchmarkResult[]> {
   results.push(
     bench("UserBudgetManager.check", () => {
       budgetManager.check("bench-user", "gpt-4o", 1000, 500)
-    })
+    }),
   )
 
   results.push(
     bench("UserBudgetManager.getStatus", () => {
       budgetManager.getStatus("bench-user")
-    })
+    }),
   )
 
   // ==========================================================
@@ -367,13 +400,13 @@ export async function runAllBenchmarks(): Promise<BenchmarkResult[]> {
   results.push(
     bench("AnomalyDetector.check (normal)", () => {
       anomalyDetector.check(0.05, 500)
-    })
+    }),
   )
 
   results.push(
     bench("AnomalyDetector.check (anomaly)", () => {
       anomalyDetector.check(5.0, 50000)
-    })
+    }),
   )
 
   // ==========================================================
@@ -382,13 +415,13 @@ export async function runAllBenchmarks(): Promise<BenchmarkResult[]> {
 
   const mw = tokenShieldMiddleware({
     modules: {
-      guard: false,    // Skip guard to avoid debounce blocking in tight loop
-      cache: false,    // Skip cache to measure raw pipeline overhead
+      guard: false, // Skip guard to avoid debounce blocking in tight loop
+      cache: false, // Skip cache to measure raw pipeline overhead
       context: true,
       router: false,
       prefix: true,
       ledger: false,
-      anomaly: true,   // Enable anomaly detection
+      anomaly: true, // Enable anomaly detection
     },
     context: {
       maxInputTokens: 4096,
@@ -413,7 +446,7 @@ export async function runAllBenchmarks(): Promise<BenchmarkResult[]> {
   results.push(
     await benchAsync("middleware transformParams", async () => {
       await mw.transformParams({ params: { ...aiSdkParams } })
-    })
+    }),
   )
 
   const transformedParams = await mw.transformParams({ params: { ...aiSdkParams } })
@@ -428,7 +461,7 @@ export async function runAllBenchmarks(): Promise<BenchmarkResult[]> {
           finishReason: "stop",
         }),
       })
-    })
+    }),
   )
 
   results.push(
@@ -442,7 +475,7 @@ export async function runAllBenchmarks(): Promise<BenchmarkResult[]> {
           finishReason: "stop",
         }),
       })
-    })
+    }),
   )
 
   return results

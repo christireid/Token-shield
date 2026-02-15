@@ -1,57 +1,68 @@
 const MODULES = [
   {
     name: "Token Counter",
-    description: "Exact BPE counts using the same encoding OpenAI uses. Matches usage.prompt_tokens within 2 tokens.",
+    description:
+      "Exact BPE counts using the same encoding OpenAI uses. Matches usage.prompt_tokens within 2 tokens.",
     tag: "Core",
   },
   {
     name: "Cost Estimator",
-    description: "Real pricing data for GPT-5.2, Claude Opus 4.5, Gemini 2.5 Pro, and 10 more models. Updated Feb 2026.",
+    description:
+      "Real pricing data for GPT-5.2, Claude Opus 4.5, Gemini 2.5 Pro, and 10 more models. Updated Feb 2026.",
     tag: "Core",
   },
   {
     name: "Context Manager",
-    description: "Trim conversation history to fit a token budget. System messages pinned. Auto-summarizes evicted messages.",
+    description:
+      "Trim conversation history to fit a token budget. System messages pinned. Auto-summarizes evicted messages.",
     tag: "Saves 40-70%",
   },
   {
     name: "Response Cache",
-    description: "Exact + fuzzy matching via bigram similarity. Rephrased prompts hit cache. IndexedDB persistence.",
+    description:
+      "Exact + fuzzy matching via bigram similarity. Rephrased prompts hit cache. IndexedDB persistence.",
     tag: "Saves 100%",
   },
   {
     name: "Model Router",
-    description: "Deterministic complexity scoring on 9 signals. Routes trivial queries to budget models automatically.",
+    description:
+      "Deterministic complexity scoring on 9 signals. Routes trivial queries to budget models automatically.",
     tag: "Saves 80-95%",
   },
   {
     name: "Request Guard",
-    description: "Debounce, dedup, rate limit, and cost gate. Every blocked request is 100% savings on that call.",
+    description:
+      "Debounce, dedup, rate limit, and cost gate. Every blocked request is 100% savings on that call.",
     tag: "Saves 100%",
   },
   {
     name: "Prefix Optimizer",
-    description: "Reorders messages for provider-side prompt caching. OpenAI 50% discount, Anthropic 90% discount.",
+    description:
+      "Reorders messages for provider-side prompt caching. OpenAI 50% discount, Anthropic 90% discount.",
     tag: "Saves 50-90%",
   },
   {
     name: "Tool Token Counter",
-    description: "Counts the hidden tokens that JSON tool schemas inject per request. Optimizes descriptions to reduce overhead.",
+    description:
+      "Counts the hidden tokens that JSON tool schemas inject per request. Optimizes descriptions to reduce overhead.",
     tag: "New",
   },
   {
     name: "Image Token Counter",
-    description: "OpenAI's exact tile formula: 85 base + 170 per 512x512 tile. Recommends optimal resize dimensions.",
+    description:
+      "OpenAI's exact tile formula: 85 base + 170 per 512x512 tile. Recommends optimal resize dimensions.",
     tag: "New",
   },
   {
     name: "Stream Tracker",
-    description: "Counts output tokens in real-time during streaming. Survives abort -- solves vercel/ai#7628.",
+    description:
+      "Counts output tokens in real-time during streaming. Survives abort -- solves vercel/ai#7628.",
     tag: "New",
   },
   {
     name: "Circuit Breaker",
-    description: "Hard spending limits per session, hour, day, month. Prevents the $847-to-$34K runaway scenario.",
+    description:
+      "Hard spending limits per session, hour, day, month. Prevents the $847-to-$34K runaway scenario.",
     tag: "New",
   },
 ]
@@ -75,13 +86,15 @@ export function Features() {
             >
               <div className="flex items-start justify-between gap-2">
                 <h3 className="text-sm font-semibold text-foreground">{mod.name}</h3>
-                <span className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium ${
-                  mod.tag === "New"
-                    ? "bg-primary/15 text-primary"
-                    : mod.tag === "Core"
-                      ? "bg-secondary text-muted-foreground"
-                      : "bg-primary/10 text-primary"
-                }`}>
+                <span
+                  className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium ${
+                    mod.tag === "New"
+                      ? "bg-primary/15 text-primary"
+                      : mod.tag === "Core"
+                        ? "bg-secondary text-muted-foreground"
+                        : "bg-primary/10 text-primary"
+                  }`}
+                >
                   {mod.tag}
                 </span>
               </div>

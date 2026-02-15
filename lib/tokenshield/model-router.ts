@@ -14,11 +14,7 @@
  */
 
 import { countTokens } from "gpt-tokenizer"
-import {
-  MODEL_PRICING,
-  type ModelPricing,
-  estimateCost,
-} from "./cost-estimator"
+import { MODEL_PRICING, type ModelPricing, estimateCost } from "./cost-estimator"
 
 export interface ComplexitySignals {
   /** Raw token count of the prompt */
@@ -59,7 +55,8 @@ export interface RoutingDecision {
   selectedModel: ModelPricing
   fallbackModel: ModelPricing
   estimatedCost: ReturnType<typeof estimateCost>
-  cheapestAlternativeCost: ReturnType<typeof estimateCost>
+  /** Cost of the fallback (next-tier-up) model for comparison */
+  fallbackCost: ReturnType<typeof estimateCost>
   savingsVsDefault: number
 }
 
@@ -109,18 +106,43 @@ const CONSTRAINT_KEYWORDS = new Set([
   "specification",
 ])
 
-const CODE_PATTERNS = /```|{|}|\bfunction\b|\bclass\b|\bimport\b|\bexport\b|\bconst\b|\blet\b|\bvar\b|\breturn\b|=>|\bif\s*\(|\bfor\s*\(/g
+const CODE_PATTERNS =
+  /```|{|}|\bfunction\b|\bclass\b|\bimport\b|\bexport\b|\bconst\b|\blet\b|\bvar\b|\breturn\b|=>|\bif\s*\(|\bfor\s*\(/g
 
 const STRUCTURED_OUTPUT_PATTERNS =
   /\bjson\b|\bxml\b|\byaml\b|\bcsv\b|\bschema\b|\bformat.*?as\b|\boutput.*?format\b|\breturn.*?object\b|\bstructured\b/i
 
-const SUBTASK_PATTERNS =
-  /^\s*[-*\d]+[.)]\s/gm
+const SUBTASK_PATTERNS = /^\s*[-*\d]+[.)]\s/gm
 
 const CONTEXT_PATTERNS =
   /\babove\b|\bprevious\b|\bearlier\b|\bmentioned\b|\brefer.*?to\b|\bgiven\b|\bbased on\b/i
 
-/** FIFO cache for analyzeComplexity — avoids re-running BPE + regex on identical prompts */
+/**
+ * Weights and caps for each complexity signal in the composite score.
+ * Each entry: [maxPoints, multiplier].
+ * - maxPoints: the ceiling for this signal's contribution
+ * - multiplier: per-unit weight (e.g. per keyword, per token fraction)
+ */
+const COMPLEXITY_WEIGHTS = {
+  tokenCount: { max: 25, divisor: 500 },
+  reasoningKeywords: { max: 20, perUnit: 5 },
+  constraintKeywords: { max: 10, perUnit: 2.5 },
+  codeSignals: { max: 15, perUnit: 1.5 },
+  lexicalDiversity: { multiplier: 10 },
+  structuredOutput: { points: 5 },
+  subTasks: { max: 10, perUnit: 3 },
+  contextDependency: { points: 5 },
+} as const
+
+/** Tier boundaries for the composite complexity score (0-100) */
+const TIER_THRESHOLDS = {
+  trivial: 15,
+  simple: 35,
+  moderate: 55,
+  complex: 75,
+} as const
+
+/** LRU cache for analyzeComplexity — avoids re-running BPE + regex on identical prompts */
 const MAX_COMPLEXITY_CACHE = 100
 /** Skip caching prompts longer than this to prevent large memory consumption */
 const MAX_CACHEABLE_PROMPT_LENGTH = 10_000
@@ -147,7 +169,12 @@ const complexityCache = new Map<string, ComplexityScore>()
  */
 export function analyzeComplexity(prompt: string): ComplexityScore {
   const cached = complexityCache.get(prompt)
-  if (cached) return cached
+  if (cached) {
+    // LRU: move to end so this entry is the most-recently-used
+    complexityCache.delete(prompt)
+    complexityCache.set(prompt, cached)
+    return cached
+  }
   const words = prompt.split(/\s+/).filter((w) => w.length > 0)
   const wordCount = words.length
   const sentences = prompt.split(/[.!?]+/).filter((s) => s.trim().length > 0)
@@ -156,69 +183,70 @@ export function analyzeComplexity(prompt: string): ComplexityScore {
 
   const signals: ComplexitySignals = {
     tokenCount: countTokens(prompt),
-    avgWordLength:
-      wordCount > 0
-        ? words.reduce((sum, w) => sum + w.length, 0) / wordCount
-        : 0,
+    avgWordLength: wordCount > 0 ? words.reduce((sum, w) => sum + w.length, 0) / wordCount : 0,
     sentenceCount: sentences.length,
-    lexicalDiversity:
-      wordCount > 0 ? uniqueWords.size / wordCount : 0,
+    lexicalDiversity: wordCount > 0 ? uniqueWords.size / wordCount : 0,
     codeSignals: (prompt.match(CODE_PATTERNS) || []).length,
-    reasoningKeywords: [...REASONING_KEYWORDS].filter((kw) =>
-      lowerPrompt.includes(kw)
-    ).length,
-    constraintKeywords: [...CONSTRAINT_KEYWORDS].filter((kw) =>
-      lowerPrompt.includes(kw)
-    ).length,
+    reasoningKeywords: [...REASONING_KEYWORDS].filter((kw) => lowerPrompt.includes(kw)).length,
+    constraintKeywords: [...CONSTRAINT_KEYWORDS].filter((kw) => lowerPrompt.includes(kw)).length,
     hasStructuredOutput: STRUCTURED_OUTPUT_PATTERNS.test(prompt),
     subTaskCount: (prompt.match(SUBTASK_PATTERNS) || []).length,
     hasContextDependency: CONTEXT_PATTERNS.test(prompt),
   }
 
   // Weighted composite score (0-100)
+  const w = COMPLEXITY_WEIGHTS
   let score = 0
 
-  // Token count contribution (0-25 points)
-  // <50 tokens = trivial, 50-200 = moderate, 200-500 = complex, 500+ = expert
-  score += Math.min(25, (signals.tokenCount / 500) * 25)
+  // Token count contribution
+  score += Math.min(
+    w.tokenCount.max,
+    (signals.tokenCount / w.tokenCount.divisor) * w.tokenCount.max,
+  )
 
-  // Reasoning keywords (0-20 points)
-  score += Math.min(20, signals.reasoningKeywords * 5)
+  // Reasoning keywords
+  score += Math.min(
+    w.reasoningKeywords.max,
+    signals.reasoningKeywords * w.reasoningKeywords.perUnit,
+  )
 
-  // Constraint keywords (0-10 points)
-  score += Math.min(10, signals.constraintKeywords * 2.5)
+  // Constraint keywords
+  score += Math.min(
+    w.constraintKeywords.max,
+    signals.constraintKeywords * w.constraintKeywords.perUnit,
+  )
 
-  // Code signals (0-15 points)
-  score += Math.min(15, signals.codeSignals * 1.5)
+  // Code signals
+  score += Math.min(w.codeSignals.max, signals.codeSignals * w.codeSignals.perUnit)
 
-  // Lexical diversity (0-10 points)
-  // Higher diversity = more complex vocabulary
-  score += signals.lexicalDiversity * 10
+  // Lexical diversity — higher diversity = more complex vocabulary
+  score += signals.lexicalDiversity * w.lexicalDiversity.multiplier
 
-  // Structured output requirement (5 points)
-  if (signals.hasStructuredOutput) score += 5
+  // Structured output requirement
+  if (signals.hasStructuredOutput) score += w.structuredOutput.points
 
-  // Sub-tasks (0-10 points)
-  score += Math.min(10, signals.subTaskCount * 3)
+  // Sub-tasks
+  score += Math.min(w.subTasks.max, signals.subTaskCount * w.subTasks.perUnit)
 
-  // Context dependency (5 points)
-  if (signals.hasContextDependency) score += 5
+  // Context dependency
+  if (signals.hasContextDependency) score += w.contextDependency.points
 
   score = Math.min(100, Math.round(score))
 
+  const t = TIER_THRESHOLDS
   let tier: ComplexityScore["tier"]
   let recommendedTier: ModelPricing["tier"]
 
-  if (score <= 15) {
+  if (score <= t.trivial) {
     tier = "trivial"
     recommendedTier = "budget"
-  } else if (score <= 35) {
+  } else if (score <= t.simple) {
     tier = "simple"
     recommendedTier = "budget"
-  } else if (score <= 55) {
+  } else if (score <= t.moderate) {
     tier = "moderate"
     recommendedTier = "standard"
-  } else if (score <= 75) {
+  } else if (score <= t.complex) {
     tier = "complex"
     recommendedTier = "premium"
   } else {
@@ -272,7 +300,7 @@ export function routeToModel(
     minTier?: ModelPricing["tier"]
     /** Expected output tokens (for cost comparison) */
     expectedOutputTokens?: number
-  } = {}
+  } = {},
 ): RoutingDecision {
   const complexity = analyzeComplexity(prompt)
   const expectedOutput = options.expectedOutputTokens ?? 500
@@ -303,11 +331,7 @@ export function routeToModel(
     }))
     .sort((a, b) => a.cost.totalCost - b.cost.totalCost)
 
-  const defaultCost = estimateCost(
-    defaultModelId,
-    complexity.signals.tokenCount,
-    expectedOutput
-  )
+  const defaultCost = estimateCost(defaultModelId, complexity.signals.tokenCount, expectedOutput)
 
   // If no candidates match the filter, fall back to the default model
   if (sorted.length === 0) {
@@ -317,7 +341,7 @@ export function routeToModel(
       selectedModel: fallbackModel,
       fallbackModel: fallbackModel,
       estimatedCost: defaultCost,
-      cheapestAlternativeCost: defaultCost,
+      fallbackCost: defaultCost,
       savingsVsDefault: 0,
     }
   }
@@ -332,7 +356,7 @@ export function routeToModel(
     selectedModel: selected.model,
     fallbackModel: fallback.model,
     estimatedCost: selected.cost,
-    cheapestAlternativeCost: selected.cost,
+    fallbackCost: fallback.cost,
     savingsVsDefault: defaultCost.totalCost - selected.cost.totalCost,
   }
 }
@@ -356,7 +380,7 @@ export function routeToModel(
  */
 export function rankModels(
   inputTokens: number,
-  outputTokens: number
+  outputTokens: number,
 ): { model: ModelPricing; cost: ReturnType<typeof estimateCost> }[] {
   return Object.values(MODEL_PRICING)
     .map((m) => ({

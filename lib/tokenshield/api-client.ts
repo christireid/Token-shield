@@ -3,6 +3,8 @@
  * Returns the real usage data from each provider alongside the response.
  */
 
+import { TokenShieldAPIError, ERROR_CODES } from "./errors"
+
 export type Provider = "openai" | "anthropic" | "google"
 
 export interface LLMResult {
@@ -53,7 +55,7 @@ export interface LLMMessage {
 export async function callOpenAI(
   messages: LLMMessage[],
   model: string,
-  options?: { max_tokens?: number; temperature?: number; signal?: AbortSignal }
+  options?: { max_tokens?: number; temperature?: number; signal?: AbortSignal },
 ): Promise<LLMResult> {
   const res = await fetch("/api/openai", {
     method: "POST",
@@ -69,10 +71,21 @@ export async function callOpenAI(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Unknown error" }))
-    throw new Error(err.error ?? `OpenAI API error: ${res.status}`)
+    throw new TokenShieldAPIError(
+      err.error ?? `OpenAI API error: ${res.status}`,
+      "openai",
+      res.status,
+    )
   }
 
-  const data = await res.json()
+  const data = await res.json().catch(() => {
+    throw new TokenShieldAPIError(
+      `OpenAI API returned invalid JSON (status ${res.status})`,
+      "openai",
+      res.status,
+      ERROR_CODES.API_INVALID_RESPONSE,
+    )
+  })
   // OpenAI returns prompt_tokens and completion_tokens; fallback to input/output tokens if present
   const promptTokens = data.usage?.prompt_tokens ?? data.usage?.input_tokens ?? 0
   const completionTokens = data.usage?.completion_tokens ?? data.usage?.output_tokens ?? 0
@@ -101,7 +114,7 @@ export async function callOpenAI(
 export async function callAnthropic(
   messages: LLMMessage[],
   model: string,
-  options?: { max_tokens?: number; temperature?: number; signal?: AbortSignal }
+  options?: { max_tokens?: number; temperature?: number; signal?: AbortSignal },
 ): Promise<LLMResult> {
   // Extract system message for Anthropic (sent separately)
   const systemMessages = messages.filter((m) => m.role === "system")
@@ -122,10 +135,21 @@ export async function callAnthropic(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Unknown error" }))
-    throw new Error(err.error ?? `Anthropic API error: ${res.status}`)
+    throw new TokenShieldAPIError(
+      err.error ?? `Anthropic API error: ${res.status}`,
+      "anthropic",
+      res.status,
+    )
   }
 
-  const data = await res.json()
+  const data = await res.json().catch(() => {
+    throw new TokenShieldAPIError(
+      `Anthropic API returned invalid JSON (status ${res.status})`,
+      "anthropic",
+      res.status,
+      ERROR_CODES.API_INVALID_RESPONSE,
+    )
+  })
   const inputTokens = data.usage?.input_tokens ?? 0
   const outputTokens = data.usage?.output_tokens ?? 0
   const totalTokens = data.usage?.total_tokens ?? inputTokens + outputTokens
@@ -153,7 +177,7 @@ export async function callAnthropic(
 export async function callGoogle(
   messages: LLMMessage[],
   model: string,
-  options?: { max_tokens?: number; temperature?: number; signal?: AbortSignal }
+  options?: { max_tokens?: number; temperature?: number; signal?: AbortSignal },
 ): Promise<LLMResult> {
   const res = await fetch("/api/google", {
     method: "POST",
@@ -169,10 +193,21 @@ export async function callGoogle(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Unknown error" }))
-    throw new Error(err.error ?? `Google API error: ${res.status}`)
+    throw new TokenShieldAPIError(
+      err.error ?? `Google API error: ${res.status}`,
+      "google",
+      res.status,
+    )
   }
 
-  const data = await res.json()
+  const data = await res.json().catch(() => {
+    throw new TokenShieldAPIError(
+      `Google API returned invalid JSON (status ${res.status})`,
+      "google",
+      res.status,
+      ERROR_CODES.API_INVALID_RESPONSE,
+    )
+  })
   const inputTokens = data.usage?.input_tokens ?? 0
   const outputTokens = data.usage?.output_tokens ?? 0
   const totalTokens = data.usage?.total_tokens ?? inputTokens + outputTokens
@@ -201,7 +236,7 @@ export async function callLLM(
   provider: Provider,
   messages: LLMMessage[],
   model: string,
-  options?: { max_tokens?: number; temperature?: number; signal?: AbortSignal }
+  options?: { max_tokens?: number; temperature?: number; signal?: AbortSignal },
 ): Promise<LLMResult> {
   switch (provider) {
     case "openai":
@@ -217,10 +252,7 @@ export async function callLLM(
 // Accurate pricing per million tokens
 // -------------------------------------------------------
 
-const PROVIDER_PRICES: Record<
-  string,
-  { input: number; output: number; provider: Provider }
-> = {
+const PROVIDER_PRICES: Record<string, { input: number; output: number; provider: Provider }> = {
   // OpenAI
   "gpt-4o": { input: 2.5, output: 10.0, provider: "openai" },
   "gpt-4o-2024-11-20": { input: 2.5, output: 10.0, provider: "openai" },
@@ -254,7 +286,7 @@ const PROVIDER_PRICES: Record<
 export function calculateRealCost(
   model: string,
   inputTokens: number,
-  outputTokens: number
+  outputTokens: number,
 ): { inputCost: number; outputCost: number; totalCost: number; provider: Provider } {
   // Try exact match first, then prefix match
   let pricing = PROVIDER_PRICES[model]

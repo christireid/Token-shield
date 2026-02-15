@@ -8,6 +8,7 @@ import {
   truncateToTokenBudget,
   countModelTokens,
   countFast,
+  getTokenizerAccuracy,
 } from "./token-counter"
 
 describe("token-counter", () => {
@@ -40,20 +41,14 @@ describe("token-counter", () => {
     })
 
     it("includes name overhead when name is present", () => {
-      const withoutName = countChatTokens([
-        { role: "user", content: "Hello!" },
-      ])
-      const withName = countChatTokens([
-        { role: "user", content: "Hello!", name: "Alice" },
-      ])
+      const withoutName = countChatTokens([{ role: "user", content: "Hello!" }])
+      const withName = countChatTokens([{ role: "user", content: "Hello!", name: "Alice" }])
       expect(withName.total).toBeGreaterThan(withoutName.total)
     })
 
     it("truncates long content in perMessage output", () => {
       const longContent = "a".repeat(200)
-      const result = countChatTokens([
-        { role: "user", content: longContent },
-      ])
+      const result = countChatTokens([{ role: "user", content: longContent }])
       expect(result.perMessage[0].content.length).toBeLessThan(200)
       expect(result.perMessage[0].content).toContain("...")
     })
@@ -121,6 +116,59 @@ describe("token-counter", () => {
       const cjk = "\u4e00".repeat(100)
       const eng = "a".repeat(100)
       expect(countFast(cjk)).toBeGreaterThan(countFast(eng))
+    })
+  })
+
+  describe("getTokenizerAccuracy", () => {
+    it("returns exact accuracy for OpenAI models", () => {
+      const result = getTokenizerAccuracy("gpt-4o-mini")
+      expect(result.accuracy).toBe("exact")
+      expect(result.provider).toBe("openai")
+      expect(result.marginOfError).toBe(0)
+    })
+
+    it("returns approximate accuracy for Anthropic models", () => {
+      const result = getTokenizerAccuracy("claude-sonnet-4-5-20250514")
+      expect(result.accuracy).toBe("approximate")
+      expect(result.provider).toBe("anthropic")
+      expect(result.marginOfError).toBe(0.15)
+    })
+
+    it("returns approximate accuracy for Google models", () => {
+      const result = getTokenizerAccuracy("gemini-1.5-pro")
+      expect(result.accuracy).toBe("approximate")
+      expect(result.provider).toBe("google")
+      expect(result.marginOfError).toBe(0.2)
+    })
+
+    it("returns approximate accuracy for open-source models (llama)", () => {
+      const result = getTokenizerAccuracy("llama-3.1-70b")
+      expect(result.accuracy).toBe("approximate")
+      expect(result.provider).toBe("open-source")
+      expect(result.marginOfError).toBe(0.15)
+    })
+
+    it("returns approximate accuracy for Mistral models", () => {
+      const result = getTokenizerAccuracy("mistral-large-latest")
+      expect(result.accuracy).toBe("approximate")
+      expect(result.provider).toBe("open-source")
+    })
+
+    it("returns approximate accuracy for Mixtral models", () => {
+      const result = getTokenizerAccuracy("mixtral-8x7b")
+      expect(result.accuracy).toBe("approximate")
+      expect(result.provider).toBe("open-source")
+    })
+
+    it("is case-insensitive", () => {
+      expect(getTokenizerAccuracy("CLAUDE-3-OPUS").provider).toBe("anthropic")
+      expect(getTokenizerAccuracy("GEMINI-PRO").provider).toBe("google")
+    })
+
+    it("defaults to exact/openai for unknown models", () => {
+      const result = getTokenizerAccuracy("some-unknown-model")
+      expect(result.accuracy).toBe("exact")
+      expect(result.provider).toBe("openai")
     })
   })
 })

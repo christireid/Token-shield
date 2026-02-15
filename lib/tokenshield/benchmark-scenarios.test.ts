@@ -6,11 +6,7 @@
  */
 
 import { describe, it, expect } from "vitest"
-import {
-  generateWords,
-  generateChatMessages,
-  generateContextMessages,
-} from "./benchmark-scenarios"
+import { generateWords, generateChatMessages, generateContextMessages } from "./benchmark-scenarios"
 
 describe("generateWords", () => {
   it("generates the requested number of words", () => {

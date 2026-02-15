@@ -116,7 +116,7 @@ export function budgetPct(value: number, limit: number): number {
  */
 export function resolveUserLimits(
   config: UserBudgetConfig,
-  userId: string
+  userId: string,
 ): UserBudgetLimits | null {
   const userConfig = config.users?.[userId]
   if (userConfig) return userConfig
@@ -130,7 +130,7 @@ export function resolveUserLimits(
 export function computeSpendWindows(
   records: UserSpendRecord[],
   userId: string,
-  now: number
+  now: number,
 ): { daily: number; monthly: number } {
   const oneDayAgo = now - ONE_DAY_MS
   const thirtyDaysAgo = now - THIRTY_DAYS_MS
@@ -155,7 +155,7 @@ export function buildBudgetSnapshot(
   userId: string,
   limits: UserBudgetLimits | null,
   spend: { daily: number; monthly: number },
-  userInflight: number
+  userInflight: number,
 ): UserBudgetStatus {
   const tier = limits?.tier ?? "standard"
 
@@ -175,11 +175,12 @@ export function buildBudgetSnapshot(
   const dailyRemaining = limits.daily > 0 ? Math.max(0, limits.daily - spend.daily) : null
   const monthlyRemaining = limits.monthly > 0 ? Math.max(0, limits.monthly - spend.monthly) : null
   const dailyPercent = limits.daily > 0 ? Math.min((spend.daily / limits.daily) * 100, 999) : 0
-  const monthlyPercent = limits.monthly > 0 ? Math.min((spend.monthly / limits.monthly) * 100, 999) : 0
+  const monthlyPercent =
+    limits.monthly > 0 ? Math.min((spend.monthly / limits.monthly) * 100, 999) : 0
 
   // isOverBudget accounts for in-flight; 0-limit means no limit for that window
-  const dailyOver = limits.daily > 0 && (spend.daily + userInflight) >= limits.daily
-  const monthlyOver = limits.monthly > 0 && (spend.monthly + userInflight) >= limits.monthly
+  const dailyOver = limits.daily > 0 && spend.daily + userInflight >= limits.daily
+  const monthlyOver = limits.monthly > 0 && spend.monthly + userInflight >= limits.monthly
 
   return {
     userId,
@@ -197,10 +198,7 @@ export function buildBudgetSnapshot(
  * Evict stale warning entries to prevent unbounded map growth.
  * Mutates the provided map in place.
  */
-export function evictStaleWarnings(
-  warningFired: Map<string, number>,
-  now: number
-): void {
+export function evictStaleWarnings(warningFired: Map<string, number>, now: number): void {
   if (warningFired.size <= MAX_WARNING_MAP_SIZE) return
 
   // First pass: remove expired entries (>30 days old)

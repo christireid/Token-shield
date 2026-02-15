@@ -54,13 +54,11 @@ describe("UserBudgetManager — Battle Tests", () => {
       // Set a tiny daily budget so inflight from check() exhausts it quickly.
       // gpt-4o with 50K input + 20K output ≈ $0.275 per check reservation.
       const mgr = new UserBudgetManager({
-        users: { "u1": { daily: 0.50, monthly: 100 } },
+        users: { u1: { daily: 0.5, monthly: 100 } },
       })
 
       // Simulate 10 concurrent check() calls that each reserve significant inflight
-      const checks = Array.from({ length: 10 }, () =>
-        mgr.check("u1", "gpt-4o", 50000, 20000)
-      )
+      const checks = Array.from({ length: 10 }, () => mgr.check("u1", "gpt-4o", 50000, 20000))
 
       const allowed = checks.filter((c) => c.allowed)
       const blocked = checks.filter((c) => !c.allowed)
@@ -71,12 +69,12 @@ describe("UserBudgetManager — Battle Tests", () => {
 
       // Total inflight should not vastly exceed the daily limit
       const status = mgr.getStatus("u1")
-      expect(status.inflight).toBeLessThanOrEqual(0.60)
+      expect(status.inflight).toBeLessThanOrEqual(0.6)
     })
 
     it("inflight drains correctly after mixed success/failure", async () => {
       const mgr = new UserBudgetManager({
-        users: { "u1": { daily: 10, monthly: 100 } },
+        users: { u1: { daily: 10, monthly: 100 } },
       })
 
       // 5 requests check in
@@ -106,8 +104,8 @@ describe("UserBudgetManager — Battle Tests", () => {
     it("one user hitting budget does not affect another", async () => {
       const mgr = new UserBudgetManager({
         users: {
-          "alice": { daily: 0.01, monthly: 100 },
-          "bob": { daily: 100, monthly: 1000 },
+          alice: { daily: 0.01, monthly: 100 },
+          bob: { daily: 100, monthly: 1000 },
         },
       })
 
@@ -161,7 +159,7 @@ describe("UserBudgetManager — Battle Tests", () => {
     it("warning fires exactly once per window", async () => {
       const onWarning = vi.fn()
       const mgr = new UserBudgetManager({
-        users: { "u1": { daily: 10, monthly: 100 } },
+        users: { u1: { daily: 10, monthly: 100 } },
         onBudgetWarning: onWarning,
       })
 
@@ -179,7 +177,7 @@ describe("UserBudgetManager — Battle Tests", () => {
     it("exceeded callback receives correct data", async () => {
       const onExceeded = vi.fn()
       const mgr = new UserBudgetManager({
-        users: { "u1": { daily: 5.0, monthly: 100 } },
+        users: { u1: { daily: 5.0, monthly: 100 } },
         onBudgetExceeded: onExceeded,
       })
 
@@ -197,7 +195,7 @@ describe("UserBudgetManager — Battle Tests", () => {
     it("monthly warning fires independently of daily warning", async () => {
       const onWarning = vi.fn()
       const mgr = new UserBudgetManager({
-        users: { "u1": { daily: 100, monthly: 10 } },
+        users: { u1: { daily: 100, monthly: 10 } },
         onBudgetWarning: onWarning,
       })
 
@@ -214,9 +212,9 @@ describe("UserBudgetManager — Battle Tests", () => {
     it("routes each tier to the correct model", () => {
       const mgr = new UserBudgetManager({
         users: {
-          "free": { daily: 1, monthly: 5, tier: "standard" },
-          "pro": { daily: 10, monthly: 100, tier: "premium" },
-          "vip": { daily: 999, monthly: 9999, tier: "unlimited" },
+          free: { daily: 1, monthly: 5, tier: "standard" },
+          pro: { daily: 10, monthly: 100, tier: "premium" },
+          vip: { daily: 999, monthly: 9999, tier: "unlimited" },
         },
         tierModels: {
           standard: "gpt-4o-mini",
@@ -232,7 +230,7 @@ describe("UserBudgetManager — Battle Tests", () => {
 
     it("returns null when tier has no model mapping", () => {
       const mgr = new UserBudgetManager({
-        users: { "u1": { daily: 1, monthly: 5, tier: "standard" } },
+        users: { u1: { daily: 1, monthly: 5, tier: "standard" } },
         tierModels: { premium: "gpt-4o" }, // no standard mapping
       })
 
@@ -243,7 +241,7 @@ describe("UserBudgetManager — Battle Tests", () => {
   describe("budget modification at runtime", () => {
     it("upgrading budget allows previously blocked user", async () => {
       const mgr = new UserBudgetManager({
-        users: { "u1": { daily: 1.0, monthly: 10 } },
+        users: { u1: { daily: 1.0, monthly: 10 } },
       })
 
       await mgr.recordSpend("u1", 1.0, "gpt-4o-mini")
@@ -257,7 +255,7 @@ describe("UserBudgetManager — Battle Tests", () => {
 
     it("downgrading budget blocks previously allowed user", async () => {
       const mgr = new UserBudgetManager({
-        users: { "u1": { daily: 100, monthly: 1000 } },
+        users: { u1: { daily: 100, monthly: 1000 } },
       })
 
       await mgr.recordSpend("u1", 5.0, "gpt-4o-mini")
@@ -269,7 +267,7 @@ describe("UserBudgetManager — Battle Tests", () => {
 
     it("removing user reverts to default budget", async () => {
       const mgr = new UserBudgetManager({
-        users: { "u1": { daily: 100, monthly: 1000 } },
+        users: { u1: { daily: 100, monthly: 1000 } },
         defaultBudget: { daily: 2, monthly: 20 },
       })
 
@@ -498,7 +496,7 @@ describe("CostLedger — Battle Tests", () => {
         savings: {},
       })
       // gpt-4o-mini: $0.15/1M input, $0.60/1M output
-      expect(entry.actualCost).toBeCloseTo(0.15 + 0.60, 4)
+      expect(entry.actualCost).toBeCloseTo(0.15 + 0.6, 4)
     })
 
     it("uses fallback pricing for unknown models", async () => {
@@ -602,8 +600,18 @@ describe("CostLedger — Battle Tests", () => {
 
   describe("summary aggregation", () => {
     it("byModel groups calls, cost, and tokens correctly", async () => {
-      await ledger.record({ model: "gpt-4o-mini", inputTokens: 1000, outputTokens: 500, savings: {} })
-      await ledger.record({ model: "gpt-4o-mini", inputTokens: 2000, outputTokens: 1000, savings: {} })
+      await ledger.record({
+        model: "gpt-4o-mini",
+        inputTokens: 1000,
+        outputTokens: 500,
+        savings: {},
+      })
+      await ledger.record({
+        model: "gpt-4o-mini",
+        inputTokens: 2000,
+        outputTokens: 1000,
+        savings: {},
+      })
       await ledger.record({ model: "gpt-4o", inputTokens: 3000, outputTokens: 1500, savings: {} })
 
       const summary = ledger.getSummary()
@@ -613,8 +621,20 @@ describe("CostLedger — Battle Tests", () => {
     })
 
     it("byFeature groups calls under tag or _untagged", async () => {
-      await ledger.record({ model: "gpt-4o-mini", inputTokens: 100, outputTokens: 50, savings: {}, feature: "chat" })
-      await ledger.record({ model: "gpt-4o-mini", inputTokens: 100, outputTokens: 50, savings: {}, feature: "chat" })
+      await ledger.record({
+        model: "gpt-4o-mini",
+        inputTokens: 100,
+        outputTokens: 50,
+        savings: {},
+        feature: "chat",
+      })
+      await ledger.record({
+        model: "gpt-4o-mini",
+        inputTokens: 100,
+        outputTokens: 50,
+        savings: {},
+        feature: "chat",
+      })
       await ledger.record({ model: "gpt-4o-mini", inputTokens: 100, outputTokens: 50, savings: {} }) // no feature
 
       const summary = ledger.getSummary()
@@ -623,8 +643,16 @@ describe("CostLedger — Battle Tests", () => {
     })
 
     it("cacheHitRate is accurate", async () => {
-      await ledger.recordCacheHit({ model: "gpt-4o-mini", savedInputTokens: 100, savedOutputTokens: 50 })
-      await ledger.recordCacheHit({ model: "gpt-4o-mini", savedInputTokens: 100, savedOutputTokens: 50 })
+      await ledger.recordCacheHit({
+        model: "gpt-4o-mini",
+        savedInputTokens: 100,
+        savedOutputTokens: 50,
+      })
+      await ledger.recordCacheHit({
+        model: "gpt-4o-mini",
+        savedInputTokens: 100,
+        savedOutputTokens: 50,
+      })
       await ledger.record({ model: "gpt-4o-mini", inputTokens: 100, outputTokens: 50, savings: {} })
 
       const summary = ledger.getSummary()
@@ -651,7 +679,13 @@ describe("CostLedger — Battle Tests", () => {
 
   describe("export correctness", () => {
     it("exportJSON includes all entries and valid summary", async () => {
-      await ledger.record({ model: "gpt-4o-mini", inputTokens: 100, outputTokens: 50, savings: { cache: 0.001 }, feature: "test" })
+      await ledger.record({
+        model: "gpt-4o-mini",
+        inputTokens: 100,
+        outputTokens: 50,
+        savings: { cache: 0.001 },
+        feature: "test",
+      })
       await ledger.record({ model: "gpt-4o", inputTokens: 200, outputTokens: 100, savings: {} })
 
       const json = ledger.exportJSON()
@@ -725,7 +759,14 @@ describe("Middleware Budget Integration — Battle Tests", () => {
     it("breaker trips before user budget is checked", async () => {
       const onBlocked = vi.fn()
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         breaker: {
           limits: { perSession: 0 }, // zero budget = always blocks
           action: "stop",
@@ -734,15 +775,15 @@ describe("Middleware Budget Integration — Battle Tests", () => {
         userBudget: {
           getUserId: () => "u1",
           budgets: {
-            users: { "u1": { daily: 100, monthly: 1000 } }, // generous budget
+            users: { u1: { daily: 100, monthly: 1000 } }, // generous budget
           },
         },
         onBlocked,
       })
 
-      await expect(
-        mw.transformParams({ params: makeParams("Hello") })
-      ).rejects.toThrow(TokenShieldBlockedError)
+      await expect(mw.transformParams({ params: makeParams("Hello") })).rejects.toThrow(
+        TokenShieldBlockedError,
+      )
       expect(onBlocked).toHaveBeenCalled()
 
       // User budget should NOT have any inflight (breaker blocked first)
@@ -755,7 +796,14 @@ describe("Middleware Budget Integration — Battle Tests", () => {
       const onUsage = vi.fn()
       const onWarning = vi.fn()
       const mw = tokenShieldMiddleware({
-        modules: { guard: true, cache: true, context: false, router: false, prefix: false, ledger: true },
+        modules: {
+          guard: true,
+          cache: true,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: true,
+        },
         guard: { debounceMs: 0, maxRequestsPerMinute: 999, maxCostPerHour: 999 },
         cache: { maxEntries: 100, ttlMs: 60_000, similarityThreshold: 1.0 },
         userBudget: {
@@ -811,10 +859,24 @@ describe("Middleware Budget Integration — Battle Tests", () => {
       const events2: string[] = []
 
       const mw1 = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: true },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: true,
+        },
       })
       const mw2 = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: true },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: true,
+        },
       })
 
       mw1.events.on("ledger:entry", () => events1.push("mw1"))
@@ -823,7 +885,10 @@ describe("Middleware Budget Integration — Battle Tests", () => {
       // Generate through mw1 only
       const params = makeParams("Hello")
       const t1 = await mw1.transformParams({ params })
-      await mw1.wrapGenerate({ doGenerate: mockDoGenerate(), params: t1 as Record<string, unknown> })
+      await mw1.wrapGenerate({
+        doGenerate: mockDoGenerate(),
+        params: t1 as Record<string, unknown>,
+      })
 
       expect(events1).toHaveLength(1)
       expect(events2).toHaveLength(0) // mw2 should NOT receive mw1's events
@@ -833,7 +898,14 @@ describe("Middleware Budget Integration — Battle Tests", () => {
   describe("budget enforcement across streaming", () => {
     it("records budget spend after stream drains completely", async () => {
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: true },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: true,
+        },
         userBudget: {
           getUserId: () => "stream-budget-user",
           budgets: {
@@ -853,7 +925,9 @@ describe("Middleware Budget Integration — Battle Tests", () => {
 
       // Drain the stream
       const reader = (result.stream as ReadableStream).getReader()
-      while (!(await reader.read()).done) { /* drain */ }
+      while (!(await reader.read()).done) {
+        /* drain */
+      }
 
       // After drain: inflight released, spend recorded
       const status = mw.userBudgetManager!.getStatus("stream-budget-user")
@@ -863,7 +937,14 @@ describe("Middleware Budget Integration — Battle Tests", () => {
 
     it("releases inflight when stream is cancelled mid-way", async () => {
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: true },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: true,
+        },
         userBudget: {
           getUserId: () => "cancel-user",
           budgets: {
@@ -880,7 +961,9 @@ describe("Middleware Budget Integration — Battle Tests", () => {
         start(controller) {
           controller.enqueue({ type: "text-delta", textDelta: "Once" })
         },
-        pull() { return new Promise(() => {}) }, // never resolves
+        pull() {
+          return new Promise(() => {})
+        }, // never resolves
       })
       const doStream = vi.fn(async () => ({ stream: originalStream }))
       const result = await mw.wrapStream({ doStream, params: t as Record<string, unknown> })
@@ -899,7 +982,14 @@ describe("Middleware Budget Integration — Battle Tests", () => {
     it("reports correct cost and savings across multiple requests", async () => {
       const usages: { cost: number; saved: number; model: string }[] = []
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: true, context: false, router: false, prefix: false, ledger: true },
+        modules: {
+          guard: false,
+          cache: true,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: true,
+        },
         cache: { maxEntries: 100, ttlMs: 60_000, similarityThreshold: 1.0 },
         onUsage: (u) => usages.push({ cost: u.cost, saved: u.saved, model: u.model }),
       })
@@ -915,10 +1005,10 @@ describe("Middleware Budget Integration — Battle Tests", () => {
       await mw.wrapGenerate({ doGenerate: mockDoGenerate(), params: t2 as Record<string, unknown> })
 
       expect(usages).toHaveLength(2)
-      expect(usages[0].cost).toBeGreaterThan(0)  // real API call
-      expect(usages[0].saved).toBe(0)             // no savings on first call
-      expect(usages[1].cost).toBe(0)              // cache hit
-      expect(usages[1].saved).toBeGreaterThan(0)  // savings from cache
+      expect(usages[0].cost).toBeGreaterThan(0) // real API call
+      expect(usages[0].saved).toBe(0) // no savings on first call
+      expect(usages[1].cost).toBe(0) // cache hit
+      expect(usages[1].saved).toBeGreaterThan(0) // savings from cache
     })
   })
 
@@ -926,7 +1016,14 @@ describe("Middleware Budget Integration — Battle Tests", () => {
     it("does not reserve inflight or record spend in dry-run", async () => {
       const dryRunActions: { module: string; description: string }[] = []
       const mw = tokenShieldMiddleware({
-        modules: { guard: true, cache: true, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: true,
+          cache: true,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         guard: { debounceMs: 0, maxRequestsPerMinute: 999, maxCostPerHour: 999 },
         dryRun: true,
         onDryRun: (action) => dryRunActions.push(action),
@@ -950,7 +1047,14 @@ describe("Middleware Budget Integration — Battle Tests", () => {
   describe("error recovery and inflight cleanup", () => {
     it("guard block releases user budget inflight", async () => {
       const mw = tokenShieldMiddleware({
-        modules: { guard: true, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: true,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         guard: { debounceMs: 0, maxRequestsPerMinute: 999, maxCostPerHour: 999 },
         userBudget: {
           getUserId: () => "guard-blocked-user",
@@ -961,9 +1065,9 @@ describe("Middleware Budget Integration — Battle Tests", () => {
       })
 
       // Single character "x" is below default minInputLength=2, guard will block
-      await expect(
-        mw.transformParams({ params: makeParams("x") })
-      ).rejects.toThrow(TokenShieldBlockedError)
+      await expect(mw.transformParams({ params: makeParams("x") })).rejects.toThrow(
+        TokenShieldBlockedError,
+      )
 
       // Budget inflight should have been released when guard blocked
       expect(mw.userBudgetManager!.getStatus("guard-blocked-user").inflight).toBe(0)
@@ -971,7 +1075,14 @@ describe("Middleware Budget Integration — Battle Tests", () => {
 
     it("API failure releases both breaker and budget inflight", async () => {
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         breaker: {
           limits: { perSession: 100 },
           action: "stop",
@@ -987,10 +1098,12 @@ describe("Middleware Budget Integration — Battle Tests", () => {
 
       const params = makeParams("Hello")
       const t = await mw.transformParams({ params })
-      const failGenerate = vi.fn(async () => { throw new Error("500 Internal Server Error") })
+      const failGenerate = vi.fn(async () => {
+        throw new Error("500 Internal Server Error")
+      })
 
       await expect(
-        mw.wrapGenerate({ doGenerate: failGenerate, params: t as Record<string, unknown> })
+        mw.wrapGenerate({ doGenerate: failGenerate, params: t as Record<string, unknown> }),
       ).rejects.toThrow("500 Internal Server Error")
 
       // Both budget and breaker should be clean
@@ -1001,7 +1114,14 @@ describe("Middleware Budget Integration — Battle Tests", () => {
   describe("tier routing through middleware", () => {
     it("standard tier user is routed to cheaper model", async () => {
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: true },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: true,
+        },
         userBudget: {
           getUserId: () => "standard-user",
           budgets: {
@@ -1016,13 +1136,20 @@ describe("Middleware Budget Integration — Battle Tests", () => {
         prompt: makePrompt([{ role: "user", content: "Hello" }]),
       }
 
-      const transformed = await mw.transformParams({ params }) as Record<string, unknown>
+      const transformed = (await mw.transformParams({ params })) as Record<string, unknown>
       expect(transformed.modelId).toBe("gpt-4o-mini") // downgraded by tier
     })
 
     it("premium tier user keeps expensive model", async () => {
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: true },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: true,
+        },
         userBudget: {
           getUserId: () => "premium-user",
           budgets: {
@@ -1037,7 +1164,7 @@ describe("Middleware Budget Integration — Battle Tests", () => {
         prompt: makePrompt([{ role: "user", content: "Hello" }]),
       }
 
-      const transformed = await mw.transformParams({ params }) as Record<string, unknown>
+      const transformed = (await mw.transformParams({ params })) as Record<string, unknown>
       expect(transformed.modelId).toBe("gpt-4o") // no downgrade
     })
   })
@@ -1046,7 +1173,14 @@ describe("Middleware Budget Integration — Battle Tests", () => {
     it("ledger entry matches onUsage callback data", async () => {
       const onUsage = vi.fn()
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: true },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: true,
+        },
         onUsage,
       })
 
@@ -1064,7 +1198,14 @@ describe("Middleware Budget Integration — Battle Tests", () => {
 
     it("ledger tracks feature tag from config", async () => {
       const mw = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: true },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: true,
+        },
         ledger: { feature: "chatbot-v2" },
       })
 

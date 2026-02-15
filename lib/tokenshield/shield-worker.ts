@@ -14,7 +14,17 @@ import { NeuroElasticEngine, type NeuroElasticConfig, type FindResult } from "./
 export type WorkerCommand =
   | { type: "INIT"; id: string; payload: NeuroElasticConfig }
   | { type: "FIND"; id: string; payload: { prompt: string; model?: string } }
-  | { type: "LEARN"; id: string; payload: { prompt: string; response: string; model: string; inputTokens: number; outputTokens: number } }
+  | {
+      type: "LEARN"
+      id: string
+      payload: {
+        prompt: string
+        response: string
+        model: string
+        inputTokens: number
+        outputTokens: number
+      }
+    }
   | { type: "CLEAR"; id: string }
   | { type: "STATS"; id: string }
 
@@ -23,7 +33,11 @@ export type WorkerResponse =
   | { type: "FIND_RESULT"; id: string; payload: FindResult | null }
   | { type: "LEARN_DONE"; id: string }
   | { type: "CLEAR_DONE"; id: string }
-  | { type: "STATS_RESULT"; id: string; payload: { entries: number; totalHits: number; avgScore: number } }
+  | {
+      type: "STATS_RESULT"
+      id: string
+      payload: { entries: number; totalHits: number; avgScore: number }
+    }
   | { type: "ERROR"; id: string; payload: string }
 
 // --- Unique ID generator ---
@@ -47,7 +61,10 @@ function nextId(): string {
 export class ShieldWorker {
   private engine: NeuroElasticEngine | null = null
   private worker: Worker | null = null
-  private pending = new Map<string, { resolve: (value: unknown) => void; reject: (reason: unknown) => void }>()
+  private pending = new Map<
+    string,
+    { resolve: (value: unknown) => void; reject: (reason: unknown) => void }
+  >()
   private ready = false
   private mode: "worker" | "inline" = "inline"
 
@@ -111,12 +128,22 @@ export class ShieldWorker {
   }
 
   /** Learn a new prompt→response pair. */
-  async learn(prompt: string, response: string, model: string, inputTokens: number, outputTokens: number): Promise<void> {
+  async learn(
+    prompt: string,
+    response: string,
+    model: string,
+    inputTokens: number,
+    outputTokens: number,
+  ): Promise<void> {
     if (!this.ready) return
     if (this.mode === "inline") {
       return this.engine!.learn(prompt, response, model, inputTokens, outputTokens)
     }
-    return this.post<void>({ type: "LEARN", id: nextId(), payload: { prompt, response, model, inputTokens, outputTokens } })
+    return this.post<void>({
+      type: "LEARN",
+      id: nextId(),
+      payload: { prompt, response, model, inputTokens, outputTokens },
+    })
   }
 
   /** Clear all memories. */
@@ -134,7 +161,10 @@ export class ShieldWorker {
     if (this.mode === "inline") {
       return this.engine!.stats()
     }
-    return this.post<{ entries: number; totalHits: number; avgScore: number }>({ type: "STATS", id: nextId() })
+    return this.post<{ entries: number; totalHits: number; avgScore: number }>({
+      type: "STATS",
+      id: nextId(),
+    })
   }
 
   /** Check if the engine is ready. */
@@ -173,8 +203,14 @@ export class ShieldWorker {
         }
       }, 10_000)
       this.pending.set(id, {
-        resolve: (value: unknown) => { clearTimeout(timer); resolve(value as T) },
-        reject: (reason: unknown) => { clearTimeout(timer); reject(reason) },
+        resolve: (value: unknown) => {
+          clearTimeout(timer)
+          resolve(value as T)
+        },
+        reject: (reason: unknown) => {
+          clearTimeout(timer)
+          reject(reason)
+        },
       })
       this.worker!.postMessage(command)
     })

@@ -8,12 +8,7 @@
  * npm dependency: gpt-tokenizer (works in browser, no WASM needed)
  */
 
-import {
-  encode,
-  decode,
-  countTokens,
-  isWithinTokenLimit,
-} from "gpt-tokenizer"
+import { encode, decode, countTokens, isWithinTokenLimit } from "gpt-tokenizer"
 
 /**
  * Per-message overhead for chat completions.
@@ -31,6 +26,10 @@ export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool"
   content: string
   name?: string
+  /** Mark this message as stable prefix content. Pinned messages are placed in the
+   *  non-volatile prefix section by the prefix optimizer, enabling provider-level
+   *  prompt caching (e.g., Anthropic's cache_control). */
+  pinned?: boolean
 }
 
 export interface TokenCount {
@@ -107,10 +106,7 @@ export function countChatTokens(messages: ChatMessage[]): ChatTokenCount {
     return {
       role: msg.role,
       tokens: contentTokens,
-      content:
-        msg.content.length > 80
-          ? msg.content.slice(0, 80) + "..."
-          : msg.content,
+      content: msg.content.length > 80 ? msg.content.slice(0, 80) + "..." : msg.content,
     }
   })
 
@@ -144,7 +140,7 @@ export function countChatTokens(messages: ChatMessage[]): ChatTokenCount {
  */
 export function fitsInBudget(
   text: string,
-  maxTokens: number
+  maxTokens: number,
 ): { fits: boolean; tokenCount: number | false } {
   const result = isWithinTokenLimit(text, maxTokens)
   return {
@@ -209,7 +205,7 @@ export function decodeTokens(tokens: number[]): string {
  */
 export function truncateToTokenBudget(
   text: string,
-  maxTokens: number
+  maxTokens: number,
 ): { text: string; originalTokens: number; finalTokens: number; truncated: boolean } {
   const tokens = encode(text)
   if (tokens.length <= maxTokens) {
@@ -248,26 +244,48 @@ export function getTokenizerAccuracy(modelId: string): {
 } {
   const lower = modelId.toLowerCase()
   if (lower.includes("claude") || lower.includes("anthropic")) {
-    return { accuracy: "approximate", provider: "anthropic", marginOfError: 0.15, note: "Anthropic uses a different BPE vocabulary. Counts may differ by ~15%. Use usage.input_tokens from the API response for billing accuracy." }
+    return {
+      accuracy: "approximate",
+      provider: "anthropic",
+      marginOfError: 0.15,
+      note: "Anthropic uses a different BPE vocabulary. Counts may differ by ~15%. Use usage.input_tokens from the API response for billing accuracy.",
+    }
   }
   if (lower.includes("gemini") || lower.includes("google")) {
-    return { accuracy: "approximate", provider: "google", marginOfError: 0.20, note: "Google uses SentencePiece tokenization. Counts may differ by ~20%. Use usageMetadata from the API response for billing accuracy." }
+    return {
+      accuracy: "approximate",
+      provider: "google",
+      marginOfError: 0.2,
+      note: "Google uses SentencePiece tokenization. Counts may differ by ~20%. Use usageMetadata from the API response for billing accuracy.",
+    }
   }
   if (lower.includes("llama") || lower.includes("mistral") || lower.includes("mixtral")) {
-    return { accuracy: "approximate", provider: "open-source", marginOfError: 0.15, note: "Open-source models use various tokenizers. Counts may differ by ~15%." }
+    return {
+      accuracy: "approximate",
+      provider: "open-source",
+      marginOfError: 0.15,
+      note: "Open-source models use various tokenizers. Counts may differ by ~15%.",
+    }
   }
-  return { accuracy: "exact", provider: "openai", marginOfError: 0, note: "gpt-tokenizer uses the same BPE encoding as OpenAI. Counts are exact." }
+  return {
+    accuracy: "exact",
+    provider: "openai",
+    marginOfError: 0,
+    note: "gpt-tokenizer uses the same BPE encoding as OpenAI. Counts are exact.",
+  }
 }
 
 /**
  * Count tokens for a specific model using BPE encoding.
  *
- * Uses gpt-tokenizer (BPE) for all providers. This is 100% accurate for
- * OpenAI models and approximately 85-90% accurate for Anthropic/Google.
+ * **Note:** All providers currently use the same cl100k_base tokenizer.
+ * The `modelId` parameter is accepted for forward-compatibility with
+ * provider-specific tokenizers but does not currently affect the count.
  * For billing-accurate counts on non-OpenAI models, use the `usage`
- * object from the API response instead.
+ * object from the API response. See {@link getTokenizerAccuracy} for
+ * per-provider accuracy information.
  *
- * @param modelId - The model identifier (e.g., "gpt-4o", "claude-sonnet-4.5")
+ * @param _modelId - The model identifier (reserved for future per-model tokenizers)
  * @param text - The input text to tokenize
  * @returns The token count for the given text
  * @example
@@ -276,7 +294,7 @@ export function getTokenizerAccuracy(modelId: string): {
  * // tokens === 4
  * ```
  */
-export function countModelTokens(modelId: string, text: string): number {
+export function countModelTokens(_modelId: string, text: string): number {
   return countTokens(text)
 }
 

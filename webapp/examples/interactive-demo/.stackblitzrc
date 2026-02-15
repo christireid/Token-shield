@@ -1,6 +1,0 @@
-{
-  "startCommand": "npm run dev",
-  "env": {
-    "OPENAI_API_KEY": "sk-placeholder-key-for-demo"
-  }
-}

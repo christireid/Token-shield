@@ -1,19 +1,20 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import {
   Pipeline,
   createPipeline,
   createBreakerStage,
+  createBudgetStage,
   createGuardStage,
   createCacheStage,
   createContextStage,
   createRouterStage,
   createPrefixStage,
   type PipelineContext,
-  type PipelineStage,
 } from "./pipeline"
 import { CostCircuitBreaker } from "./circuit-breaker"
 import { RequestGuard } from "./request-guard"
 import { ResponseCache } from "./response-cache"
+import { UserBudgetManager } from "./user-budget-manager"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -67,12 +68,51 @@ describe("Pipeline - addStage / removeStage / getStageNames", () => {
 // ---------------------------------------------------------------------------
 
 describe("Pipeline - execute", () => {
+  it("handles empty pipeline gracefully", async () => {
+    const pipeline = new Pipeline()
+    const ctx = makeCtx()
+    const result = await pipeline.execute(ctx)
+    expect(result.aborted).toBe(false)
+    expect(result.lastUserText).toBe("Hello")
+  })
+
+  it("supports async stages (Promise return)", async () => {
+    const pipeline = createPipeline({
+      name: "async",
+      async execute(ctx) {
+        await new Promise((r) => setTimeout(r, 1))
+        ctx.meta.asyncDone = true
+        return ctx
+      },
+    })
+    const result = await pipeline.execute(makeCtx())
+    expect(result.meta.asyncDone).toBe(true)
+  })
+
   it("runs stages in order", async () => {
     const order: string[] = []
     const pipeline = createPipeline(
-      { name: "first", execute: (ctx) => { order.push("first"); return ctx } },
-      { name: "second", execute: (ctx) => { order.push("second"); return ctx } },
-      { name: "third", execute: (ctx) => { order.push("third"); return ctx } },
+      {
+        name: "first",
+        execute: (ctx) => {
+          order.push("first")
+          return ctx
+        },
+      },
+      {
+        name: "second",
+        execute: (ctx) => {
+          order.push("second")
+          return ctx
+        },
+      },
+      {
+        name: "third",
+        execute: (ctx) => {
+          order.push("third")
+          return ctx
+        },
+      },
     )
     await pipeline.execute(makeCtx())
     expect(order).toEqual(["first", "second", "third"])
@@ -90,7 +130,13 @@ describe("Pipeline - execute", () => {
           return ctx
         },
       },
-      { name: "skipped", execute: (ctx) => { order.push("skipped"); return ctx } },
+      {
+        name: "skipped",
+        execute: (ctx) => {
+          order.push("skipped")
+          return ctx
+        },
+      },
     )
     const result = await pipeline.execute(makeCtx())
     expect(order).toEqual(["aborter"])
@@ -101,9 +147,7 @@ describe("Pipeline - execute", () => {
   it("calls beforeStage and afterStage hooks", async () => {
     const beforeStage = vi.fn()
     const afterStage = vi.fn()
-    const pipeline = createPipeline(
-      { name: "s1", execute: (ctx) => ctx },
-    )
+    const pipeline = createPipeline({ name: "s1", execute: (ctx) => ctx })
     pipeline.addHook({ beforeStage, afterStage })
     await pipeline.execute(makeCtx())
     expect(beforeStage).toHaveBeenCalledWith("s1", expect.any(Object))
@@ -129,14 +173,67 @@ describe("Pipeline - execute", () => {
   })
 
   it("swallows hook errors without aborting the pipeline", async () => {
-    const pipeline = createPipeline(
-      { name: "s1", execute: (ctx) => ctx },
-    )
+    const pipeline = createPipeline({ name: "s1", execute: (ctx) => ctx })
     pipeline.addHook({
-      beforeStage: () => { throw new Error("hook error") },
+      beforeStage: () => {
+        throw new Error("hook error")
+      },
     })
     const result = await pipeline.execute(makeCtx())
     expect(result.aborted).toBe(false)
+  })
+
+  it("swallows afterStage hook errors", async () => {
+    const pipeline = createPipeline(
+      { name: "s1", execute: (ctx) => ctx },
+      {
+        name: "s2",
+        execute: (ctx) => {
+          ctx.meta.s2Ran = true
+          return ctx
+        },
+      },
+    )
+    pipeline.addHook({
+      afterStage: () => {
+        throw new Error("after hook error")
+      },
+    })
+    const result = await pipeline.execute(makeCtx())
+    expect(result.aborted).toBe(false)
+    expect(result.meta.s2Ran).toBe(true)
+  })
+
+  it("swallows onError hook errors", async () => {
+    const pipeline = createPipeline({
+      name: "bad",
+      execute: () => {
+        throw new Error("stage error")
+      },
+    })
+    pipeline.addHook({
+      onError: () => {
+        throw new Error("onError hook itself threw")
+      },
+    })
+    const result = await pipeline.execute(makeCtx())
+    expect(result.aborted).toBe(true)
+    expect(result.abortReason).toContain("stage error")
+  })
+
+  it("calls multiple hooks in order", async () => {
+    const order: string[] = []
+    const pipeline = createPipeline({ name: "s", execute: (ctx) => ctx })
+    pipeline.addHook({ beforeStage: () => order.push("hook1-before") })
+    pipeline.addHook({ beforeStage: () => order.push("hook2-before") })
+    await pipeline.execute(makeCtx())
+    expect(order).toEqual(["hook1-before", "hook2-before"])
+  })
+
+  it("addHook is chainable", () => {
+    const pipeline = new Pipeline()
+    const result = pipeline.addHook({ beforeStage: vi.fn() })
+    expect(result).toBe(pipeline)
   })
 })
 
@@ -308,9 +405,7 @@ describe("createRouterStage", () => {
   })
 
   it("skips routing if tierRouted is already set", () => {
-    const tiers = [
-      { modelId: "gpt-4o-mini", maxComplexity: 40 },
-    ]
+    const tiers = [{ modelId: "gpt-4o-mini", maxComplexity: 40 }]
     const stage = createRouterStage(tiers)
     const ctx = makeCtx({ modelId: "gpt-4o", meta: { tierRouted: true } })
     const result = stage.execute(ctx) as PipelineContext
@@ -370,5 +465,100 @@ describe("createPrefixStage", () => {
     const result = stage.execute(ctx) as PipelineContext
     // Should pass through without changes
     expect(result.meta.prefixSaved).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Pre-built stages: createBudgetStage
+// ---------------------------------------------------------------------------
+
+describe("createBudgetStage", () => {
+  it("allows requests within budget", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+    })
+    const stage = createBudgetStage(manager, () => "user-123", { reserveForOutput: 500 })
+    const ctx = makeCtx({ lastUserText: "Hello, help me with something" })
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.aborted).toBe(false)
+    expect(result.meta.userId).toBe("user-123")
+  })
+
+  it("aborts when getUserId throws", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+    })
+    const stage = createBudgetStage(
+      manager,
+      () => {
+        throw new Error("no auth")
+      },
+      { reserveForOutput: 500 },
+    )
+    const ctx = makeCtx()
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.aborted).toBe(true)
+    expect(result.abortReason).toBe("Failed to resolve user ID")
+  })
+
+  it("aborts when getUserId returns empty string", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+    })
+    const stage = createBudgetStage(manager, () => "", { reserveForOutput: 500 })
+    const ctx = makeCtx()
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.aborted).toBe(true)
+    expect(result.abortReason).toContain("non-empty string")
+  })
+
+  it("stores userId and userBudgetInflight in meta", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+    })
+    const stage = createBudgetStage(manager, () => "user-456", { reserveForOutput: 500 })
+    const ctx = makeCtx({ lastUserText: "Estimate my cost" })
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.meta.userId).toBe("user-456")
+    expect(result.meta.userBudgetInflight).toBeDefined()
+  })
+
+  it("applies tier model routing when configured", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+      tierModels: {
+        standard: "gpt-4o-mini",
+        premium: "gpt-4o",
+      },
+    })
+    const stage = createBudgetStage(manager, () => "user-789", { reserveForOutput: 500 })
+    const ctx = makeCtx({ modelId: "gpt-4o" })
+    const result = stage.execute(ctx) as PipelineContext
+    // Default tier is "standard", which maps to gpt-4o-mini
+    if (result.meta.tierRouted) {
+      expect(result.modelId).toBe("gpt-4o-mini")
+      expect(result.meta.originalModel).toBe("gpt-4o")
+    }
+  })
+
+  it("skips when already aborted", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+    })
+    const stage = createBudgetStage(manager, () => "user-123", { reserveForOutput: 500 })
+    const ctx = makeCtx({ aborted: true, abortReason: "earlier" })
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.abortReason).toBe("earlier")
+  })
+
+  it("handles missing lastUserText gracefully (0 estimated input)", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+    })
+    const stage = createBudgetStage(manager, () => "user-123", { reserveForOutput: 500 })
+    const ctx = makeCtx({ lastUserText: "" })
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.aborted).toBe(false)
+    expect(result.meta.userId).toBe("user-123")
   })
 })

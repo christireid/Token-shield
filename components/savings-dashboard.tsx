@@ -78,7 +78,10 @@ export function SavingsDashboard({ results }: { results: TestResult[] }) {
                   </span>
                   <svg
                     className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`}
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                   </svg>
@@ -94,7 +97,9 @@ export function SavingsDashboard({ results }: { results: TestResult[] }) {
                       <p className="mt-0.5 font-mono text-sm text-foreground">
                         {r.without.tokens.toLocaleString()} tok
                       </p>
-                      <p className="font-mono text-xs text-muted-foreground">{formatCost(r.without.cost)}</p>
+                      <p className="font-mono text-xs text-muted-foreground">
+                        {formatCost(r.without.cost)}
+                      </p>
                     </div>
                     <div className="rounded-md bg-secondary p-2.5">
                       <p className="text-xs text-muted-foreground">With Shield</p>
@@ -108,7 +113,9 @@ export function SavingsDashboard({ results }: { results: TestResult[] }) {
                       <p className="mt-0.5 font-mono text-sm font-semibold text-primary">
                         {r.saved.tokens.toLocaleString()} tok
                       </p>
-                      <p className="font-mono text-xs font-semibold text-primary">{formatCost(r.saved.cost)}</p>
+                      <p className="font-mono text-xs font-semibold text-primary">
+                        {formatCost(r.saved.cost)}
+                      </p>
                     </div>
                   </div>
                   {r.raw && (

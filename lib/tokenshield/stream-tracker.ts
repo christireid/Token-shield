@@ -91,6 +91,10 @@ export class StreamTokenTracker {
       updateInterval: 5,
       ...config,
     }
+    // Guard against 0 or negative interval (would cause modulo to never match)
+    if (this.config.updateInterval != null && this.config.updateInterval < 1) {
+      this.config.updateInterval = 1
+    }
     this.startTime = Date.now()
     this.lastChunkTime = this.startTime
   }
@@ -173,15 +177,18 @@ export class StreamTokenTracker {
     // Do a final recount if we haven't recently — but skip if stream is
     // already finished/aborted, since finish() may have set provider-accurate
     // counts that we don't want to overwrite with a buffer recount.
-    if (!this.isCompleted && !this.isAborted && this.chunkCount % (this.config.updateInterval ?? 5) !== 0) {
+    if (
+      !this.isCompleted &&
+      !this.isAborted &&
+      this.chunkCount % (this.config.updateInterval ?? 5) !== 0
+    ) {
       this.recountOutput()
     }
 
     const inputTokens = this.config.inputTokens ?? 0
     const totalTokens = inputTokens + this.outputTokenCount
     const durationMs = Math.max(1, this.lastChunkTime - this.startTime)
-    const tokensPerSecond =
-      durationMs > 0 ? (this.outputTokenCount / durationMs) * 1000 : 0
+    const tokensPerSecond = durationMs > 0 ? (this.outputTokenCount / durationMs) * 1000 : 0
 
     let estimatedCost = 0
     const pricing = MODEL_PRICING[this.config.modelId]
@@ -189,7 +196,7 @@ export class StreamTokenTracker {
       estimatedCost = estimateCost(
         this.config.modelId,
         inputTokens,
-        this.outputTokenCount
+        this.outputTokenCount,
       ).totalCost
     }
 

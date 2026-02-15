@@ -1,3 +1,5 @@
+import { TokenShieldConfigError } from "./errors"
+
 /**
  * TokenShield - Cost Estimator
  *
@@ -185,30 +187,33 @@ export interface CostEstimate {
 export function estimateCost(
   modelId: string,
   inputTokens: number,
-  outputTokens: number
+  outputTokens: number,
 ): CostEstimate {
   const model = MODEL_PRICING[modelId]
   if (!model) {
-    throw new Error(
-      `Unknown model: ${modelId}. Available: ${Object.keys(MODEL_PRICING).join(", ")}`
+    throw new TokenShieldConfigError(
+      `Unknown model: ${modelId}. Available: ${Object.keys(MODEL_PRICING).join(", ")}`,
     )
   }
 
-  const inputCost = (inputTokens / 1_000_000) * model.inputPerMillion
-  const outputCost = (outputTokens / 1_000_000) * model.outputPerMillion
+  // Clamp negative token counts to zero to prevent negative costs
+  const safeInput = Math.max(0, inputTokens)
+  const safeOutput = Math.max(0, outputTokens)
+
+  const inputCost = (safeInput / 1_000_000) * model.inputPerMillion
+  const outputCost = (safeOutput / 1_000_000) * model.outputPerMillion
 
   const result: CostEstimate = {
     model,
-    inputTokens,
-    outputTokens,
+    inputTokens: safeInput,
+    outputTokens: safeOutput,
     inputCost,
     outputCost,
     totalCost: inputCost + outputCost,
   }
 
   if (model.cachedInputPerMillion !== undefined) {
-    result.cachedInputCost =
-      (inputTokens / 1_000_000) * model.cachedInputPerMillion
+    result.cachedInputCost = (safeInput / 1_000_000) * model.cachedInputPerMillion
     result.totalWithCache = result.cachedInputCost + outputCost
   }
 
@@ -231,10 +236,7 @@ export function estimateCost(
  * console.log(ranked[0].totalCost)  // its cost in USD
  * ```
  */
-export function compareCosts(
-  inputTokens: number,
-  outputTokens: number
-): CostEstimate[] {
+export function compareCosts(inputTokens: number, outputTokens: number): CostEstimate[] {
   return Object.keys(MODEL_PRICING)
     .map((modelId) => estimateCost(modelId, inputTokens, outputTokens))
     .sort((a, b) => a.totalCost - b.totalCost)
@@ -264,7 +266,7 @@ export function calculateSavings(
   modelId: string,
   originalInputTokens: number,
   reducedInputTokens: number,
-  outputTokens: number
+  outputTokens: number,
 ): {
   originalCost: CostEstimate
   reducedCost: CostEstimate
@@ -276,9 +278,7 @@ export function calculateSavings(
   const reducedCost = estimateCost(modelId, reducedInputTokens, outputTokens)
   const savedDollars = originalCost.totalCost - reducedCost.totalCost
   const savedPercent =
-    originalCost.totalCost > 0
-      ? (savedDollars / originalCost.totalCost) * 100
-      : 0
+    originalCost.totalCost > 0 ? (savedDollars / originalCost.totalCost) * 100 : 0
 
   return {
     originalCost,
@@ -309,7 +309,7 @@ export function calculateSavings(
 export function cheapestModelForBudget(
   inputTokens: number,
   outputTokens: number,
-  maxCostPerRequest: number
+  maxCostPerRequest: number,
 ): CostEstimate | null {
   const costs = compareCosts(inputTokens, outputTokens)
   return costs.find((c) => c.totalCost <= maxCostPerRequest) ?? null
@@ -339,7 +339,7 @@ export function projectMonthlyCost(
   modelId: string,
   avgInputTokens: number,
   avgOutputTokens: number,
-  requestsPerDay: number
+  requestsPerDay: number,
 ): {
   dailyCost: number
   monthlyCost: number

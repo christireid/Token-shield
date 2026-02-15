@@ -15,6 +15,7 @@
  */
 
 import { get, set, del, keys, createStore, type UseStore } from "./storage-adapter"
+import { TokenShieldCryptoError, ERROR_CODES } from "./errors"
 
 // -------------------------------------------------------
 // Types
@@ -64,7 +65,7 @@ async function deriveKeyFromPassphrase(passphrase: string): Promise<CryptoKey> {
     encoder.encode(passphrase),
     "PBKDF2",
     false,
-    ["deriveKey"]
+    ["deriveKey"],
   )
 
   return crypto.subtle.deriveKey(
@@ -72,7 +73,7 @@ async function deriveKeyFromPassphrase(passphrase: string): Promise<CryptoKey> {
     baseKey,
     { name: ALGORITHM, length: 256 },
     false,
-    ["encrypt", "decrypt"]
+    ["encrypt", "decrypt"],
   )
 }
 
@@ -87,7 +88,10 @@ async function getSessionKey(): Promise<CryptoKey> {
     return crypto.subtle.importKey("jwk", jwk, { name: ALGORITHM }, true, ["encrypt", "decrypt"])
   }
 
-  const key = await crypto.subtle.generateKey({ name: ALGORITHM, length: 256 }, true, ["encrypt", "decrypt"])
+  const key = await crypto.subtle.generateKey({ name: ALGORITHM, length: 256 }, true, [
+    "encrypt",
+    "decrypt",
+  ])
   const jwk = await crypto.subtle.exportKey("jwk", key)
   sessionStorage.setItem(SESSION_KEY_NAME, JSON.stringify(jwk))
   return key
@@ -103,7 +107,7 @@ async function encrypt(plaintext: string, key: CryptoKey): Promise<Uint8Array> {
   const ciphertext = await crypto.subtle.encrypt(
     { name: ALGORITHM, iv },
     key,
-    encoder.encode(plaintext)
+    encoder.encode(plaintext),
   )
   // Prepend IV to ciphertext for storage
   const result = new Uint8Array(IV_LENGTH + ciphertext.byteLength)
@@ -118,11 +122,7 @@ async function encrypt(plaintext: string, key: CryptoKey): Promise<Uint8Array> {
 async function decrypt(data: Uint8Array, key: CryptoKey): Promise<string> {
   const iv = data.slice(0, IV_LENGTH)
   const ciphertext = data.slice(IV_LENGTH)
-  const plaintext = await crypto.subtle.decrypt(
-    { name: ALGORITHM, iv },
-    key,
-    ciphertext
-  )
+  const plaintext = await crypto.subtle.decrypt({ name: ALGORITHM, iv }, key, ciphertext)
   return new TextDecoder().decode(plaintext)
 }
 
@@ -144,10 +144,24 @@ export class EncryptedStore {
       this.cryptoKey = config.encryption.key
     } else if (config.encryption.mode === "passphrase") {
       this.keyPromise = deriveKeyFromPassphrase(config.encryption.passphrase)
-      this.keyPromise.then((k) => { this.cryptoKey = k }).catch(() => {})
+      this.keyPromise
+        .then((k) => {
+          this.cryptoKey = k
+        })
+        .catch(() => {
+          // eslint-disable-next-line no-console
+          console.warn("[TokenShield] Failed to derive encryption key from passphrase")
+        })
     } else if (config.encryption.mode === "session") {
       this.keyPromise = getSessionKey()
-      this.keyPromise.then((k) => { this.cryptoKey = k }).catch(() => {})
+      this.keyPromise
+        .then((k) => {
+          this.cryptoKey = k
+        })
+        .catch(() => {
+          // eslint-disable-next-line no-console
+          console.warn("[TokenShield] Failed to generate session encryption key")
+        })
     }
   }
 
@@ -157,7 +171,10 @@ export class EncryptedStore {
       this.cryptoKey = await this.keyPromise
       return this.cryptoKey
     }
-    throw new Error("EncryptedStore: no encryption key available")
+    throw new TokenShieldCryptoError(
+      "EncryptedStore: no encryption key available",
+      ERROR_CODES.CRYPTO_KEY_DERIVATION_FAILED,
+    )
   }
 
   /**

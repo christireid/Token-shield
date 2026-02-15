@@ -39,7 +39,10 @@ export interface CreateTokenShieldOptions {
   config?: Partial<TokenShieldMiddlewareConfig>
 }
 
-const PRESET_CONFIGS: Record<Exclude<TokenShieldPreset, "custom">, Partial<TokenShieldMiddlewareConfig>> = {
+const PRESET_CONFIGS: Record<
+  Exclude<TokenShieldPreset, "custom">,
+  Partial<TokenShieldMiddlewareConfig>
+> = {
   chatApp: {
     modules: { guard: true, cache: true, context: true, router: false, prefix: true, ledger: true },
     guard: { debounceMs: 300, maxRequestsPerMinute: 30 },
@@ -47,12 +50,26 @@ const PRESET_CONFIGS: Record<Exclude<TokenShieldPreset, "custom">, Partial<Token
     context: { maxInputTokens: 4000, reserveForOutput: 1000 },
   },
   apiBackend: {
-    modules: { guard: true, cache: true, context: false, router: false, prefix: false, ledger: true },
+    modules: {
+      guard: true,
+      cache: true,
+      context: false,
+      router: false,
+      prefix: false,
+      ledger: true,
+    },
     guard: { debounceMs: 0, maxRequestsPerMinute: 120 },
-    cache: { maxEntries: 1000, ttlMs: 3600000, similarityThreshold: 0.90 },
+    cache: { maxEntries: 1000, ttlMs: 3600000, similarityThreshold: 0.9 },
   },
   development: {
-    modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: true },
+    modules: {
+      guard: false,
+      cache: false,
+      context: false,
+      router: false,
+      prefix: false,
+      ledger: true,
+    },
   },
 }
 
@@ -84,21 +101,31 @@ const PRESET_CONFIGS: Record<Exclude<TokenShieldPreset, "custom">, Partial<Token
  * ```
  */
 export function createTokenShield(options: CreateTokenShieldOptions = {}): TokenShieldMiddleware {
-  const { preset = "chatApp", monthlyBudget, dailyBudget, onBlocked, onUsage, dryRun, onDryRun, config: overrides } = options
+  const {
+    preset = "chatApp",
+    monthlyBudget,
+    dailyBudget,
+    onBlocked,
+    onUsage,
+    dryRun,
+    onDryRun,
+    config: overrides,
+  } = options
 
   // Start with preset defaults
   const presetConfig = preset !== "custom" ? { ...PRESET_CONFIGS[preset] } : {}
 
   // Build breaker config from budget parameters
-  const breaker = (monthlyBudget || dailyBudget)
-    ? {
-        limits: {
-          ...(monthlyBudget ? { perMonth: monthlyBudget } : {}),
-          ...(dailyBudget ? { perDay: dailyBudget } : {}),
-        },
-        action: "stop" as const,
-      }
-    : undefined
+  const breaker =
+    monthlyBudget || dailyBudget
+      ? {
+          limits: {
+            ...(monthlyBudget ? { perMonth: monthlyBudget } : {}),
+            ...(dailyBudget ? { perDay: dailyBudget } : {}),
+          },
+          action: "stop" as const,
+        }
+      : undefined
 
   // Merge everything together: preset → budget → callbacks → user overrides
   const finalConfig: TokenShieldMiddlewareConfig = {

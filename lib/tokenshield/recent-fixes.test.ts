@@ -11,7 +11,7 @@ import { CostLedger } from "./cost-ledger"
 import { ResponseCache } from "./response-cache"
 import { RequestGuard } from "./request-guard"
 import { optimizePrefix } from "./prefix-optimizer"
-import { createEventBus, shieldEvents } from "./event-bus"
+import { createEventBus, shieldEvents, subscribeToAnyEvent } from "./event-bus"
 import type { ChatMessage } from "./token-counter"
 
 // -------------------------------------------------------
@@ -120,9 +120,15 @@ describe("Fix 2: ResponseCache.peek() immutability", () => {
     const fuzzyCache = new ResponseCache({
       maxEntries: 100,
       ttlMs: 60000,
-      similarityThreshold: 0.70,
+      similarityThreshold: 0.7,
     })
-    await fuzzyCache.store("Explain what React is and how it works", "React is a library...", "gpt-4o-mini", 15, 25)
+    await fuzzyCache.store(
+      "Explain what React is and how it works",
+      "React is a library...",
+      "gpt-4o-mini",
+      15,
+      25,
+    )
 
     const statsBefore = fuzzyCache.stats()
 
@@ -249,10 +255,10 @@ describe("Fix 4: Tool result messages are volatile (not stable prefix)", () => {
 })
 
 // -------------------------------------------------------
-// Fix 5: RequestGuard.getStats() read-only snapshot
+// Fix 5: RequestGuard.getSnapshot() read-only snapshot
 // (Ensures dry-run mode doesn't mutate guard state)
 // -------------------------------------------------------
-describe("Fix 5: RequestGuard.getStats() is read-only", () => {
+describe("Fix 5: RequestGuard.getSnapshot() is read-only", () => {
   let guard: RequestGuard
 
   beforeEach(() => {
@@ -268,33 +274,33 @@ describe("Fix 5: RequestGuard.getStats() is read-only", () => {
     // Make a request to create some state
     guard.check("Hello world", undefined, "gpt-4o-mini")
 
-    const stats1 = guard.getStats()
-    const stats2 = guard.getStats()
+    const stats1 = guard.getSnapshot()
+    const stats2 = guard.getSnapshot()
 
-    // Calling getStats twice should return identical data
+    // Calling getSnapshot twice should return identical data
     expect(stats1.requestsLastMinute).toBe(stats2.requestsLastMinute)
     expect(stats1.lastRequestTime).toBe(stats2.lastRequestTime)
     expect(stats1.currentHourlySpend).toBe(stats2.currentHourlySpend)
   })
 
-  it("getStats does not affect subsequent check() calls", () => {
+  it("getSnapshot does not affect subsequent check() calls", () => {
     // Check a request
     const result1 = guard.check("Test prompt", undefined, "gpt-4o-mini")
     expect(result1.allowed).toBe(true)
 
-    // Call getStats many times (should be side-effect-free)
+    // Call getSnapshot many times (should be side-effect-free)
     for (let i = 0; i < 10; i++) {
-      guard.getStats()
+      guard.getSnapshot()
     }
 
-    // The next check should not be affected by getStats calls
+    // The next check should not be affected by getSnapshot calls
     // (wait past debounce window)
-    const stats = guard.getStats()
+    const stats = guard.getSnapshot()
     expect(stats.requestsLastMinute).toBe(1) // Only the one real check
   })
 
   it("returns correct structure", () => {
-    const stats = guard.getStats()
+    const stats = guard.getSnapshot()
     expect(typeof stats.lastRequestTime).toBe("number")
     expect(typeof stats.requestsLastMinute).toBe("number")
     expect(typeof stats.currentHourlySpend).toBe("number")
@@ -345,11 +351,13 @@ describe("Fix 6: Per-instance event bus isolation + global forwarding", () => {
     const globalReceived: unknown[] = []
 
     // Set up forwarding (mirrors what middleware.ts does)
-    instanceBus.on("ledger:entry", ((data: unknown) => {
+    subscribeToAnyEvent(instanceBus, "ledger:entry", (data) => {
       try {
-        (shieldEvents.emit as (type: string, data: unknown) => void)("ledger:entry", data)
-      } catch { /* non-fatal */ }
-    }) as never)
+        ;(shieldEvents.emit as (type: string, data: unknown) => void)("ledger:entry", data)
+      } catch {
+        /* non-fatal */
+      }
+    })
 
     shieldEvents.on("ledger:entry", (data) => globalReceived.push(data))
 

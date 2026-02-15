@@ -79,7 +79,8 @@ const TASK_PATTERNS: {
   },
   // Code generation
   {
-    pattern: /\b(write|create|implement|build|code|function|class|component)\b.*\b(code|function|class|program|script|component)\b/i,
+    pattern:
+      /\b(write|create|implement|build|code|function|class|component)\b.*\b(code|function|class|program|script|component)\b/i,
     type: "code-generation",
     avgTokens: 400,
     maxTokens: 1500,
@@ -157,7 +158,7 @@ export function predictOutputTokens(
     minMaxTokens?: number
     /** Hard maximum for max_tokens */
     maxMaxTokens?: number
-  } = {}
+  } = {},
 ): OutputPrediction {
   const safetyMargin = options.safetyMargin ?? 1.5
   const minMax = options.minMaxTokens ?? 50
@@ -174,10 +175,7 @@ export function predictOutputTokens(
         predicted = Math.round(inputTokens * 1.2)
       }
 
-      const suggested = Math.min(
-        maxMax,
-        Math.max(minMax, Math.round(predicted * safetyMargin))
-      )
+      const suggested = Math.min(maxMax, Math.max(minMax, Math.round(predicted * safetyMargin)))
 
       return {
         predictedTokens: predicted,
@@ -202,10 +200,7 @@ export function predictOutputTokens(
     predicted = Math.min(2000, Math.round(inputTokens * 0.7))
   }
 
-  const suggested = Math.min(
-    maxMax,
-    Math.max(minMax, Math.round(predicted * safetyMargin))
-  )
+  const suggested = Math.min(maxMax, Math.max(minMax, Math.round(predicted * safetyMargin)))
 
   return {
     predictedTokens: predicted,

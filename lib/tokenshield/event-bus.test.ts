@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest"
-import { shieldEvents, createEventBus } from "./event-bus"
+import { shieldEvents, createEventBus, subscribeToEvent } from "./event-bus"
 
 describe("event-bus", () => {
   it("shieldEvents is a mitt emitter", () => {
@@ -32,5 +32,39 @@ describe("event-bus", () => {
     bus.off("cache:miss", handler)
     bus.emit("cache:miss", { prompt: "test" })
     expect(handler).not.toHaveBeenCalled()
+  })
+
+  describe("subscribeToEvent", () => {
+    it("subscribes to events and receives data", () => {
+      const bus = createEventBus()
+      const handler = vi.fn()
+      subscribeToEvent(bus, "request:blocked", handler)
+      bus.emit("request:blocked", { reason: "test", estimatedCost: 0.5 })
+      expect(handler).toHaveBeenCalledWith({ reason: "test", estimatedCost: 0.5 })
+    })
+
+    it("returns an unsubscribe function that removes the handler", () => {
+      const bus = createEventBus()
+      const handler = vi.fn()
+      const unsub = subscribeToEvent(bus, "cache:miss", handler)
+      bus.emit("cache:miss", { prompt: "first" })
+      expect(handler).toHaveBeenCalledTimes(1)
+
+      unsub()
+      bus.emit("cache:miss", { prompt: "second" })
+      expect(handler).toHaveBeenCalledTimes(1) // Not called again
+    })
+
+    it("works with multiple event types on the same bus", () => {
+      const bus = createEventBus()
+      const hitHandler = vi.fn()
+      const missHandler = vi.fn()
+      subscribeToEvent(bus, "cache:hit", hitHandler)
+      subscribeToEvent(bus, "cache:miss", missHandler)
+
+      bus.emit("cache:hit", { matchType: "exact", similarity: 1, savedCost: 0 })
+      expect(hitHandler).toHaveBeenCalledTimes(1)
+      expect(missHandler).not.toHaveBeenCalled()
+    })
   })
 })

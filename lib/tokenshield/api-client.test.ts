@@ -44,18 +44,18 @@ describe("callOpenAI", () => {
         usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
         latencyMs: 200,
         id: "chatcmpl-123",
-      })
+      }),
     )
 
-    const result = await callOpenAI(
-      [{ role: "user", content: "Hi" }],
-      "gpt-4o"
-    )
+    const result = await callOpenAI([{ role: "user", content: "Hi" }], "gpt-4o")
 
-    expect(mockFetch).toHaveBeenCalledWith("/api/openai", expect.objectContaining({
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    }))
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/openai",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      }),
+    )
     expect(result.content).toBe("Hello!")
     expect(result.provider).toBe("openai")
     expect(result.usage.input_tokens).toBe(10)
@@ -66,13 +66,11 @@ describe("callOpenAI", () => {
   })
 
   it("throws on HTTP error", async () => {
-    mockFetch.mockResolvedValue(
-      mockJsonResponse({ error: "Rate limit exceeded" }, 429)
-    )
+    mockFetch.mockResolvedValue(mockJsonResponse({ error: "Rate limit exceeded" }, 429))
 
-    await expect(
-      callOpenAI([{ role: "user", content: "Hi" }], "gpt-4o")
-    ).rejects.toThrow("Rate limit exceeded")
+    await expect(callOpenAI([{ role: "user", content: "Hi" }], "gpt-4o")).rejects.toThrow(
+      "Rate limit exceeded",
+    )
   })
 
   it("uses default max_tokens and temperature", async () => {
@@ -83,7 +81,7 @@ describe("callOpenAI", () => {
         usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
         latencyMs: 100,
         id: "chatcmpl-456",
-      })
+      }),
     )
 
     await callOpenAI([{ role: "user", content: "test" }], "gpt-4o")
@@ -101,7 +99,7 @@ describe("callOpenAI", () => {
         usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
         latencyMs: 100,
         id: "chatcmpl-789",
-      })
+      }),
     )
 
     await callOpenAI([{ role: "user", content: "test" }], "gpt-4o", {
@@ -124,7 +122,7 @@ describe("callAnthropic", () => {
         usage: { input_tokens: 12, output_tokens: 6, total_tokens: 18 },
         latencyMs: 300,
         id: "msg-123",
-      })
+      }),
     )
 
     const result = await callAnthropic(
@@ -132,7 +130,7 @@ describe("callAnthropic", () => {
         { role: "system", content: "You are helpful" },
         { role: "user", content: "Hi" },
       ],
-      "claude-sonnet-4-20250514"
+      "claude-sonnet-4-20250514",
     )
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body)
@@ -151,7 +149,7 @@ describe("callAnthropic", () => {
         usage: { input_tokens: 1, output_tokens: 1 },
         latencyMs: 100,
         id: "msg-456",
-      })
+      }),
     )
 
     await callAnthropic([{ role: "user", content: "test" }], "claude-sonnet-4-20250514")
@@ -169,13 +167,10 @@ describe("callGoogle", () => {
         usage: { input_tokens: 8, output_tokens: 4, total_tokens: 12 },
         latencyMs: 150,
         id: "gen-123",
-      })
+      }),
     )
 
-    const result = await callGoogle(
-      [{ role: "user", content: "Hi" }],
-      "gemini-2.0-flash"
-    )
+    const result = await callGoogle([{ role: "user", content: "Hi" }], "gemini-2.0-flash")
 
     expect(result.content).toBe("Hello from Gemini!")
     expect(result.provider).toBe("google")
@@ -191,7 +186,7 @@ describe("callGoogle", () => {
         usage: { input_tokens: 1, output_tokens: 1 },
         latencyMs: 100,
         id: "gen-456",
-      })
+      }),
     )
 
     await callGoogle([{ role: "user", content: "test" }], "gemini-2.0-flash")
@@ -209,7 +204,7 @@ describe("callLLM", () => {
         usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
         latencyMs: 100,
         id: "chatcmpl-llm",
-      })
+      }),
     )
 
     const result = await callLLM("openai", [{ role: "user", content: "test" }], "gpt-4o")
@@ -226,10 +221,14 @@ describe("callLLM", () => {
         usage: { input_tokens: 1, output_tokens: 1 },
         latencyMs: 100,
         id: "msg-llm",
-      })
+      }),
     )
 
-    const result = await callLLM("anthropic", [{ role: "user", content: "test" }], "claude-sonnet-4-20250514")
+    const result = await callLLM(
+      "anthropic",
+      [{ role: "user", content: "test" }],
+      "claude-sonnet-4-20250514",
+    )
 
     expect(result.provider).toBe("anthropic")
     expect(mockFetch).toHaveBeenCalledWith("/api/anthropic", expect.anything())
@@ -243,7 +242,7 @@ describe("callLLM", () => {
         usage: { input_tokens: 1, output_tokens: 1 },
         latencyMs: 100,
         id: "gen-llm",
-      })
+      }),
     )
 
     const result = await callLLM("google", [{ role: "user", content: "test" }], "gemini-2.0-flash")

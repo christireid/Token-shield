@@ -10,7 +10,7 @@
  * operates per-request), this is a session/time-window level kill switch.
  *
  * Features:
- * - Per-session, hourly, daily, and monthly cost limits
+ * - Per-session, hourly, daily, and 30-day rolling cost limits
  * - Configurable actions: warn, throttle, or hard-stop
  * - Optional persistence via localStorage (survives page refresh)
  * - Alert callbacks for integration with monitoring
@@ -26,11 +26,11 @@ import { estimateCost, MODEL_PRICING } from "./cost-estimator"
 export interface BreakerLimits {
   /** Maximum spend per session (resets on page refresh unless persisted) */
   perSession?: number
-  /** Maximum spend per hour */
+  /** Maximum spend per rolling 1-hour window */
   perHour?: number
-  /** Maximum spend per 24-hour period */
+  /** Maximum spend per rolling 24-hour window */
   perDay?: number
-  /** Maximum spend per calendar month */
+  /** Maximum spend per rolling 30-day window (not calendar month) */
   perMonth?: number
 }
 
@@ -135,8 +135,37 @@ const DEFAULT_CONFIG: BreakerConfig = {
   storageKey: "tokenshield-breaker",
 }
 
+/** Warning threshold: fire warnings when spend reaches this fraction of the limit */
+const WARNING_THRESHOLD = 0.8
+/** One hour in milliseconds */
+const ONE_HOUR_MS = 60 * 60 * 1000
+/** One day in milliseconds */
+const ONE_DAY_MS = 24 * 60 * 60 * 1000
+/** Thirty days in milliseconds */
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+
 /** Maximum spend records kept in memory (prevents unbounded growth in high-throughput scenarios) */
 const MAX_BREAKER_RECORDS = 50_000
+
+/** Percentage displayed when a limit is zero (avoids division by zero) */
+const UNLIMITED_PERCENTAGE = 999
+
+/**
+ * Maps each limit type to its config key, spend key, and remaining key.
+ * Used to drive limit checking, trip detection, and remaining budget
+ * calculations from a single definition.
+ */
+const LIMIT_DEFS = [
+  { type: "session", configKey: "perSession", spendKey: "session", remainKey: "session" },
+  { type: "hour", configKey: "perHour", spendKey: "lastHour", remainKey: "hour" },
+  { type: "day", configKey: "perDay", spendKey: "lastDay", remainKey: "day" },
+  { type: "month", configKey: "perMonth", spendKey: "lastMonth", remainKey: "month" },
+] as const satisfies ReadonlyArray<{
+  type: BreakerEvent["limitType"]
+  configKey: keyof BreakerLimits
+  spendKey: keyof BreakerStatus["spend"]
+  remainKey: keyof BreakerStatus["remaining"]
+}>
 
 export class CostCircuitBreaker {
   private config: BreakerConfig
@@ -158,58 +187,55 @@ export class CostCircuitBreaker {
 
   /**
    * Check if a request should proceed given current spending.
-   * Call this before every API request.
+   * Call before every API call. Returns a decision with the current
+   * status and optional warning/throttle signals.
    */
-  check(modelId?: string, estimatedInputTokens?: number, estimatedOutputTokens?: number): BreakerCheckResult {
+  check(
+    modelId?: string,
+    estimatedInputTokens?: number,
+    estimatedOutputTokens?: number,
+  ): BreakerCheckResult {
     this.totalRequests++
     const status = this.getStatus()
 
     // Check each limit
     const limits = this.config.limits
 
-    // Auto-reset time-window warnings when spend drops below 80% threshold
-    // (session warnings never auto-reset — they clear on explicit reset() only)
-    if (limits.perHour != null && status.spend.lastHour < limits.perHour * 0.8) {
-      this.warningFired.delete("hour-warning")
-    }
-    if (limits.perDay != null && status.spend.lastDay < limits.perDay * 0.8) {
-      this.warningFired.delete("day-warning")
-    }
-    if (limits.perMonth != null && status.spend.lastMonth < limits.perMonth * 0.8) {
-      this.warningFired.delete("month-warning")
+    // Auto-reset all warnings (including session) when spend drops below 80% threshold
+    for (const def of LIMIT_DEFS) {
+      const limitVal = limits[def.configKey]
+      if (limitVal != null && status.spend[def.spendKey] < limitVal * WARNING_THRESHOLD) {
+        this.warningFired.delete(`${def.type}-warning`)
+      }
     }
 
-    const checks: { type: BreakerEvent["limitType"]; current: number; limit: number }[] = []
-
-    if (limits.perSession !== undefined) {
-      checks.push({ type: "session", current: status.spend.session, limit: limits.perSession })
-    }
-    if (limits.perHour !== undefined) {
-      checks.push({ type: "hour", current: status.spend.lastHour, limit: limits.perHour })
-    }
-    if (limits.perDay !== undefined) {
-      checks.push({ type: "day", current: status.spend.lastDay, limit: limits.perDay })
-    }
-    if (limits.perMonth !== undefined) {
-      checks.push({ type: "month", current: status.spend.lastMonth, limit: limits.perMonth })
-    }
+    // Build limit checks from defined limits
+    const checks = LIMIT_DEFS.filter((d) => limits[d.configKey] !== undefined).map((d) => ({
+      type: d.type,
+      current: status.spend[d.spendKey],
+      limit: limits[d.configKey]!,
+    }))
 
     // Also check if the estimated cost of THIS request would push us over
     let estimatedCost = 0
     if (modelId && estimatedInputTokens) {
       const pricing = MODEL_PRICING[modelId]
       if (pricing) {
-        estimatedCost = estimateCost(modelId, estimatedInputTokens, estimatedOutputTokens ?? 500).totalCost
+        estimatedCost = estimateCost(
+          modelId,
+          estimatedInputTokens,
+          estimatedOutputTokens ?? 500,
+        ).totalCost
       }
     }
 
     for (const c of checks) {
       const projectedSpend = c.current + estimatedCost
-      const pctUsed = c.limit > 0 ? (projectedSpend / c.limit) * 100 : 999
+      const pctUsed = c.limit > 0 ? (projectedSpend / c.limit) * 100 : UNLIMITED_PERCENTAGE
 
       // Fire warning at 80%
       const warningKey = `${c.type}-warning`
-      if (projectedSpend >= c.limit * 0.8 && !this.warningFired.has(warningKey)) {
+      if (projectedSpend >= c.limit * WARNING_THRESHOLD && !this.warningFired.has(warningKey)) {
         this.warningFired.add(warningKey)
         this.config.onWarning?.({
           limitType: c.type,
@@ -271,7 +297,7 @@ export class CostCircuitBreaker {
     })
 
     // Clean up old records (keep last 30 days) + enforce hard cap
-    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
+    const thirtyDaysAgo = Date.now() - THIRTY_DAYS_MS
     this.records = this.records.filter((r) => r.timestamp > thirtyDaysAgo)
     if (this.records.length > MAX_BREAKER_RECORDS) {
       this.records = this.records.slice(-MAX_BREAKER_RECORDS)
@@ -285,9 +311,9 @@ export class CostCircuitBreaker {
    */
   getStatus(): BreakerStatus {
     const now = Date.now()
-    const oneHourAgo = now - 60 * 60 * 1000
-    const oneDayAgo = now - 24 * 60 * 60 * 1000
-    const oneMonthAgo = now - 30 * 24 * 60 * 60 * 1000
+    const oneHourAgo = now - ONE_HOUR_MS
+    const oneDayAgo = now - ONE_DAY_MS
+    const oneMonthAgo = now - THIRTY_DAYS_MS
 
     let sessionSpend = 0
     let hourSpend = 0
@@ -302,64 +328,45 @@ export class CostCircuitBreaker {
     }
 
     const limits = this.config.limits
-    const trippedLimits: BreakerEvent[] = []
+    const spend: BreakerStatus["spend"] = {
+      session: sessionSpend,
+      lastHour: hourSpend,
+      lastDay: daySpend,
+      lastMonth: monthSpend,
+    }
 
-    if (limits.perSession != null && sessionSpend >= limits.perSession) {
-      trippedLimits.push({
-        limitType: "session",
-        currentSpend: sessionSpend,
-        limit: limits.perSession,
-        percentUsed: limits.perSession > 0 ? (sessionSpend / limits.perSession) * 100 : 999,
-        action: this.config.action,
-        timestamp: now,
-      })
-    }
-    if (limits.perHour != null && hourSpend >= limits.perHour) {
-      trippedLimits.push({
-        limitType: "hour",
-        currentSpend: hourSpend,
-        limit: limits.perHour,
-        percentUsed: limits.perHour > 0 ? (hourSpend / limits.perHour) * 100 : 999,
-        action: this.config.action,
-        timestamp: now,
-      })
-    }
-    if (limits.perDay != null && daySpend >= limits.perDay) {
-      trippedLimits.push({
-        limitType: "day",
-        currentSpend: daySpend,
-        limit: limits.perDay,
-        percentUsed: limits.perDay > 0 ? (daySpend / limits.perDay) * 100 : 999,
-        action: this.config.action,
-        timestamp: now,
-      })
-    }
-    if (limits.perMonth != null && monthSpend >= limits.perMonth) {
-      trippedLimits.push({
-        limitType: "month",
-        currentSpend: monthSpend,
-        limit: limits.perMonth,
-        percentUsed: limits.perMonth > 0 ? (monthSpend / limits.perMonth) * 100 : 999,
-        action: this.config.action,
-        timestamp: now,
-      })
-    }
+    const trippedLimits: BreakerEvent[] = LIMIT_DEFS.flatMap((def) => {
+      const limitVal = limits[def.configKey]
+      if (limitVal == null) return []
+      const currentSpend = spend[def.spendKey]
+      if (currentSpend < limitVal) return []
+      return [
+        {
+          limitType: def.type,
+          currentSpend,
+          limit: limitVal,
+          percentUsed: limitVal > 0 ? (currentSpend / limitVal) * 100 : UNLIMITED_PERCENTAGE,
+          action: this.config.action,
+          timestamp: now,
+        },
+      ]
+    })
+
+    const remaining = Object.fromEntries(
+      LIMIT_DEFS.map((def) => {
+        const limitVal = limits[def.configKey]
+        return [
+          def.remainKey,
+          limitVal != null ? Math.max(0, limitVal - spend[def.spendKey]) : null,
+        ]
+      }),
+    ) as BreakerStatus["remaining"]
 
     return {
       tripped: trippedLimits.length > 0 && this.config.action === "stop",
       trippedLimits,
-      spend: {
-        session: sessionSpend,
-        lastHour: hourSpend,
-        lastDay: daySpend,
-        lastMonth: monthSpend,
-      },
-      remaining: {
-        session: limits.perSession != null ? Math.max(0, limits.perSession - sessionSpend) : null,
-        hour: limits.perHour != null ? Math.max(0, limits.perHour - hourSpend) : null,
-        day: limits.perDay != null ? Math.max(0, limits.perDay - daySpend) : null,
-        month: limits.perMonth != null ? Math.max(0, limits.perMonth - monthSpend) : null,
-      },
+      spend,
+      remaining,
       totalRequests: this.totalRequests,
       requestsBlocked: this.totalBlocked,
     }
@@ -398,10 +405,7 @@ export class CostCircuitBreaker {
         sessionStart: this.sessionStart,
         totalBlocked: this.totalBlocked,
       }
-      localStorage.setItem(
-        this.config.storageKey ?? "tokenshield-breaker",
-        JSON.stringify(state)
-      )
+      localStorage.setItem(this.config.storageKey ?? "tokenshield-breaker", JSON.stringify(state))
     } catch {
       // localStorage not available or full
     }
@@ -410,9 +414,7 @@ export class CostCircuitBreaker {
   private restore(): void {
     if (typeof window === "undefined") return
     try {
-      const raw = localStorage.getItem(
-        this.config.storageKey ?? "tokenshield-breaker"
-      )
+      const raw = localStorage.getItem(this.config.storageKey ?? "tokenshield-breaker")
       if (raw) {
         const state: PersistedState = JSON.parse(raw)
         this.records = state.records ?? []

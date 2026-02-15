@@ -1,12 +1,12 @@
 /**
  * API route that proxies requests to OpenAI and returns the REAL usage object.
- * 
+ *
  * This is the ground truth. Every token count, every cost calculation
  * we do client-side gets validated against what OpenAI actually reports back.
- * 
+ *
  * The response includes:
  * - usage.prompt_tokens: exact input tokens billed
- * - usage.completion_tokens: exact output tokens billed  
+ * - usage.completion_tokens: exact output tokens billed
  * - usage.total_tokens: sum
  * - The model actually used
  * - The response content
@@ -29,29 +29,20 @@ interface RequestBody {
 export async function POST(request: Request) {
   const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) {
-    return NextResponse.json(
-      { error: "OPENAI_API_KEY not configured" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "OPENAI_API_KEY not configured" }, { status: 500 })
   }
 
   let body: RequestBody
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json(
-      { error: "Invalid JSON body" },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
   const { messages, model, max_tokens, temperature } = body
 
   if (!messages || !model) {
-    return NextResponse.json(
-      { error: "messages and model are required" },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: "messages and model are required" }, { status: 400 })
   }
 
   const startTime = Date.now()
@@ -75,7 +66,7 @@ export async function POST(request: Request) {
       const errorData = await response.text()
       return NextResponse.json(
         { error: `OpenAI API error: ${response.status}`, details: errorData },
-        { status: response.status }
+        { status: response.status },
       )
     }
 
@@ -102,7 +93,7 @@ export async function POST(request: Request) {
   } catch (err) {
     return NextResponse.json(
       { error: `Network error: ${err instanceof Error ? err.message : "unknown"}` },
-      { status: 502 }
+      { status: 502 },
     )
   }
 }

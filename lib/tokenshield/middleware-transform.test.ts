@@ -5,7 +5,7 @@
  * breaker -> user budget -> guard -> cache lookup -> context trim -> route -> prefix optimize
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import { tokenShieldMiddleware } from "./middleware"
 import { SHIELD_META, type ShieldMeta } from "./middleware-types"
 
@@ -21,7 +21,14 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
   describe("basic passthrough", () => {
     it("passes through params when no prompt is provided", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
       })
       const params = { modelId: "gpt-4o-mini", temperature: 0.7 }
       const result = await shield.transformParams({ params })
@@ -32,7 +39,14 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
 
     it("passes through params when prompt is not an array", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
       })
       const params = { modelId: "gpt-4o-mini", prompt: "just a string" }
       const result = await shield.transformParams({ params })
@@ -42,7 +56,14 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
 
     it("attaches SHIELD_META to params on valid prompt", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
       })
       const params = {
         modelId: "gpt-4o-mini",
@@ -60,7 +81,14 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
     it("blocks requests when guard rate limit is exceeded", async () => {
       const onBlocked = vi.fn()
       const shield = tokenShieldMiddleware({
-        modules: { guard: true, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: true,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         guard: { maxRequestsPerMinute: 1, debounceMs: 0 },
         onBlocked,
       })
@@ -85,7 +113,14 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
   describe("cache module", () => {
     it("returns cache hit metadata when prompt is cached", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: true, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: true,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         cache: { maxEntries: 10, ttlMs: 60000, similarityThreshold: 0.85 },
       })
 
@@ -105,7 +140,14 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
 
     it("returns no cache hit for uncached prompt", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: true, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: true,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         cache: { maxEntries: 10, ttlMs: 60000, similarityThreshold: 0.85 },
       })
 
@@ -123,7 +165,14 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
   describe("context trim module", () => {
     it("trims long conversations to fit token budget", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: true, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: true,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         context: { maxInputTokens: 100, reserveForOutput: 50 },
       })
 
@@ -148,7 +197,14 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
 
     it("does not trim when under budget", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: true, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: true,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         context: { maxInputTokens: 10000, reserveForOutput: 500 },
       })
 
@@ -166,7 +222,14 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
   describe("model router module", () => {
     it("routes simple requests to cheaper model when tiers configured", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: true, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: true,
+          prefix: false,
+          ledger: false,
+        },
         router: {
           tiers: [
             { modelId: "gpt-4o-mini", maxComplexity: 50 },
@@ -188,11 +251,16 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
 
     it("does not route when complexity exceeds all tier maxComplexity values", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: true, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: true,
+          prefix: false,
+          ledger: false,
+        },
         router: {
-          tiers: [
-            { modelId: "gpt-4o-mini", maxComplexity: 5 },
-          ],
+          tiers: [{ modelId: "gpt-4o-mini", maxComplexity: 5 }],
           complexityThreshold: 50,
         },
       })
@@ -202,10 +270,13 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
       // A request scoring > 5 will find no matching tier and keep the original model
       const params = {
         modelId: "gpt-4o",
-        prompt: makePrompt([{
-          role: "user",
-          content: "Please analyze the following complex multi-step algorithm and explain the time complexity of each recursive subroutine, including the master theorem application and amortized analysis of the data structure operations.",
-        }]),
+        prompt: makePrompt([
+          {
+            role: "user",
+            content:
+              "Please analyze the following complex multi-step algorithm and explain the time complexity of each recursive subroutine, including the master theorem application and amortized analysis of the data structure operations.",
+          },
+        ]),
       }
       const result = await shield.transformParams({ params })
       const meta = (result as Record<string | symbol, unknown>)[SHIELD_META] as ShieldMeta
@@ -218,8 +289,15 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
   describe("router override", () => {
     it("uses routerOverride when provided", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
-        routerOverride: (prompt) => prompt.includes("[IMPORTANT]") ? "gpt-4o" : null,
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
+        routerOverride: (prompt) => (prompt.includes("[IMPORTANT]") ? "gpt-4o" : null),
       })
 
       const params = {
@@ -233,7 +311,14 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
 
     it("does not override when routerOverride returns null", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         routerOverride: () => null,
       })
 
@@ -251,7 +336,14 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
     it("does not modify params in dry-run mode", async () => {
       const dryRunActions: Array<{ module: string; description: string }> = []
       const shield = tokenShieldMiddleware({
-        modules: { guard: true, cache: true, context: true, router: true, prefix: true, ledger: false },
+        modules: {
+          guard: true,
+          cache: true,
+          context: true,
+          router: true,
+          prefix: true,
+          ledger: false,
+        },
         dryRun: true,
         onDryRun: (action) => dryRunActions.push(action),
         guard: { debounceMs: 0 },
@@ -280,7 +372,14 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
     it("blocks requests when session budget is exceeded", async () => {
       const onBlocked = vi.fn()
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         breaker: {
           limits: { perSession: 0.0000001 },
           action: "stop",
@@ -304,7 +403,14 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
     it("emits cache:miss when cache misses", async () => {
       const events: string[] = []
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: true, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: true,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         cache: { maxEntries: 10 },
       })
 
@@ -322,7 +428,14 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
     it("emits cache:hit when cache hits", async () => {
       const events: string[] = []
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: true, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: true,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         cache: { maxEntries: 10 },
       })
 
@@ -341,7 +454,14 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
     it("emits context:trimmed when context is trimmed", async () => {
       const events: Array<Record<string, unknown>> = []
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: true, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: true,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
         context: { maxInputTokens: 50, reserveForOutput: 20 },
       })
 
@@ -350,7 +470,10 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
       const params = {
         modelId: "gpt-4o-mini",
         prompt: makePrompt([
-          { role: "user", content: "A very long message that should exceed the token budget. ".repeat(20) },
+          {
+            role: "user",
+            content: "A very long message that should exceed the token budget. ".repeat(20),
+          },
           { role: "user", content: "Latest question?" },
         ]),
       }
@@ -364,7 +487,14 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
   describe("prefix optimizer", () => {
     it("rebuilds prompt in AI SDK format after optimization", async () => {
       const shield = tokenShieldMiddleware({
-        modules: { guard: false, cache: false, context: false, router: false, prefix: true, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: true,
+          ledger: false,
+        },
         prefix: { provider: "openai" },
       })
 
@@ -377,7 +507,10 @@ describe("buildTransformParams (via tokenShieldMiddleware)", () => {
       }
       const result = await shield.transformParams({ params })
       // Should have prompt in AI SDK format (array of role/content objects)
-      const rebuiltPrompt = result.prompt as Array<{ role: string; content: Array<{ type: string; text: string }> }>
+      const rebuiltPrompt = result.prompt as Array<{
+        role: string
+        content: Array<{ type: string; text: string }>
+      }>
       expect(Array.isArray(rebuiltPrompt)).toBe(true)
       expect(rebuiltPrompt.length).toBeGreaterThan(0)
       for (const msg of rebuiltPrompt) {

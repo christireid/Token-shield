@@ -80,7 +80,9 @@ describe("CostCircuitBreaker", () => {
       limits: { perSession: 10.0 },
       action: "stop",
       persist: false,
-      onWarning: () => { warningFired = true },
+      onWarning: () => {
+        warningFired = true
+      },
     })
     // 80% of $10 = $8.00; projectedSpend must be >= $8.00
     b.recordSpend(8.01, "gpt-4o-mini")
@@ -106,5 +108,142 @@ describe("CostCircuitBreaker", () => {
     const result = throttled.check()
     expect(result.allowed).toBe(true)
     expect(result.reason).toContain("Throttled")
+  })
+
+  // -------------------------------------------------------
+  // perDay and perMonth limits
+  // -------------------------------------------------------
+
+  it("blocks requests when perDay limit exceeded", () => {
+    const daily = new CostCircuitBreaker({
+      limits: { perDay: 1.0 },
+      action: "stop",
+      persist: false,
+    })
+    daily.recordSpend(1.0, "gpt-4o-mini")
+    const result = daily.check()
+    expect(result.allowed).toBe(false)
+    expect(result.reason).toContain("day")
+  })
+
+  it("blocks requests when perMonth limit exceeded", () => {
+    const monthly = new CostCircuitBreaker({
+      limits: { perMonth: 5.0 },
+      action: "stop",
+      persist: false,
+    })
+    monthly.recordSpend(5.0, "gpt-4o-mini")
+    const result = monthly.check()
+    expect(result.allowed).toBe(false)
+    expect(result.reason).toContain("month")
+  })
+
+  it("getStatus reports perDay/perMonth remaining", () => {
+    const b = new CostCircuitBreaker({
+      limits: { perDay: 10.0, perMonth: 50.0 },
+      action: "stop",
+      persist: false,
+    })
+    b.recordSpend(3.0, "gpt-4o-mini")
+    const status = b.getStatus()
+    expect(status.remaining.day).toBeCloseTo(7.0)
+    expect(status.remaining.month).toBeCloseTo(47.0)
+  })
+
+  // -------------------------------------------------------
+  // updateLimits
+  // -------------------------------------------------------
+
+  it("updateLimits changes effective limits at runtime", () => {
+    const b = new CostCircuitBreaker({
+      limits: { perSession: 2.0 },
+      action: "stop",
+      persist: false,
+    })
+    b.recordSpend(2.0, "gpt-4o-mini")
+    expect(b.check().allowed).toBe(false)
+
+    // Increase session limit
+    b.updateLimits({ perSession: 10.0 })
+    expect(b.check().allowed).toBe(true)
+  })
+
+  it("updateLimits resets warning state", () => {
+    let warningCount = 0
+    const b = new CostCircuitBreaker({
+      limits: { perSession: 10.0 },
+      action: "stop",
+      persist: false,
+      onWarning: () => {
+        warningCount++
+      },
+    })
+    // Trigger warning at 80%
+    b.recordSpend(8.5, "gpt-4o-mini")
+    b.check()
+    expect(warningCount).toBe(1)
+
+    // Warning should not fire again without updateLimits
+    b.check()
+    expect(warningCount).toBe(1)
+
+    // After updateLimits, warning state resets — warning can fire again
+    b.updateLimits({ perSession: 10.0 })
+    b.check()
+    expect(warningCount).toBe(2)
+  })
+
+  // -------------------------------------------------------
+  // getStatus with all limit types
+  // -------------------------------------------------------
+
+  it("getStatus returns null remaining for unconfigured limit types", () => {
+    const b = new CostCircuitBreaker({
+      limits: { perSession: 5.0 },
+      action: "stop",
+      persist: false,
+    })
+    const status = b.getStatus()
+    expect(status.remaining.session).toBe(5.0)
+    expect(status.remaining.hour).toBeNull()
+    expect(status.remaining.day).toBeNull()
+    expect(status.remaining.month).toBeNull()
+  })
+
+  it("getStatus trippedLimits contains all exceeded limits", () => {
+    const b = new CostCircuitBreaker({
+      limits: { perSession: 1.0, perHour: 1.0, perDay: 1.0, perMonth: 1.0 },
+      action: "stop",
+      persist: false,
+    })
+    b.recordSpend(2.0, "gpt-4o-mini")
+    const status = b.getStatus()
+    expect(status.trippedLimits.length).toBe(4)
+    const limitTypes = status.trippedLimits.map((t: { limitType: string }) => t.limitType)
+    expect(limitTypes).toContain("session")
+    expect(limitTypes).toContain("hour")
+    expect(limitTypes).toContain("day")
+    expect(limitTypes).toContain("month")
+  })
+
+  // -------------------------------------------------------
+  // Warning fires only once per limit type
+  // -------------------------------------------------------
+
+  it("warning fires only once until limit is updated", () => {
+    let warningCount = 0
+    const b = new CostCircuitBreaker({
+      limits: { perSession: 10.0 },
+      action: "stop",
+      persist: false,
+      onWarning: () => {
+        warningCount++
+      },
+    })
+    b.recordSpend(8.5, "gpt-4o-mini")
+    b.check()
+    b.check()
+    b.check()
+    expect(warningCount).toBe(1) // Should fire only once
   })
 })

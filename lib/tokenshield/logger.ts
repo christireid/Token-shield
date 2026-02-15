@@ -1,8 +1,10 @@
 import type { TokenShieldEvents } from "./event-bus"
 
-// --- Types ---
+// -------------------------------------------------------
+// Types
+// -------------------------------------------------------
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+export type LogLevel = "debug" | "info" | "warn" | "error"
 
 export interface LogEntry {
   level: LogLevel
@@ -44,7 +46,9 @@ export interface Span {
 
 export type CompletedSpan = Span & { endTime?: number; events: SpanEvent[] }
 
-// --- Helpers ---
+// -------------------------------------------------------
+// Helpers
+// -------------------------------------------------------
 
 const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 }
 
@@ -53,60 +57,70 @@ function generateId(): string {
     return crypto.randomUUID()
   } catch {
     // Fallback for environments without crypto.randomUUID
-    return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join('')
+    return Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join("")
   }
 }
 
 function defaultHandler(entry: LogEntry): void {
-  const dataStr = entry.data ? ` ${JSON.stringify(entry.data)}` : ''
+  const dataStr = entry.data ? ` ${JSON.stringify(entry.data)}` : ""
   const msg = `[TokenShield] [${entry.level}] [${entry.module}] ${entry.message}${dataStr}`
-  const method = entry.level === 'debug' ? 'debug' : entry.level === 'warn' ? 'warn' : entry.level === 'error' ? 'error' : 'info'
+  const method = entry.level
+  // eslint-disable-next-line no-console
   console[method](msg)
 }
 
 // Map event types to appropriate log levels
 const EVENT_LOG_LEVELS: Record<keyof TokenShieldEvents, LogLevel> = {
-  'request:blocked': 'warn',
-  'request:allowed': 'debug',
-  'cache:hit': 'info',
-  'cache:miss': 'debug',
-  'cache:store': 'debug',
-  'context:trimmed': 'info',
-  'router:downgraded': 'info',
-  'router:holdback': 'debug',
-  'ledger:entry': 'debug',
-  'breaker:warning': 'warn',
-  'breaker:tripped': 'error',
-  'userBudget:warning': 'warn',
-  'userBudget:exceeded': 'error',
-  'userBudget:spend': 'debug',
-  'stream:chunk': 'debug',
-  'stream:abort': 'warn',
-  'stream:complete': 'info',
-  'anomaly:detected': 'warn',
+  "request:blocked": "warn",
+  "request:allowed": "debug",
+  "cache:hit": "info",
+  "cache:miss": "debug",
+  "cache:store": "debug",
+  "context:trimmed": "info",
+  "router:downgraded": "info",
+  "router:holdback": "debug",
+  "ledger:entry": "debug",
+  "breaker:warning": "warn",
+  "breaker:tripped": "error",
+  "userBudget:warning": "warn",
+  "userBudget:exceeded": "error",
+  "userBudget:spend": "debug",
+  "stream:chunk": "debug",
+  "stream:abort": "warn",
+  "stream:complete": "info",
+  "anomaly:detected": "warn",
 }
 
-// --- Logger class ---
+// -------------------------------------------------------
+// Logger Class
+// -------------------------------------------------------
 
 /** Maximum spans retained before FIFO eviction */
 const MAX_SPANS = 1000
 
 export class TokenShieldLogger {
-  private config: Required<Pick<LoggerConfig, 'level' | 'timestamps'>> & Pick<LoggerConfig, 'handler' | 'enableSpans'>
+  private config: Required<Pick<LoggerConfig, "level" | "timestamps">> &
+    Pick<LoggerConfig, "handler" | "enableSpans">
   private spans: CompletedSpan[] = []
   /** Guard against double-connecting to the event bus */
   private eventBusConnected = false
+  private eventBusCleanup: (() => void) | null = null
 
   constructor(config?: LoggerConfig) {
     this.config = {
-      level: config?.level ?? 'info',
+      level: config?.level ?? "info",
       handler: config?.handler,
       enableSpans: config?.enableSpans ?? false,
       timestamps: config?.timestamps ?? true,
     }
   }
 
-  private emit(level: LogLevel, module: string, message: string, data?: Record<string, unknown>): void {
+  private emit(
+    level: LogLevel,
+    module: string,
+    message: string,
+    data?: Record<string, unknown>,
+  ): void {
     if (LOG_LEVEL_PRIORITY[level] < LOG_LEVEL_PRIORITY[this.config.level]) return
     const entry: LogEntry = {
       level,
@@ -119,19 +133,19 @@ export class TokenShieldLogger {
   }
 
   debug(module: string, message: string, data?: Record<string, unknown>): void {
-    this.emit('debug', module, message, data)
+    this.emit("debug", module, message, data)
   }
 
   info(module: string, message: string, data?: Record<string, unknown>): void {
-    this.emit('info', module, message, data)
+    this.emit("info", module, message, data)
   }
 
   warn(module: string, message: string, data?: Record<string, unknown>): void {
-    this.emit('warn', module, message, data)
+    this.emit("warn", module, message, data)
   }
 
   error(module: string, message: string, data?: Record<string, unknown>): void {
-    this.emit('error', module, message, data)
+    this.emit("error", module, message, data)
   }
 
   startSpan(name: string, attributes?: Record<string, unknown>): Span {
@@ -151,7 +165,7 @@ export class TokenShieldLogger {
         span.endTime = Date.now()
         if (endAttributes) Object.assign(span.attributes, endAttributes)
         if (this.config.enableSpans) {
-          this.emit('info', 'span', `${name} completed`, {
+          this.emit("info", "span", `${name} completed`, {
             spanId,
             traceId,
             durationMs: span.endTime - startTime,
@@ -160,7 +174,11 @@ export class TokenShieldLogger {
         }
       },
       addEvent: (eventName: string, eventAttributes?: Record<string, unknown>) => {
-        events.push({ name: eventName, timestamp: Date.now(), ...(eventAttributes != null && { attributes: eventAttributes }) })
+        events.push({
+          name: eventName,
+          timestamp: Date.now(),
+          ...(eventAttributes != null && { attributes: eventAttributes }),
+        })
       },
     }
 
@@ -170,7 +188,7 @@ export class TokenShieldLogger {
       this.spans = this.spans.slice(-MAX_SPANS)
     }
     if (this.config.enableSpans) {
-      this.emit('debug', 'span', `${name} started`, { spanId, traceId, ...span.attributes })
+      this.emit("debug", "span", `${name} started`, { spanId, traceId, ...span.attributes })
     }
     return span
   }
@@ -183,10 +201,20 @@ export class TokenShieldLogger {
     this.spans = []
   }
 
-  connectEventBus(events: { on: <K extends keyof TokenShieldEvents>(type: K, handler: (event: TokenShieldEvents[K]) => void) => void; off: <K extends keyof TokenShieldEvents>(type: K, handler: (event: TokenShieldEvents[K]) => void) => void }): () => void {
-    // Prevent double-connecting which would accumulate duplicate handlers
+  connectEventBus(events: {
+    on: <K extends keyof TokenShieldEvents>(
+      type: K,
+      handler: (event: TokenShieldEvents[K]) => void,
+    ) => void
+    off: <K extends keyof TokenShieldEvents>(
+      type: K,
+      handler: (event: TokenShieldEvents[K]) => void,
+    ) => void
+  }): () => void {
+    // Prevent double-connecting which would accumulate duplicate handlers.
+    // Return the stored cleanup so callers can still disconnect.
     if (this.eventBusConnected) {
-      return () => {} // no-op cleanup
+      return this.eventBusCleanup ?? (() => {})
     }
     this.eventBusConnected = true
     const handlers: Array<() => void> = []
@@ -200,14 +228,19 @@ export class TokenShieldLogger {
       handlers.push(() => events.off(key, handler))
     }
 
-    return () => {
+    const cleanup = () => {
       handlers.forEach((unsub) => unsub())
       this.eventBusConnected = false
+      this.eventBusCleanup = null
     }
+    this.eventBusCleanup = cleanup
+    return cleanup
   }
 }
 
-// --- Exports ---
+// -------------------------------------------------------
+// Exports
+// -------------------------------------------------------
 
 /** Singleton logger instance */
 export const logger: TokenShieldLogger = /* @__PURE__ */ new TokenShieldLogger()
