@@ -211,7 +211,7 @@ export {
 
 // Dashboard Component
 export { TokenShieldDashboard, type TokenShieldDashboardProps } from "./dashboard"
-export { type SavingsAttribution } from "./dashboard-sections"
+export { SavingsAttributionSection, type SavingsAttribution } from "./dashboard-sections"
 
 // License Activation Component
 export { LicenseActivation, type LicenseActivationProps } from "./license-activation"

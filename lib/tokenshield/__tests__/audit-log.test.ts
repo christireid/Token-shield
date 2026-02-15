@@ -239,6 +239,55 @@ describe("AuditLog", () => {
       expect(entry.severity).toBe("warn")
       expect(entry.data).toEqual({ field: "maxCostPerHour", oldValue: 5, newValue: 10 })
     })
+
+    it("logBudgetWarning records budget_warning event", () => {
+      const entry = log.logBudgetWarning("user-42", "daily", 85)
+      expect(entry.eventType).toBe("budget_warning")
+      expect(entry.severity).toBe("warn")
+      expect(entry.userId).toBe("user-42")
+      expect(entry.data).toEqual({ userId: "user-42", limitType: "daily", percentUsed: 85 })
+      expect(entry.description).toContain("85%")
+    })
+
+    it("logBreakerReset records breaker_reset event", () => {
+      const entry = log.logBreakerReset("hourly")
+      expect(entry.eventType).toBe("breaker_reset")
+      expect(entry.severity).toBe("info")
+      expect(entry.data).toEqual({ limitType: "hourly" })
+      expect(entry.description).toContain("hourly")
+    })
+
+    it("logLicenseActivated records license_activated event", () => {
+      const entry = log.logLicenseActivated("enterprise", "Acme Corp")
+      expect(entry.eventType).toBe("license_activated")
+      expect(entry.severity).toBe("info")
+      expect(entry.data).toEqual({ tier: "enterprise", holder: "Acme Corp" })
+      expect(entry.description).toContain("enterprise")
+      expect(entry.description).toContain("Acme Corp")
+    })
+
+    it("logExportRequested records export_requested event", () => {
+      const entry = log.logExportRequested("JSON", 250)
+      expect(entry.eventType).toBe("export_requested")
+      expect(entry.severity).toBe("info")
+      expect(entry.data).toEqual({ format: "JSON", entryCount: 250 })
+      expect(entry.description).toContain("JSON")
+      expect(entry.description).toContain("250")
+    })
+
+    it("logCompressorApplied records compressor_applied event", () => {
+      const entry = log.logCompressorApplied(200, 1000, 800)
+      expect(entry.eventType).toBe("compressor_applied")
+      expect(entry.severity).toBe("info")
+      expect(entry.data).toEqual({ savedTokens: 200, originalTokens: 1000, compressedTokens: 800 })
+    })
+
+    it("logDeltaApplied records delta_applied event", () => {
+      const entry = log.logDeltaApplied(150, 900, 750)
+      expect(entry.eventType).toBe("delta_applied")
+      expect(entry.severity).toBe("info")
+      expect(entry.data).toEqual({ savedTokens: 150, originalTokens: 900, encodedTokens: 750 })
+    })
   })
 
   describe("getEntries (filtering)", () => {

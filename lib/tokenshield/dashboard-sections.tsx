@@ -228,7 +228,9 @@ export const EVENT_COLORS: Record<string, string> = {
   "cache:hit": "#22c55e",
   "stream:complete": "#22c55e",
   "cache:store": "#22c55e",
-  // Yellow: warnings
+  // Yellow: warnings / informational
+  "anomaly:detected": "#f59e0b",
+  "router:holdback": "#f59e0b",
   "breaker:warning": "#f59e0b",
   "userBudget:warning": "#f59e0b",
   "context:trimmed": "#f59e0b",
@@ -296,6 +298,10 @@ export function summarizeEventData(type: string, data: Record<string, unknown>):
         return `saved: ${data.savedTokens ?? "?"} tokens (${data.originalTokens} → ${data.compressedTokens})`
       case "delta:applied":
         return `saved: ${data.savedTokens ?? "?"} tokens (${data.originalTokens} → ${data.encodedTokens})`
+      case "anomaly:detected":
+        return `${data.type}: z-score ${typeof data.zScore === "number" ? data.zScore.toFixed(1) : "?"}, value: ${data.value ?? "?"}`
+      case "router:holdback":
+        return `model: ${data.model ?? "?"}, holdback: ${typeof data.holdbackRate === "number" ? (data.holdbackRate * 100).toFixed(0) + "%" : "?"}`
       default: {
         // Fallback: show first 2 keys
         const keys = Object.keys(data).slice(0, 2)

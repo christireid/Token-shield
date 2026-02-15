@@ -348,6 +348,38 @@ export class AuditLog {
     })
   }
 
+  logBudgetWarning(userId: string, limitType: string, percentUsed: number): AuditEntry {
+    return this.record(
+      "budget_warning",
+      "warn",
+      "user-budget-manager",
+      `Budget warning: ${userId} at ${percentUsed.toFixed(0)}% of ${limitType} limit`,
+      { userId, limitType, percentUsed },
+      userId,
+    )
+  }
+
+  logBreakerReset(limitType: string): AuditEntry {
+    return this.record("breaker_reset", "info", "circuit-breaker", `Breaker reset: ${limitType}`, { limitType })
+  }
+
+  logLicenseActivated(tier: string, holder: string): AuditEntry {
+    return this.record("license_activated", "info", "license", `License activated: ${tier} tier for ${holder}`, {
+      tier,
+      holder,
+    })
+  }
+
+  logExportRequested(format: string, entryCount: number): AuditEntry {
+    return this.record(
+      "export_requested",
+      "info",
+      "audit-log",
+      `Audit log exported as ${format} (${entryCount} entries)`,
+      { format, entryCount },
+    )
+  }
+
   /**
    * Verify the integrity of the audit chain.
    * Returns true if no entries have been tampered with.
