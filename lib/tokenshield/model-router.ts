@@ -14,7 +14,12 @@
  */
 
 import { countTokens } from "gpt-tokenizer"
-import { MODEL_PRICING, type ModelPricing, estimateCost } from "./cost-estimator"
+import {
+  MODEL_PRICING,
+  type ModelPricing,
+  estimateCost,
+} from "./cost-estimator"
+import { PRICING_REGISTRY } from "./pricing-registry"
 
 export interface ComplexitySignals {
   /** Raw token count of the prompt */
@@ -55,9 +60,10 @@ export interface RoutingDecision {
   selectedModel: ModelPricing
   fallbackModel: ModelPricing
   estimatedCost: ReturnType<typeof estimateCost>
-  /** Cost of the fallback (next-tier-up) model for comparison */
-  fallbackCost: ReturnType<typeof estimateCost>
+  cheapestAlternativeCost: ReturnType<typeof estimateCost>
   savingsVsDefault: number
+  /** Whether the selected model is from a different provider than the default */
+  crossProvider: boolean
 }
 
 // Keyword sets for signal detection
@@ -106,43 +112,18 @@ const CONSTRAINT_KEYWORDS = new Set([
   "specification",
 ])
 
-const CODE_PATTERNS =
-  /```|{|}|\bfunction\b|\bclass\b|\bimport\b|\bexport\b|\bconst\b|\blet\b|\bvar\b|\breturn\b|=>|\bif\s*\(|\bfor\s*\(/g
+const CODE_PATTERNS = /```|{|}|\bfunction\b|\bclass\b|\bimport\b|\bexport\b|\bconst\b|\blet\b|\bvar\b|\breturn\b|=>|\bif\s*\(|\bfor\s*\(/g
 
 const STRUCTURED_OUTPUT_PATTERNS =
   /\bjson\b|\bxml\b|\byaml\b|\bcsv\b|\bschema\b|\bformat.*?as\b|\boutput.*?format\b|\breturn.*?object\b|\bstructured\b/i
 
-const SUBTASK_PATTERNS = /^\s*[-*\d]+[.)]\s/gm
+const SUBTASK_PATTERNS =
+  /^\s*[-*\d]+[.)]\s/gm
 
 const CONTEXT_PATTERNS =
   /\babove\b|\bprevious\b|\bearlier\b|\bmentioned\b|\brefer.*?to\b|\bgiven\b|\bbased on\b/i
 
-/**
- * Weights and caps for each complexity signal in the composite score.
- * Each entry: [maxPoints, multiplier].
- * - maxPoints: the ceiling for this signal's contribution
- * - multiplier: per-unit weight (e.g. per keyword, per token fraction)
- */
-const COMPLEXITY_WEIGHTS = {
-  tokenCount: { max: 25, divisor: 500 },
-  reasoningKeywords: { max: 20, perUnit: 5 },
-  constraintKeywords: { max: 10, perUnit: 2.5 },
-  codeSignals: { max: 15, perUnit: 1.5 },
-  lexicalDiversity: { multiplier: 10 },
-  structuredOutput: { points: 5 },
-  subTasks: { max: 10, perUnit: 3 },
-  contextDependency: { points: 5 },
-} as const
-
-/** Tier boundaries for the composite complexity score (0-100) */
-const TIER_THRESHOLDS = {
-  trivial: 15,
-  simple: 35,
-  moderate: 55,
-  complex: 75,
-} as const
-
-/** LRU cache for analyzeComplexity — avoids re-running BPE + regex on identical prompts */
+/** FIFO cache for analyzeComplexity — avoids re-running BPE + regex on identical prompts */
 const MAX_COMPLEXITY_CACHE = 100
 /** Skip caching prompts longer than this to prevent large memory consumption */
 const MAX_CACHEABLE_PROMPT_LENGTH = 10_000
@@ -169,12 +150,7 @@ const complexityCache = new Map<string, ComplexityScore>()
  */
 export function analyzeComplexity(prompt: string): ComplexityScore {
   const cached = complexityCache.get(prompt)
-  if (cached) {
-    // LRU: move to end so this entry is the most-recently-used
-    complexityCache.delete(prompt)
-    complexityCache.set(prompt, cached)
-    return cached
-  }
+  if (cached) return cached
   const words = prompt.split(/\s+/).filter((w) => w.length > 0)
   const wordCount = words.length
   const sentences = prompt.split(/[.!?]+/).filter((s) => s.trim().length > 0)
@@ -183,70 +159,69 @@ export function analyzeComplexity(prompt: string): ComplexityScore {
 
   const signals: ComplexitySignals = {
     tokenCount: countTokens(prompt),
-    avgWordLength: wordCount > 0 ? words.reduce((sum, w) => sum + w.length, 0) / wordCount : 0,
+    avgWordLength:
+      wordCount > 0
+        ? words.reduce((sum, w) => sum + w.length, 0) / wordCount
+        : 0,
     sentenceCount: sentences.length,
-    lexicalDiversity: wordCount > 0 ? uniqueWords.size / wordCount : 0,
+    lexicalDiversity:
+      wordCount > 0 ? uniqueWords.size / wordCount : 0,
     codeSignals: (prompt.match(CODE_PATTERNS) || []).length,
-    reasoningKeywords: [...REASONING_KEYWORDS].filter((kw) => lowerPrompt.includes(kw)).length,
-    constraintKeywords: [...CONSTRAINT_KEYWORDS].filter((kw) => lowerPrompt.includes(kw)).length,
+    reasoningKeywords: [...REASONING_KEYWORDS].filter((kw) =>
+      lowerPrompt.includes(kw)
+    ).length,
+    constraintKeywords: [...CONSTRAINT_KEYWORDS].filter((kw) =>
+      lowerPrompt.includes(kw)
+    ).length,
     hasStructuredOutput: STRUCTURED_OUTPUT_PATTERNS.test(prompt),
     subTaskCount: (prompt.match(SUBTASK_PATTERNS) || []).length,
     hasContextDependency: CONTEXT_PATTERNS.test(prompt),
   }
 
   // Weighted composite score (0-100)
-  const w = COMPLEXITY_WEIGHTS
   let score = 0
 
-  // Token count contribution
-  score += Math.min(
-    w.tokenCount.max,
-    (signals.tokenCount / w.tokenCount.divisor) * w.tokenCount.max,
-  )
+  // Token count contribution (0-25 points)
+  // <50 tokens = trivial, 50-200 = moderate, 200-500 = complex, 500+ = expert
+  score += Math.min(25, (signals.tokenCount / 500) * 25)
 
-  // Reasoning keywords
-  score += Math.min(
-    w.reasoningKeywords.max,
-    signals.reasoningKeywords * w.reasoningKeywords.perUnit,
-  )
+  // Reasoning keywords (0-20 points)
+  score += Math.min(20, signals.reasoningKeywords * 5)
 
-  // Constraint keywords
-  score += Math.min(
-    w.constraintKeywords.max,
-    signals.constraintKeywords * w.constraintKeywords.perUnit,
-  )
+  // Constraint keywords (0-10 points)
+  score += Math.min(10, signals.constraintKeywords * 2.5)
 
-  // Code signals
-  score += Math.min(w.codeSignals.max, signals.codeSignals * w.codeSignals.perUnit)
+  // Code signals (0-15 points)
+  score += Math.min(15, signals.codeSignals * 1.5)
 
-  // Lexical diversity — higher diversity = more complex vocabulary
-  score += signals.lexicalDiversity * w.lexicalDiversity.multiplier
+  // Lexical diversity (0-10 points)
+  // Higher diversity = more complex vocabulary
+  score += signals.lexicalDiversity * 10
 
-  // Structured output requirement
-  if (signals.hasStructuredOutput) score += w.structuredOutput.points
+  // Structured output requirement (5 points)
+  if (signals.hasStructuredOutput) score += 5
 
-  // Sub-tasks
-  score += Math.min(w.subTasks.max, signals.subTaskCount * w.subTasks.perUnit)
+  // Sub-tasks (0-10 points)
+  score += Math.min(10, signals.subTaskCount * 3)
 
-  // Context dependency
-  if (signals.hasContextDependency) score += w.contextDependency.points
+  // Context dependency (5 points)
+  if (signals.hasContextDependency) score += 5
 
   score = Math.min(100, Math.round(score))
 
-  const t = TIER_THRESHOLDS
   let tier: ComplexityScore["tier"]
   let recommendedTier: ModelPricing["tier"]
 
-  if (score <= t.trivial) {
+  if (score <= 15) {
     tier = "trivial"
     recommendedTier = "budget"
-  } else if (score <= t.simple) {
+  } else if (score <= 35) {
     tier = "simple"
     recommendedTier = "budget"
-  } else if (score <= t.moderate) {
+  } else if (score <= 55) {
     tier = "moderate"
     recommendedTier = "standard"
-  } else if (score <= t.complex) {
+  } else if (score <= 75) {
     tier = "complex"
     recommendedTier = "premium"
   } else {
@@ -300,10 +275,31 @@ export function routeToModel(
     minTier?: ModelPricing["tier"]
     /** Expected output tokens (for cost comparison) */
     expectedOutputTokens?: number
-  } = {},
+    /**
+     * Enable cross-provider routing. When false (default), only routes within
+     * the default model's provider. Set to true to consider models from all
+     * providers. Use false if your code depends on provider-specific response
+     * formats or features (e.g., Anthropic cache_control).
+     */
+    crossProvider?: boolean
+    /**
+     * Minimum context window required. Filters out models whose context window
+     * is smaller than this value. Useful when routing long-context requests.
+     */
+    minContextWindow?: number
+    /**
+     * Required capabilities. When set, only models that support these features
+     * are considered. Skips models that don't match.
+     */
+    requiredCapabilities?: {
+      vision?: boolean
+      functions?: boolean
+    }
+  } = {}
 ): RoutingDecision {
   const complexity = analyzeComplexity(prompt)
   const expectedOutput = options.expectedOutputTokens ?? 500
+  const enableCrossProvider = options.crossProvider ?? false
 
   const tierOrder: Record<ModelPricing["tier"], number> = {
     budget: 0,
@@ -315,12 +311,31 @@ export function routeToModel(
   const minTier = options.minTier ?? complexity.recommendedTier
   const minTierNum = tierOrder[minTier]
 
+  // Determine the default model's provider for same-provider filtering
+  const defaultModel = MODEL_PRICING[defaultModelId]
+  const defaultProvider = defaultModel?.provider
+
   // Filter models by criteria
   const candidates = Object.values(MODEL_PRICING).filter((m) => {
+    // Explicit provider filter takes highest priority
     if (options.allowedProviders && !options.allowedProviders.includes(m.provider)) {
       return false
     }
-    return tierOrder[m.tier] >= minTierNum
+    // When cross-provider is disabled, restrict to same provider as default
+    if (!enableCrossProvider && defaultProvider && m.provider !== defaultProvider) {
+      return false
+    }
+    // Tier filter
+    if (tierOrder[m.tier] < minTierNum) return false
+    // Context window filter
+    if (options.minContextWindow && m.contextWindow < options.minContextWindow) return false
+    // Capability filters — use pricing registry for richer metadata
+    if (options.requiredCapabilities) {
+      const registryEntry = PRICING_REGISTRY_LOOKUP(m.id)
+      if (options.requiredCapabilities.vision && registryEntry && !registryEntry.supportsVision) return false
+      if (options.requiredCapabilities.functions && registryEntry && !registryEntry.supportsFunctions) return false
+    }
+    return true
   })
 
   // Sort by total cost (cheapest first)
@@ -331,7 +346,11 @@ export function routeToModel(
     }))
     .sort((a, b) => a.cost.totalCost - b.cost.totalCost)
 
-  const defaultCost = estimateCost(defaultModelId, complexity.signals.tokenCount, expectedOutput)
+  const defaultCost = estimateCost(
+    defaultModelId,
+    complexity.signals.tokenCount,
+    expectedOutput
+  )
 
   // If no candidates match the filter, fall back to the default model
   if (sorted.length === 0) {
@@ -341,8 +360,9 @@ export function routeToModel(
       selectedModel: fallbackModel,
       fallbackModel: fallbackModel,
       estimatedCost: defaultCost,
-      fallbackCost: defaultCost,
+      cheapestAlternativeCost: defaultCost,
       savingsVsDefault: 0,
+      crossProvider: false,
     }
   }
 
@@ -356,9 +376,17 @@ export function routeToModel(
     selectedModel: selected.model,
     fallbackModel: fallback.model,
     estimatedCost: selected.cost,
-    fallbackCost: fallback.cost,
+    cheapestAlternativeCost: selected.cost,
     savingsVsDefault: defaultCost.totalCost - selected.cost.totalCost,
+    crossProvider: defaultProvider !== undefined && selected.model.provider !== defaultProvider,
   }
+}
+
+/** Look up model capabilities from the pricing registry */
+function PRICING_REGISTRY_LOOKUP(modelId: string): { supportsVision: boolean; supportsFunctions: boolean } | undefined {
+  const entry = PRICING_REGISTRY[modelId]
+  if (!entry) return undefined
+  return { supportsVision: entry.supportsVision, supportsFunctions: entry.supportsFunctions }
 }
 
 /**
@@ -380,7 +408,7 @@ export function routeToModel(
  */
 export function rankModels(
   inputTokens: number,
-  outputTokens: number,
+  outputTokens: number
 ): { model: ModelPricing; cost: ReturnType<typeof estimateCost> }[] {
   return Object.values(MODEL_PRICING)
     .map((m) => ({

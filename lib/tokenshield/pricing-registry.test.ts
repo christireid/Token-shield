@@ -11,6 +11,7 @@ import {
   registerModel,
   getModelPricing,
   getModelsByProvider,
+  fetchLatestPricing,
   type ModelPricingEntry,
 } from "./pricing-registry"
 
@@ -173,5 +174,54 @@ describe("registerModel", () => {
 
     expect(PRICING_REGISTRY["test-custom-model"].name).toBe("V2")
     expect(PRICING_REGISTRY["test-custom-model"].inputPerMillion).toBe(0.5)
+  })
+})
+
+describe("fetchLatestPricing", () => {
+  it("rejects invalid URLs", async () => {
+    const result = await fetchLatestPricing("not-a-url")
+    expect(result.errors.length).toBeGreaterThan(0)
+    expect(result.errors[0]).toContain("Invalid URL")
+  })
+
+  it("rejects non-HTTPS URLs", async () => {
+    const result = await fetchLatestPricing("http://api.tokenshield.dev/pricing")
+    expect(result.errors.length).toBeGreaterThan(0)
+    expect(result.errors[0]).toContain("HTTPS")
+  })
+
+  it("rejects disallowed hostnames (SSRF prevention)", async () => {
+    const result = await fetchLatestPricing("https://evil.example.com/pricing")
+    expect(result.errors.length).toBeGreaterThan(0)
+    expect(result.errors[0]).toContain("not in the allowed list")
+  })
+
+  it("rejects localhost URLs", async () => {
+    const result = await fetchLatestPricing("https://localhost/pricing")
+    expect(result.errors.length).toBeGreaterThan(0)
+    expect(result.errors[0]).toContain("not in the allowed list")
+  })
+
+  it("allows custom hosts via allowedHosts option", async () => {
+    // This will fail at fetch time (no server), but should pass URL validation
+    const result = await fetchLatestPricing("https://my-custom-api.example.com/pricing", {
+      allowedHosts: ["my-custom-api.example.com"],
+      timeoutMs: 100,
+      force: true,
+    })
+    // Should not have URL validation errors; may have fetch errors
+    const urlErrors = result.errors.filter((e) => e.includes("not in the allowed list") || e.includes("Invalid URL") || e.includes("HTTPS"))
+    expect(urlErrors.length).toBe(0)
+  })
+
+  it("accepts allowed tokenshield.dev hosts", async () => {
+    // Will fail at fetch time but should pass URL validation
+    const result = await fetchLatestPricing("https://api.tokenshield.dev/pricing", {
+      timeoutMs: 100,
+      force: true,
+    })
+    // Should not have URL validation errors
+    const urlErrors = result.errors.filter((e) => e.includes("not in the allowed list") || e.includes("Invalid URL") || e.includes("HTTPS"))
+    expect(urlErrors.length).toBe(0)
   })
 })

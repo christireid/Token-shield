@@ -78,6 +78,8 @@ export {
   ResponseCache,
   normalizeText,
   textSimilarity,
+  classifyContentType,
+  type ContentType,
   type CacheEntry,
   type CacheConfig,
 } from "./response-cache"
@@ -199,6 +201,8 @@ export {
   registerModel,
   getModelPricing,
   getModelsByProvider,
+  fetchLatestPricing,
+  getLastPricingFetchTime,
   type ModelPricingEntry,
 } from "./pricing-registry"
 
@@ -340,3 +344,25 @@ export {
   formatResults,
   type BenchmarkResult,
 } from "./benchmark"
+
+// License Gating (Open-Core)
+export {
+  activateLicense,
+  getLicenseInfo,
+  isModulePermitted,
+  getModuleTier,
+  getModulesForTier,
+  resetLicense,
+  generateTestKey,
+  type LicenseTier,
+  type LicenseInfo,
+} from "./license"
+
+// Audit Logging (Enterprise)
+export {
+  AuditLog,
+  type AuditEntry,
+  type AuditEventType,
+  type AuditSeverity,
+  type AuditLogConfig,
+} from "./audit-log"

@@ -155,6 +155,68 @@ describe("predictOutputTokens", () => {
     })
   })
 
+  describe("length modifiers", () => {
+    it("reduces prediction for brevity instructions on general tasks", () => {
+      const verbose = predictOutputTokens("Tell me about quantum computing")
+      const brief = predictOutputTokens("Tell me about quantum computing. Be concise.")
+      // Brief should predict fewer tokens or equal (due to modifier)
+      expect(brief.predictedTokens).toBeLessThanOrEqual(verbose.predictedTokens)
+    })
+
+    it("increases prediction for verbosity instructions on analysis tasks", () => {
+      const normal = predictOutputTokens("Explain how React works")
+      const detailed = predictOutputTokens("Explain how React works in detail, step by step")
+      expect(detailed.predictedTokens).toBeGreaterThanOrEqual(normal.predictedTokens)
+    })
+
+    it("does not apply length modifiers to classification tasks", () => {
+      // "brief" in the prompt should not affect classification predictions
+      const result = predictOutputTokens(
+        "Classify this brief text as positive or negative sentiment",
+      )
+      expect(result.taskType).toBe("classification")
+      expect(result.predictedTokens).toBe(20) // unchanged by "brief"
+    })
+
+    it("does not apply length modifiers to summarization tasks", () => {
+      const result = predictOutputTokens("Summarize the following article in a brief overview")
+      expect(result.taskType).toBe("summarization")
+      expect(result.predictedTokens).toBe(150) // unchanged by "brief"
+    })
+  })
+
+  describe("model multipliers", () => {
+    it("adjusts predictions for verbose models (Claude)", () => {
+      const base = predictOutputTokens("Explain gravity", {})
+      const claude = predictOutputTokens("Explain gravity", { modelId: "claude-opus-4.5" })
+      // Claude should predict more tokens (1.3x multiplier)
+      expect(claude.predictedTokens).toBeGreaterThan(base.predictedTokens)
+    })
+
+    it("adjusts predictions for concise models (GPT-4.1 Nano)", () => {
+      const base = predictOutputTokens("Explain gravity", {})
+      const nano = predictOutputTokens("Explain gravity", { modelId: "gpt-4.1-nano" })
+      // Nano should predict fewer tokens (0.75x multiplier)
+      expect(nano.predictedTokens).toBeLessThan(base.predictedTokens)
+    })
+
+    it("uses 1.0 multiplier for unknown models", () => {
+      const base = predictOutputTokens("What is the capital of France?", {})
+      const unknown = predictOutputTokens("What is the capital of France?", {
+        modelId: "unknown-model-xyz",
+      })
+      expect(unknown.predictedTokens).toBe(base.predictedTokens)
+    })
+
+    it("matches model prefix for versioned models", () => {
+      const versioned = predictOutputTokens("What is the capital of France?", {
+        modelId: "gpt-4o-2024-08-06",
+      })
+      const base = predictOutputTokens("What is the capital of France?", { modelId: "gpt-4o" })
+      expect(versioned.predictedTokens).toBe(base.predictedTokens)
+    })
+  })
+
   describe("OutputPrediction shape", () => {
     it("returns all required fields", () => {
       const result = predictOutputTokens("Hello")
