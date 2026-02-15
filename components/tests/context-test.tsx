@@ -25,25 +25,79 @@ function generateConversation(): Message[] {
       content:
         "You are a helpful assistant that specializes in web development, React, TypeScript, and modern frontend architecture. Always provide concise, practical advice.",
     },
-    { role: "user", content: "I'm building a React app with TypeScript. Should I use Vite or Next.js for my project?" },
-    { role: "assistant", content: "It depends on your needs. If you need server-side rendering, API routes, file-based routing, and optimized production builds, Next.js is the better choice. If you want a pure SPA with fast HMR and minimal configuration, Vite is excellent. For most production apps, I'd recommend Next.js because of its built-in optimizations and deployment story." },
-    { role: "user", content: "I went with Next.js. Now I need to set up authentication. What are my options?" },
-    { role: "assistant", content: "For Next.js authentication, your main options are: 1) NextAuth.js (now Auth.js) - the most popular, supports many providers, handles sessions. 2) Clerk - fully managed auth with beautiful UI components. 3) Supabase Auth - if you're using Supabase for your database. 4) Custom JWT implementation with middleware. For most projects, I'd start with Auth.js because it's free, flexible, and well-documented." },
+    {
+      role: "user",
+      content:
+        "I'm building a React app with TypeScript. Should I use Vite or Next.js for my project?",
+    },
+    {
+      role: "assistant",
+      content:
+        "It depends on your needs. If you need server-side rendering, API routes, file-based routing, and optimized production builds, Next.js is the better choice. If you want a pure SPA with fast HMR and minimal configuration, Vite is excellent. For most production apps, I'd recommend Next.js because of its built-in optimizations and deployment story.",
+    },
+    {
+      role: "user",
+      content: "I went with Next.js. Now I need to set up authentication. What are my options?",
+    },
+    {
+      role: "assistant",
+      content:
+        "For Next.js authentication, your main options are: 1) NextAuth.js (now Auth.js) - the most popular, supports many providers, handles sessions. 2) Clerk - fully managed auth with beautiful UI components. 3) Supabase Auth - if you're using Supabase for your database. 4) Custom JWT implementation with middleware. For most projects, I'd start with Auth.js because it's free, flexible, and well-documented.",
+    },
     { role: "user", content: "What about state management? Redux seems heavy for my project." },
-    { role: "assistant", content: "Redux is indeed heavy for most modern React apps. Better alternatives: 1) Zustand - minimal API, tiny bundle (1KB), works great with TypeScript. 2) Jotai - atomic state management, bottom-up approach. 3) React Query/TanStack Query - for server state (API data caching). 4) Just React Context + useReducer for simple global state. My recommendation: use TanStack Query for server state and Zustand for client state." },
+    {
+      role: "assistant",
+      content:
+        "Redux is indeed heavy for most modern React apps. Better alternatives: 1) Zustand - minimal API, tiny bundle (1KB), works great with TypeScript. 2) Jotai - atomic state management, bottom-up approach. 3) React Query/TanStack Query - for server state (API data caching). 4) Just React Context + useReducer for simple global state. My recommendation: use TanStack Query for server state and Zustand for client state.",
+    },
     { role: "user", content: "How do I handle form validation in React?" },
-    { role: "assistant", content: "Use React Hook Form with Zod for schema validation. React Hook Form is performant because it minimizes re-renders using uncontrolled components. Zod gives you TypeScript-first schema validation with great error messages. Together they're the gold standard. Install: npm i react-hook-form @hookform/resolvers zod. Define your schema with z.object(), then use useForm with zodResolver." },
-    { role: "user", content: "I need to implement a data table with sorting, filtering, and pagination. What should I use?" },
-    { role: "assistant", content: "TanStack Table (formerly React Table) v8 is the standard. It's headless (you control the UI), supports sorting, filtering, pagination, column resizing, and virtual scrolling. Pair it with shadcn/ui's Table component for styling. For simpler cases, shadcn/ui has a DataTable example that wraps TanStack Table with a nice API." },
+    {
+      role: "assistant",
+      content:
+        "Use React Hook Form with Zod for schema validation. React Hook Form is performant because it minimizes re-renders using uncontrolled components. Zod gives you TypeScript-first schema validation with great error messages. Together they're the gold standard. Install: npm i react-hook-form @hookform/resolvers zod. Define your schema with z.object(), then use useForm with zodResolver.",
+    },
+    {
+      role: "user",
+      content:
+        "I need to implement a data table with sorting, filtering, and pagination. What should I use?",
+    },
+    {
+      role: "assistant",
+      content:
+        "TanStack Table (formerly React Table) v8 is the standard. It's headless (you control the UI), supports sorting, filtering, pagination, column resizing, and virtual scrolling. Pair it with shadcn/ui's Table component for styling. For simpler cases, shadcn/ui has a DataTable example that wraps TanStack Table with a nice API.",
+    },
     { role: "user", content: "What's the best way to handle API calls in Next.js?" },
-    { role: "assistant", content: "In Next.js App Router: 1) Server Components - fetch directly in the component, data fetches on the server. 2) Route Handlers (app/api/) - for mutations and external API proxying. 3) Server Actions - for form submissions and mutations, call server code from client. For client-side data fetching, use SWR or TanStack Query. Avoid fetching in useEffect. The pattern is: server components for initial data, server actions for mutations, SWR for real-time client updates." },
+    {
+      role: "assistant",
+      content:
+        "In Next.js App Router: 1) Server Components - fetch directly in the component, data fetches on the server. 2) Route Handlers (app/api/) - for mutations and external API proxying. 3) Server Actions - for form submissions and mutations, call server code from client. For client-side data fetching, use SWR or TanStack Query. Avoid fetching in useEffect. The pattern is: server components for initial data, server actions for mutations, SWR for real-time client updates.",
+    },
     { role: "user", content: "How do I optimize images in my Next.js app?" },
-    { role: "assistant", content: "Use the next/image component. It automatically: 1) Lazy loads images, 2) Serves WebP/AVIF formats, 3) Resizes to the correct dimensions, 4) Adds blur placeholders. For external images, add the domains to next.config.js images.remotePatterns. For large hero images, use priority prop to preload them. Use the fill prop for responsive images in containers. Avoid width/height guessing - use actual image dimensions." },
+    {
+      role: "assistant",
+      content:
+        "Use the next/image component. It automatically: 1) Lazy loads images, 2) Serves WebP/AVIF formats, 3) Resizes to the correct dimensions, 4) Adds blur placeholders. For external images, add the domains to next.config.js images.remotePatterns. For large hero images, use priority prop to preload them. Use the fill prop for responsive images in containers. Avoid width/height guessing - use actual image dimensions.",
+    },
     { role: "user", content: "I need to add dark mode to my app. What's the cleanest approach?" },
-    { role: "assistant", content: "Use next-themes with Tailwind CSS. Install: npm i next-themes. Wrap your app with ThemeProvider in layout.tsx. Use the 'class' strategy in tailwind.config (darkMode: 'class'). Then use dark: prefix in your Tailwind classes. For system preference detection, next-themes handles it automatically. Use the useTheme hook to toggle. Store preference in localStorage (next-themes does this too)." },
-    { role: "user", content: "One more thing - should I deploy to Vercel or can I self-host Next.js?" },
-    { role: "assistant", content: "Vercel is the path of least resistance for Next.js - zero config, automatic preview deployments, edge functions, analytics. For self-hosting: you can use Docker with 'next start', deploy to AWS with SST, or use Coolify for a self-hosted Vercel-like experience. Self-hosting means you manage caching, CDN, and serverless functions yourself. For most teams, Vercel saves enough engineering time to justify the cost." },
-    { role: "user", content: "Based on everything we discussed, give me a quick summary of the tech stack you'd recommend for my project." },
+    {
+      role: "assistant",
+      content:
+        "Use next-themes with Tailwind CSS. Install: npm i next-themes. Wrap your app with ThemeProvider in layout.tsx. Use the 'class' strategy in tailwind.config (darkMode: 'class'). Then use dark: prefix in your Tailwind classes. For system preference detection, next-themes handles it automatically. Use the useTheme hook to toggle. Store preference in localStorage (next-themes does this too).",
+    },
+    {
+      role: "user",
+      content: "One more thing - should I deploy to Vercel or can I self-host Next.js?",
+    },
+    {
+      role: "assistant",
+      content:
+        "Vercel is the path of least resistance for Next.js - zero config, automatic preview deployments, edge functions, analytics. For self-hosting: you can use Docker with 'next start', deploy to AWS with SST, or use Coolify for a self-hosted Vercel-like experience. Self-hosting means you manage caching, CDN, and serverless functions yourself. For most teams, Vercel saves enough engineering time to justify the cost.",
+    },
+    {
+      role: "user",
+      content:
+        "Based on everything we discussed, give me a quick summary of the tech stack you'd recommend for my project.",
+    },
   ]
   return msgs
 }
@@ -86,7 +140,11 @@ export function ContextManagerTest() {
       const rawClientTokens = countChatTokens(rawMessages as ChatMessage[])
 
       const rawResponse = await callOpenAI(rawMessages, model, { max_tokens: 300 })
-      const rawCost = calculateRealCost(model, rawResponse.usage.prompt_tokens ?? 0, rawResponse.usage.completion_tokens ?? 0)
+      const rawCost = calculateRealCost(
+        model,
+        rawResponse.usage.prompt_tokens ?? 0,
+        rawResponse.usage.completion_tokens ?? 0,
+      )
 
       setRawResult({
         label: "Raw (no optimization)",
@@ -115,7 +173,11 @@ export function ContextManagerTest() {
       const trimmedClientTokens = countChatTokens(trimmedMessages as ChatMessage[])
 
       const trimmedResponse = await callOpenAI(trimmedMessages, model, { max_tokens: 300 })
-      const trimmedCost = calculateRealCost(model, trimmedResponse.usage.prompt_tokens ?? 0, trimmedResponse.usage.completion_tokens ?? 0)
+      const trimmedCost = calculateRealCost(
+        model,
+        trimmedResponse.usage.prompt_tokens ?? 0,
+        trimmedResponse.usage.completion_tokens ?? 0,
+      )
 
       setTrimmedResult({
         label: `TokenShield (budget: 600 input tokens)`,
@@ -136,31 +198,36 @@ export function ContextManagerTest() {
     }
   }
 
-  const savings = rawResult && trimmedResult
-    ? {
-        tokensSaved: rawResult.openaiPromptTokens - trimmedResult.openaiPromptTokens,
-        costSaved: rawResult.realCost.totalCost - trimmedResult.realCost.totalCost,
-        percentSaved: ((rawResult.realCost.totalCost - trimmedResult.realCost.totalCost) / rawResult.realCost.totalCost * 100),
-        tokenAccuracy: rawResult.clientTokenEstimate > 0
-          ? ((1 - Math.abs(rawResult.clientTokenEstimate - rawResult.openaiPromptTokens) / rawResult.openaiPromptTokens) * 100)
-          : 0,
-      }
-    : null
+  const savings =
+    rawResult && trimmedResult
+      ? {
+          tokensSaved: rawResult.openaiPromptTokens - trimmedResult.openaiPromptTokens,
+          costSaved: rawResult.realCost.totalCost - trimmedResult.realCost.totalCost,
+          percentSaved:
+            ((rawResult.realCost.totalCost - trimmedResult.realCost.totalCost) /
+              rawResult.realCost.totalCost) *
+            100,
+          tokenAccuracy:
+            rawResult.clientTokenEstimate > 0
+              ? (1 -
+                  Math.abs(rawResult.clientTokenEstimate - rawResult.openaiPromptTokens) /
+                    rawResult.openaiPromptTokens) *
+                100
+              : 0,
+        }
+      : null
 
   return (
     <div className="space-y-4">
       <div>
         <h3 className="text-lg font-semibold text-foreground">Context Manager Test</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Sends a 20-message dev conversation to GPT-4o-mini twice: once raw, once trimmed by TokenShield to a 600-token input budget. Compares OpenAI{"'"}s real usage.prompt_tokens.
+          Sends a 20-message dev conversation to GPT-4o-mini twice: once raw, once trimmed by
+          TokenShield to a 600-token input budget. Compares OpenAI{"'"}s real usage.prompt_tokens.
         </p>
       </div>
 
-      <Button
-        onClick={runTest}
-        disabled={running}
-        className="min-h-[44px] w-full sm:w-auto"
-      >
+      <Button onClick={runTest} disabled={running} className="min-h-[44px] w-full sm:w-auto">
         {running ? "Running real API calls..." : "Run Test (2 API calls)"}
       </Button>
 
@@ -179,9 +246,7 @@ export function ContextManagerTest() {
                   key={result.label}
                   className="rounded-lg border border-border bg-card p-4 space-y-3"
                 >
-                  <div className="font-mono text-xs font-bold text-primary">
-                    {result.label}
-                  </div>
+                  <div className="font-mono text-xs font-bold text-primary">{result.label}</div>
                   <div className="space-y-1.5 text-sm">
                     <Row label="Messages sent" value={result.messagesCount.toString()} />
                     <Row
@@ -213,7 +278,7 @@ export function ContextManagerTest() {
                     </div>
                   </div>
                 </div>
-              )
+              ),
           )}
         </div>
       )}
@@ -248,7 +313,8 @@ export function ContextManagerTest() {
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            All numbers from OpenAI{"'"}s usage object. Cost calculated from openai.com/api/pricing. gpt-4o-mini: $0.15/M input, $0.60/M output.
+            All numbers from OpenAI{"'"}s usage object. Cost calculated from openai.com/api/pricing.
+            gpt-4o-mini: $0.15/M input, $0.60/M output.
           </p>
         </div>
       )}
@@ -260,7 +326,9 @@ function Row({ label, value, highlight }: { label: string; value: string; highli
   return (
     <div className="flex items-baseline justify-between gap-2">
       <span className="text-muted-foreground">{label}</span>
-      <span className={`font-mono text-xs ${highlight ? "font-bold text-primary" : "text-foreground"}`}>
+      <span
+        className={`font-mono text-xs ${highlight ? "font-bold text-primary" : "text-foreground"}`}
+      >
         {value}
       </span>
     </div>

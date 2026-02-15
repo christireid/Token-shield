@@ -8,7 +8,8 @@ export function CodeSection() {
           How each module works
         </h2>
         <p className="mt-2 mb-8 text-sm text-muted-foreground sm:text-base">
-          Copy-paste examples for every module. Each one works independently or combined through the middleware.
+          Copy-paste examples for every module. Each one works independently or combined through the
+          middleware.
         </p>
         <CodeExamples />
       </div>

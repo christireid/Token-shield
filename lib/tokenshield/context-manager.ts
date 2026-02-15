@@ -12,7 +12,10 @@
  * - Summarization hook: replace old messages with a summary
  */
 
-import { countTokens, encode, decode } from "gpt-tokenizer"
+import { countTokens } from "gpt-tokenizer"
+
+/** OpenAI chat completion priming overhead (see tiktoken cookbook) */
+const CHAT_OVERHEAD_TOKENS = 3
 
 export interface Message {
   role: "system" | "user" | "assistant" | "tool"
@@ -78,19 +81,12 @@ function messageTokens(msg: Message): number {
  * // result.evictedCount — number of messages dropped
  * ```
  */
-export function fitToBudget(
-  messages: Message[],
-  budget: ContextBudget
-): ContextResult {
+export function fitToBudget(messages: Message[], budget: ContextBudget): ContextResult {
   const inputBudget = budget.maxContextTokens - budget.reservedForOutput
 
   // Separate pinned (system) messages from the rest
-  const pinned = messages.filter(
-    (m) => m.pinned || m.role === "system"
-  )
-  const unpinned = messages.filter(
-    (m) => !m.pinned && m.role !== "system"
-  )
+  const pinned = messages.filter((m) => m.pinned || m.role === "system")
+  const unpinned = messages.filter((m) => !m.pinned && m.role !== "system")
 
   // Count pinned tokens first
   let pinnedTokens = 0
@@ -98,8 +94,7 @@ export function fitToBudget(
     pinnedTokens += messageTokens(msg)
   }
 
-  // 3 tokens for chat overhead (priming)
-  const chatOverhead = 3
+  const chatOverhead = CHAT_OVERHEAD_TOKENS
   let remainingBudget = inputBudget - pinnedTokens - chatOverhead
 
   // Fill from newest to oldest
@@ -152,10 +147,7 @@ export function fitToBudget(
  * // result.evictedCount — messages dropped from the front
  * ```
  */
-export function slidingWindow(
-  messages: Message[],
-  maxMessages: number
-): ContextResult {
+export function slidingWindow(messages: Message[], maxMessages: number): ContextResult {
   const safeMax = Math.max(0, Math.floor(maxMessages))
   const system = messages.filter((m) => m.role === "system")
   const nonSystem = messages.filter((m) => m.role !== "system")
@@ -163,7 +155,7 @@ export function slidingWindow(
   const evicted = safeMax > 0 ? nonSystem.slice(0, -safeMax) : nonSystem
   const finalMessages = [...system, ...kept]
 
-  let totalTokens = 3 // chat overhead
+  let totalTokens = CHAT_OVERHEAD_TOKENS
   for (const msg of finalMessages) {
     totalTokens += messageTokens(msg)
   }
@@ -203,10 +195,7 @@ export function slidingWindow(
  * // High-priority messages are kept even if older
  * ```
  */
-export function priorityFit(
-  messages: Message[],
-  budget: ContextBudget
-): ContextResult {
+export function priorityFit(messages: Message[], budget: ContextBudget): ContextResult {
   const inputBudget = budget.maxContextTokens - budget.reservedForOutput
   const system = messages.filter((m) => m.role === "system")
   const nonSystem = messages.filter((m) => m.role !== "system")
@@ -218,7 +207,7 @@ export function priorityFit(
     return (b.timestamp ?? 0) - (a.timestamp ?? 0)
   })
 
-  let pinnedTokens = 3
+  let pinnedTokens = CHAT_OVERHEAD_TOKENS
   for (const msg of system) {
     pinnedTokens += messageTokens(msg)
   }
@@ -271,17 +260,12 @@ export function priorityFit(
  * // summary.content starts with "Previous conversation summary:\n"
  * ```
  */
-export function createSummaryMessage(
-  evictedMessages: Message[]
-): Message {
+export function createSummaryMessage(evictedMessages: Message[]): Message {
   // Build a condensed representation of the conversation
   const summary = evictedMessages
     .map((m) => {
       // Truncate each message to first 100 chars for the summary
-      const short =
-        m.content.length > 100
-          ? m.content.slice(0, 100) + "..."
-          : m.content
+      const short = m.content.length > 100 ? m.content.slice(0, 100) + "..." : m.content
       return `[${m.role}]: ${short}`
     })
     .join("\n")
@@ -316,19 +300,13 @@ export function createSummaryMessage(
  * }
  * ```
  */
-export function smartFit(
-  messages: Message[],
-  budget: ContextBudget
-): ContextResult {
+export function smartFit(messages: Message[], budget: ContextBudget): ContextResult {
   const result = fitToBudget(messages, budget)
 
   if (result.evictedCount > 0) {
     // Get the evicted messages
     const evictedMessages = messages.filter(
-      (m) =>
-        m.role !== "system" &&
-        !m.pinned &&
-        !result.messages.includes(m)
+      (m) => m.role !== "system" && !m.pinned && !result.messages.includes(m),
     )
 
     if (evictedMessages.length > 0) {
@@ -338,12 +316,8 @@ export function smartFit(
       // Only add summary if it fits in the remaining budget
       if (summaryTokens <= result.budgetRemaining) {
         // Insert summary after system messages, before conversation
-        const systemMsgs = result.messages.filter(
-          (m) => m.role === "system"
-        )
-        const nonSystemMsgs = result.messages.filter(
-          (m) => m.role !== "system"
-        )
+        const systemMsgs = result.messages.filter((m) => m.role === "system")
+        const nonSystemMsgs = result.messages.filter((m) => m.role !== "system")
         result.messages = [...systemMsgs, summaryMsg, ...nonSystemMsgs]
         result.totalTokens += summaryTokens
         result.budgetUsed += summaryTokens

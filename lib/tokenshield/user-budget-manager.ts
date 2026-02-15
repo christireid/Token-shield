@@ -20,11 +20,8 @@ import { estimateCost } from "./cost-estimator"
 import { shieldEvents } from "./event-bus"
 
 import {
-  type UserBudgetTier,
   type UserBudgetLimits,
   type UserBudgetConfig,
-  type BudgetExceededEvent,
-  type BudgetWarningEvent,
   type UserBudgetStatus,
   type UserSpendRecord,
   ONE_DAY_MS,
@@ -38,6 +35,9 @@ import {
   buildBudgetSnapshot,
   evictStaleWarnings,
 } from "./user-budget-types"
+
+/** Warning threshold: fire warnings when spend reaches this fraction of the limit */
+const WARNING_THRESHOLD = 0.8
 
 // Re-export all public types so existing imports from "./user-budget-manager" still work
 export type {
@@ -64,7 +64,10 @@ export class UserBudgetManager {
   /** Monotonic version counter — incremented on every state change */
   private _version = 0
   /** Cached snapshots per user, invalidated when _version or time bucket changes */
-  private _snapshotCache = new Map<string, { version: number; timeBucket: number; snapshot: UserBudgetStatus }>()
+  private _snapshotCache = new Map<
+    string,
+    { version: number; timeBucket: number; snapshot: UserBudgetStatus }
+  >()
 
   constructor(config: UserBudgetConfig = {}) {
     this.config = config
@@ -99,7 +102,12 @@ export class UserBudgetManager {
    * A limit value of 0 means "no limit" for that time window — only positive
    * limits are enforced.
    */
-  check(userId: string, modelId?: string, estimatedInputTokens?: number, estimatedOutputTokens?: number): {
+  check(
+    userId: string,
+    modelId?: string,
+    estimatedInputTokens?: number,
+    estimatedOutputTokens?: number,
+  ): {
     allowed: boolean
     reason?: string
     status: UserBudgetStatus
@@ -123,7 +131,7 @@ export class UserBudgetManager {
         estimatedCostDollars = estimateCost(
           modelId,
           estimatedInputTokens,
-          estimatedOutputTokens ?? 500
+          estimatedOutputTokens ?? 500,
         ).totalCost
       } catch {
         // Unknown model, skip cost estimate
@@ -147,7 +155,10 @@ export class UserBudgetManager {
       if (dailyWarningTime !== undefined && now - dailyWarningTime > ONE_DAY_MS) {
         this.warningFired.delete(dailyWarningKey)
       }
-      if (projectedDaily >= status.limits.daily * 0.8 && !this.warningFired.has(dailyWarningKey)) {
+      if (
+        projectedDaily >= status.limits.daily * WARNING_THRESHOLD &&
+        !this.warningFired.has(dailyWarningKey)
+      ) {
         this.warningFired.set(dailyWarningKey, now)
         const warningEvent = {
           limitType: "daily" as const,
@@ -157,7 +168,13 @@ export class UserBudgetManager {
           timestamp: Date.now(),
         }
         this.config.onBudgetWarning?.(userId, warningEvent)
-        shieldEvents.emit('userBudget:warning', { userId, limitType: warningEvent.limitType, currentSpend: warningEvent.currentSpend, limit: warningEvent.limit, percentUsed: warningEvent.percentUsed })
+        shieldEvents.emit("userBudget:warning", {
+          userId,
+          limitType: warningEvent.limitType,
+          currentSpend: warningEvent.currentSpend,
+          limit: warningEvent.limit,
+          percentUsed: warningEvent.percentUsed,
+        })
       }
       if (projectedDaily >= status.limits.daily) {
         const exceededEvent = {
@@ -168,7 +185,12 @@ export class UserBudgetManager {
           timestamp: Date.now(),
         }
         this.config.onBudgetExceeded?.(userId, exceededEvent)
-        shieldEvents.emit('userBudget:exceeded', { userId, limitType: exceededEvent.limitType, currentSpend: exceededEvent.currentSpend, limit: exceededEvent.limit })
+        shieldEvents.emit("userBudget:exceeded", {
+          userId,
+          limitType: exceededEvent.limitType,
+          currentSpend: exceededEvent.currentSpend,
+          limit: exceededEvent.limit,
+        })
         return {
           allowed: false,
           reason: `User ${userId} daily budget exceeded ($${status.spend.daily.toFixed(4)} / $${status.limits.daily.toFixed(2)})`,
@@ -186,7 +208,10 @@ export class UserBudgetManager {
       if (monthlyWarningTime !== undefined && now - monthlyWarningTime > THIRTY_DAYS_MS) {
         this.warningFired.delete(monthlyWarningKey)
       }
-      if (projectedMonthly >= status.limits.monthly * 0.8 && !this.warningFired.has(monthlyWarningKey)) {
+      if (
+        projectedMonthly >= status.limits.monthly * WARNING_THRESHOLD &&
+        !this.warningFired.has(monthlyWarningKey)
+      ) {
         this.warningFired.set(monthlyWarningKey, now)
         const warningEvent = {
           limitType: "monthly" as const,
@@ -196,7 +221,13 @@ export class UserBudgetManager {
           timestamp: Date.now(),
         }
         this.config.onBudgetWarning?.(userId, warningEvent)
-        shieldEvents.emit('userBudget:warning', { userId, limitType: warningEvent.limitType, currentSpend: warningEvent.currentSpend, limit: warningEvent.limit, percentUsed: warningEvent.percentUsed })
+        shieldEvents.emit("userBudget:warning", {
+          userId,
+          limitType: warningEvent.limitType,
+          currentSpend: warningEvent.currentSpend,
+          limit: warningEvent.limit,
+          percentUsed: warningEvent.percentUsed,
+        })
       }
       if (projectedMonthly >= status.limits.monthly) {
         const exceededEvent = {
@@ -207,7 +238,12 @@ export class UserBudgetManager {
           timestamp: Date.now(),
         }
         this.config.onBudgetExceeded?.(userId, exceededEvent)
-        shieldEvents.emit('userBudget:exceeded', { userId, limitType: exceededEvent.limitType, currentSpend: exceededEvent.currentSpend, limit: exceededEvent.limit })
+        shieldEvents.emit("userBudget:exceeded", {
+          userId,
+          limitType: exceededEvent.limitType,
+          currentSpend: exceededEvent.currentSpend,
+          limit: exceededEvent.limit,
+        })
         return {
           allowed: false,
           reason: `User ${userId} monthly budget exceeded ($${status.spend.monthly.toFixed(4)} / $${status.limits.monthly.toFixed(2)})`,
@@ -241,7 +277,12 @@ export class UserBudgetManager {
    *   When provided, this amount (not the actual cost) is subtracted from in-flight
    *   to prevent phantom accumulation from estimation inaccuracies.
    */
-  async recordSpend(userId: string, cost: number, model: string, estimatedCost?: number): Promise<void> {
+  async recordSpend(
+    userId: string,
+    cost: number,
+    model: string,
+    estimatedCost?: number,
+  ): Promise<void> {
     if (cost < 0) return // Ignore negative costs
     if (!userId) return // Ignore empty user IDs
 
@@ -291,7 +332,7 @@ export class UserBudgetManager {
       }
     }
 
-    shieldEvents.emit('userBudget:spend', { userId, cost, model })
+    shieldEvents.emit("userBudget:spend", { userId, cost, model })
     this.notify()
   }
 
@@ -332,9 +373,10 @@ export class UserBudgetManager {
       return cached.snapshot
     }
 
-    // Evict all cache entries when the cache grows too large
+    // LRU eviction: remove oldest entry when cache grows too large
     if (this._snapshotCache.size > MAX_CACHE_SIZE) {
-      this._snapshotCache.clear()
+      const oldestKey = this._snapshotCache.keys().next().value
+      if (oldestKey !== undefined) this._snapshotCache.delete(oldestKey)
     }
 
     const limits = resolveUserLimits(this.config, userId)
@@ -344,7 +386,8 @@ export class UserBudgetManager {
     const snapshot = buildBudgetSnapshot(userId, limits, spend, userInflight)
 
     // If cached snapshot has identical values, keep the old reference
-    if (cached &&
+    if (
+      cached &&
       cached.snapshot.spend.daily === snapshot.spend.daily &&
       cached.snapshot.spend.monthly === snapshot.spend.monthly &&
       cached.snapshot.isOverBudget === snapshot.isOverBudget &&
@@ -352,7 +395,11 @@ export class UserBudgetManager {
       cached.snapshot.tier === snapshot.tier &&
       cached.snapshot.limits === snapshot.limits
     ) {
-      this._snapshotCache.set(userId, { version: this._version, timeBucket, snapshot: cached.snapshot })
+      this._snapshotCache.set(userId, {
+        version: this._version,
+        timeBucket,
+        snapshot: cached.snapshot,
+      })
       return cached.snapshot
     }
 
@@ -407,7 +454,7 @@ export class UserBudgetManager {
         // Merge: keep any in-memory records that were added while hydration was in flight.
         // Deduplicate by checking timestamp+userId+cost+model.
         const existingKeys = new Set(
-          this.records.map((r) => `${r.userId}:${r.timestamp}:${r.cost}:${r.model}`)
+          this.records.map((r) => `${r.userId}:${r.timestamp}:${r.cost}:${r.model}`),
         )
         const merged = [...this.records]
         for (const r of validPersisted) {

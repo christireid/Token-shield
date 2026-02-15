@@ -8,13 +8,130 @@
 
 import { MODEL_PRICING } from "./cost-estimator"
 import { StreamTokenTracker } from "./stream-tracker"
+import type { EventBus, TokenShieldEvents } from "./event-bus"
 import {
-  SHIELD_META,
   extractLastUserText,
   safeCost,
+  getShieldMeta,
   type MiddlewareContext,
   type ShieldMeta,
 } from "./middleware-types"
+
+/** Emit an event, swallowing any listener errors (non-fatal). */
+function safeEmit<K extends keyof TokenShieldEvents>(
+  bus: EventBus,
+  name: K,
+  data: TokenShieldEvents[K],
+): void {
+  try {
+    bus.emit(name, data)
+  } catch {
+    /* non-fatal */
+  }
+}
+
+/**
+ * Conservative fallback input price ($/M tokens) used when the model isn't
+ * in MODEL_PRICING. Used for savings estimation, so a mid-tier price avoids
+ * understating the value of context trimming.
+ */
+const SAVINGS_FALLBACK_INPUT_PER_MILLION = 2.5
+
+/**
+ * Shared post-request recording logic used by both wrapGenerate and wrapStream.
+ * Computes savings, records in ledger, emits events, completes guard tracking,
+ * records in breaker/budget, and checks for anomalies.
+ */
+async function recordPostRequestUsage(
+  ctx: MiddlewareContext,
+  opts: {
+    modelId: string
+    inputTokens: number
+    outputTokens: number
+    latencyMs: number
+    meta: ShieldMeta | undefined
+    params: Record<string, unknown>
+  },
+): Promise<void> {
+  const { config, guard, ledger, breaker, userBudgetManager, anomalyDetector, instanceEvents } = ctx
+  const { modelId, inputTokens, outputTokens, latencyMs, meta, params } = opts
+
+  // Compute per-request savings
+  const contextSavedDollars = meta?.contextSaved
+    ? (meta.contextSaved / 1_000_000) *
+      (MODEL_PRICING[modelId]?.inputPerMillion ?? SAVINGS_FALLBACK_INPUT_PER_MILLION)
+    : 0
+  const routerSavedDollars = meta?.routerSaved ?? 0
+  const prefixSavedDollars = meta?.prefixSaved ?? 0
+
+  // Record in ledger
+  if (ledger) {
+    await ledger.record({
+      model: modelId,
+      inputTokens,
+      outputTokens,
+      savings: {
+        context: contextSavedDollars,
+        router: routerSavedDollars,
+        prefix: prefixSavedDollars,
+      },
+      originalInputTokens: meta?.originalInputTokens,
+      originalModel: meta?.originalModel,
+      feature: config.ledger?.feature,
+      latencyMs,
+    })
+  }
+
+  const perRequestCost = safeCost(modelId, inputTokens, outputTokens)
+  const perRequestSaved = contextSavedDollars + routerSavedDollars + prefixSavedDollars
+
+  safeEmit(instanceEvents, "ledger:entry", {
+    model: modelId,
+    inputTokens,
+    outputTokens,
+    cost: perRequestCost,
+    saved: perRequestSaved,
+  })
+
+  config.onUsage?.({
+    model: modelId,
+    inputTokens,
+    outputTokens,
+    cost: perRequestCost,
+    saved: perRequestSaved,
+  })
+
+  // Complete the guard request tracking
+  if (guard) {
+    const guardUserText = meta?.lastUserText ?? extractLastUserText(params)
+    if (guardUserText) {
+      guard.completeRequest(guardUserText, inputTokens, outputTokens, modelId)
+    }
+  }
+
+  // Record spending in circuit breaker
+  if (breaker && perRequestCost > 0) {
+    breaker.recordSpend(perRequestCost, modelId)
+  }
+
+  // Record spending in per-user budget manager
+  if (userBudgetManager && meta?.userId) {
+    await userBudgetManager
+      .recordSpend(meta.userId, perRequestCost, modelId, meta.userBudgetInflight)
+      .catch(() => {
+        /* IDB write failed — inflight already released synchronously */
+      })
+  }
+
+  // Detect anomalies
+  if (anomalyDetector) {
+    const anomaly = anomalyDetector.check(perRequestCost, inputTokens + outputTokens)
+    if (anomaly) {
+      safeEmit(instanceEvents, "anomaly:detected", anomaly)
+      config.anomaly?.onAnomalyDetected?.(anomaly)
+    }
+  }
+}
 
 /**
  * Build the wrapGenerate function for the middleware pipeline.
@@ -22,10 +139,16 @@ import {
  * and records usage in the ledger.
  */
 export function buildWrapGenerate(ctx: MiddlewareContext) {
-  const { config, guard, cache, ledger, breaker, userBudgetManager, anomalyDetector, instanceEvents, adapter } = ctx
+  const { config, cache, ledger, userBudgetManager, adapter, log } = ctx
 
-  return async ({ doGenerate, params }: { doGenerate: () => Promise<Record<string, unknown>>; params: Record<string, unknown> }) => {
-    const meta = (params as Record<string | symbol, unknown>)[SHIELD_META] as ShieldMeta | undefined
+  return async ({
+    doGenerate,
+    params,
+  }: {
+    doGenerate: () => Promise<Record<string, unknown>>
+    params: Record<string, unknown>
+  }) => {
+    const meta = getShieldMeta(params)
 
     // Cache hit: return cached response without calling the model
     if (meta?.cacheHit) {
@@ -45,7 +168,11 @@ export function buildWrapGenerate(ctx: MiddlewareContext) {
         })
       }
 
-      const cacheHitSavedDollars = safeCost(modelId, meta.cacheHit.inputTokens, meta.cacheHit.outputTokens)
+      const cacheHitSavedDollars = safeCost(
+        modelId,
+        meta.cacheHit.inputTokens,
+        meta.cacheHit.outputTokens,
+      )
 
       config.onUsage?.({
         model: modelId,
@@ -77,7 +204,11 @@ export function buildWrapGenerate(ctx: MiddlewareContext) {
       if (adapter) {
         const provider = adapter.getProviderForModel(modelId)
         if (provider) {
-          try { adapter.recordFailure(provider, err instanceof Error ? err.message : String(err)) } catch { /* non-fatal */ }
+          try {
+            adapter.recordFailure(provider, err instanceof Error ? err.message : String(err))
+          } catch {
+            /* non-fatal */
+          }
         }
       }
       throw err
@@ -88,7 +219,11 @@ export function buildWrapGenerate(ctx: MiddlewareContext) {
     if (adapter) {
       const provider = adapter.getProviderForModel(modelId)
       if (provider) {
-        try { adapter.recordSuccess(provider, latencyMs) } catch { /* non-fatal */ }
+        try {
+          adapter.recordSuccess(provider, latencyMs)
+        } catch {
+          /* non-fatal */
+        }
       }
     }
 
@@ -102,83 +237,25 @@ export function buildWrapGenerate(ctx: MiddlewareContext) {
     if (cache && responseText) {
       const cachedUserText = meta?.lastUserText ?? extractLastUserText(params)
       if (cachedUserText) {
-        cache.store(cachedUserText, responseText, modelId, inputTokens, outputTokens).catch(() => {})
+        cache
+          .store(cachedUserText, responseText, modelId, inputTokens, outputTokens)
+          .catch((err) => {
+            log?.debug("cache", "Failed to store response", {
+              error: err instanceof Error ? err.message : String(err),
+            })
+          })
       }
     }
 
-    // Compute per-request savings
-    const contextSavedDollars = meta?.contextSaved
-      ? (meta.contextSaved / 1_000_000) * (MODEL_PRICING[modelId]?.inputPerMillion ?? 2.5)
-      : 0
-    const routerSavedDollars = meta?.routerSaved ?? 0
-    const prefixSavedDollars = meta?.prefixSaved ?? 0
-
-    // Record in ledger
-    if (ledger) {
-      await ledger.record({
-        model: modelId,
-        inputTokens,
-        outputTokens,
-        savings: {
-          context: contextSavedDollars,
-          router: routerSavedDollars,
-          prefix: prefixSavedDollars,
-        },
-        originalInputTokens: meta?.originalInputTokens,
-        originalModel: meta?.originalModel,
-        feature: config.ledger?.feature,
-        latencyMs,
-      })
-    }
-
-    const perRequestCost = safeCost(modelId, inputTokens, outputTokens)
-    const perRequestSaved = contextSavedDollars + routerSavedDollars + prefixSavedDollars
-
-    try {
-      instanceEvents.emit('ledger:entry', {
-        model: modelId,
-        inputTokens,
-        outputTokens,
-        cost: perRequestCost,
-        saved: perRequestSaved,
-      })
-    } catch { /* non-fatal */ }
-
-    config.onUsage?.({
-      model: modelId,
+    // Record usage, savings, and emit events
+    await recordPostRequestUsage(ctx, {
+      modelId,
       inputTokens,
       outputTokens,
-      cost: perRequestCost,
-      saved: perRequestSaved,
+      latencyMs,
+      meta,
+      params,
     })
-
-    // Complete the guard request tracking
-    if (guard) {
-      const guardUserText = meta?.lastUserText ?? extractLastUserText(params)
-      if (guardUserText) {
-        guard.completeRequest(guardUserText, inputTokens, outputTokens, modelId)
-      }
-    }
-
-    // Record spending in circuit breaker
-    if (breaker && perRequestCost > 0) {
-      breaker.recordSpend(perRequestCost, modelId)
-    }
-
-    // Record spending in per-user budget manager
-    if (userBudgetManager && meta?.userId) {
-      await userBudgetManager.recordSpend(meta.userId, perRequestCost, modelId, meta.userBudgetInflight)
-        .catch(() => { /* IDB write failed — inflight already released synchronously */ })
-    }
-
-    // Detect anomalies
-    if (anomalyDetector) {
-      const anomaly = anomalyDetector.check(perRequestCost, inputTokens + outputTokens)
-      if (anomaly) {
-        try { instanceEvents.emit('anomaly:detected', anomaly) } catch { /* non-fatal */ }
-        config.anomaly?.onAnomalyDetected?.(anomaly)
-      }
-    }
 
     return result
   }
@@ -190,10 +267,16 @@ export function buildWrapGenerate(ctx: MiddlewareContext) {
  * pipes chunks through a StreamTokenTracker, and records usage when done.
  */
 export function buildWrapStream(ctx: MiddlewareContext) {
-  const { config, guard, cache, ledger, breaker, userBudgetManager, anomalyDetector, instanceEvents, adapter } = ctx
+  const { config, cache, ledger, userBudgetManager, instanceEvents, adapter, log } = ctx
 
-  return async ({ doStream, params }: { doStream: () => Promise<Record<string, unknown>>; params: Record<string, unknown> }) => {
-    const meta = (params as Record<string | symbol, unknown>)[SHIELD_META] as ShieldMeta | undefined
+  return async ({
+    doStream,
+    params,
+  }: {
+    doStream: () => Promise<Record<string, unknown>>
+    params: Record<string, unknown>
+  }) => {
+    const meta = getShieldMeta(params)
 
     // Cache hit: return a simulated stream without calling the model
     if (meta?.cacheHit) {
@@ -212,7 +295,11 @@ export function buildWrapStream(ctx: MiddlewareContext) {
         })
       }
 
-      const streamCacheHitSavedDollars = safeCost(modelId, meta.cacheHit.inputTokens, meta.cacheHit.outputTokens)
+      const streamCacheHitSavedDollars = safeCost(
+        modelId,
+        meta.cacheHit.inputTokens,
+        meta.cacheHit.outputTokens,
+      )
 
       config.onUsage?.({
         model: modelId,
@@ -250,7 +337,11 @@ export function buildWrapStream(ctx: MiddlewareContext) {
       if (adapter) {
         const provider = adapter.getProviderForModel(modelId)
         if (provider) {
-          try { adapter.recordFailure(provider, err instanceof Error ? err.message : String(err)) } catch { /* non-fatal */ }
+          try {
+            adapter.recordFailure(provider, err instanceof Error ? err.message : String(err))
+          } catch {
+            /* non-fatal */
+          }
         }
       }
       throw err
@@ -260,7 +351,11 @@ export function buildWrapStream(ctx: MiddlewareContext) {
     if (adapter) {
       const provider = adapter.getProviderForModel(modelId)
       if (provider) {
-        try { adapter.recordSuccess(provider, streamLatencyMs) } catch { /* non-fatal */ }
+        try {
+          adapter.recordSuccess(provider, streamLatencyMs)
+        } catch {
+          /* non-fatal */
+        }
       }
     }
 
@@ -281,78 +376,29 @@ export function buildWrapStream(ctx: MiddlewareContext) {
         const cachedUserText = meta?.lastUserText ?? extractLastUserText(params)
         const responseText = tracker.getText()
         if (cachedUserText && responseText) {
-          cache.store(cachedUserText, responseText, modelId, usage.inputTokens, usage.outputTokens).catch(() => {})
+          cache
+            .store(cachedUserText, responseText, modelId, usage.inputTokens, usage.outputTokens)
+            .catch((err) => {
+              log?.debug("cache", "Failed to store streamed response", {
+                error: err instanceof Error ? err.message : String(err),
+              })
+            })
         }
       }
 
-      const contextSavedDollars = meta?.contextSaved
-        ? (meta.contextSaved / 1_000_000) * (MODEL_PRICING[modelId]?.inputPerMillion ?? 2.5)
-        : 0
-      const routerSavedDollars = meta?.routerSaved ?? 0
-      const prefixSavedDollars = meta?.prefixSaved ?? 0
-
-      if (ledger) {
-        ledger.record({
-          model: modelId,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          savings: {
-            context: contextSavedDollars,
-            router: routerSavedDollars,
-            prefix: prefixSavedDollars,
-          },
-          originalInputTokens: meta?.originalInputTokens,
-          originalModel: meta?.originalModel,
-          feature: config.ledger?.feature,
-          latencyMs,
-        }).catch(() => {})
-      }
-
-      const streamPerRequestCost = safeCost(modelId, usage.inputTokens, usage.outputTokens)
-      const streamPerRequestSaved = contextSavedDollars + routerSavedDollars + prefixSavedDollars
-
-      try {
-        instanceEvents.emit('ledger:entry', {
-          model: modelId,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          cost: streamPerRequestCost,
-          saved: streamPerRequestSaved,
-        })
-      } catch { /* non-fatal */ }
-
-      config.onUsage?.({
-        model: modelId,
+      // Record usage, savings, and emit events (fire-and-forget for streams)
+      recordPostRequestUsage(ctx, {
+        modelId,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
-        cost: streamPerRequestCost,
-        saved: streamPerRequestSaved,
+        latencyMs,
+        meta,
+        params,
+      }).catch((err) => {
+        log?.debug("ledger", "Failed to record stream usage", {
+          error: err instanceof Error ? err.message : String(err),
+        })
       })
-
-      if (guard) {
-        const guardUserText = meta?.lastUserText ?? extractLastUserText(params)
-        if (guardUserText) {
-          guard.completeRequest(guardUserText, usage.inputTokens, usage.outputTokens, modelId)
-        }
-      }
-
-      if (breaker && streamPerRequestCost > 0) {
-        breaker.recordSpend(streamPerRequestCost, modelId)
-      }
-
-      if (userBudgetManager && meta?.userId) {
-        userBudgetManager.recordSpend(meta.userId, streamPerRequestCost, modelId, meta.userBudgetInflight)
-          .catch(() => { /* IDB write failed — inflight already released synchronously */ })
-      }
-
-      // Detect anomalies
-      if (anomalyDetector) {
-        const anomaly = anomalyDetector.check(streamPerRequestCost, usage.inputTokens + usage.outputTokens)
-        if (anomaly) {
-          try { instanceEvents.emit('anomaly:detected', anomaly) } catch { /* non-fatal */ }
-          config.anomaly?.onAnomalyDetected?.(anomaly)
-        }
-      }
     }
 
     // Guard flag to prevent double-recording
@@ -377,15 +423,17 @@ export function buildWrapStream(ctx: MiddlewareContext) {
             const usage = tracker.finish()
             recordStreamUsageOnce(usage)
 
-            try {
-              instanceEvents.emit('stream:complete', {
-                inputTokens: usage.inputTokens,
-                outputTokens: usage.outputTokens,
-                totalCost: safeCost(modelId, usage.inputTokens, usage.outputTokens),
-              })
-            } catch { /* non-fatal */ }
+            safeEmit(instanceEvents, "stream:complete", {
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              totalCost: safeCost(modelId, usage.inputTokens, usage.outputTokens),
+            })
 
-            try { controller.close() } catch { /* already closed by cancel */ }
+            try {
+              controller.close()
+            } catch {
+              /* already closed by cancel */
+            }
             return
           }
 
@@ -393,29 +441,33 @@ export function buildWrapStream(ctx: MiddlewareContext) {
           if (c && c.type === "text-delta" && typeof c.textDelta === "string") {
             tracker.addChunk(c.textDelta)
 
-            try {
-              const chunkUsage = tracker.getUsage()
-              instanceEvents.emit('stream:chunk', {
-                outputTokens: chunkUsage.outputTokens,
-                estimatedCost: chunkUsage.estimatedCost,
-              })
-            } catch { /* non-fatal */ }
+            const chunkUsage = tracker.getUsage()
+            safeEmit(instanceEvents, "stream:chunk", {
+              outputTokens: chunkUsage.outputTokens,
+              estimatedCost: chunkUsage.estimatedCost,
+            })
           }
 
-          try { controller.enqueue(value) } catch { /* stream cancelled mid-read */ }
+          try {
+            controller.enqueue(value)
+          } catch {
+            /* stream cancelled mid-read */
+          }
         } catch (err) {
           const usage = tracker.abort()
           recordStreamUsageOnce(usage)
 
-          try {
-            instanceEvents.emit('stream:abort', {
-              inputTokens: usage.inputTokens,
-              outputTokens: usage.outputTokens,
-              estimatedCost: safeCost(modelId, usage.inputTokens, usage.outputTokens),
-            })
-          } catch { /* non-fatal */ }
+          safeEmit(instanceEvents, "stream:abort", {
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            estimatedCost: safeCost(modelId, usage.inputTokens, usage.outputTokens),
+          })
 
-          try { controller.error(err) } catch { /* already closed/errored */ }
+          try {
+            controller.error(err)
+          } catch {
+            /* already closed/errored */
+          }
         }
       },
       cancel() {
@@ -425,12 +477,14 @@ export function buildWrapStream(ctx: MiddlewareContext) {
         recordStreamUsageOnce(usage)
 
         try {
-          instanceEvents.emit('stream:abort', {
+          instanceEvents.emit("stream:abort", {
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
             estimatedCost: safeCost(modelId, usage.inputTokens, usage.outputTokens),
           })
-        } catch { /* non-fatal */ }
+        } catch {
+          /* non-fatal */
+        }
       },
     })
 

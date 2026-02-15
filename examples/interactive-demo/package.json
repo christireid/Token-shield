@@ -13,7 +13,7 @@
     "react-dom": "^18",
     "ai": "^3.0.0",
     "@ai-sdk/openai": "^0.0.1",
-    "@tokenshield/ai-sdk": "file:../../..", 
+    "@tokenshield/ai-sdk": "file:../../..",
     "lucide-react": "^0.300.0",
     "recharts": "^2.10.0",
     "clsx": "^2.0.0",

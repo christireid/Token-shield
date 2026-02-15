@@ -1,25 +1,29 @@
 # Interactive Examples
 
 ## 🚀 Live Demo (Web)
+
 We have a live interactive demo that simulates TokenShield's behavior (Cache, Cost Tracking) in a Next.js environment.
 
 **[Launch in StackBlitz](https://stackblitz.com/github/tokenshield/ai-sdk/tree/main/examples/interactive-demo)**
 
-*(Note: Since this is a private repo/sandbox, you can verify the code in `examples/interactive-demo`)*
+_(Note: Since this is a private repo/sandbox, you can verify the code in `examples/interactive-demo`)_
 
 ## 📦 How to Run Locally
 
 1. **Navigate to the demo:**
+
    ```bash
    cd examples/interactive-demo
    ```
 
 2. **Install dependencies:**
+
    ```bash
    npm install
    ```
 
 3. **Run the development server:**
+
    ```bash
    npm run dev
    ```

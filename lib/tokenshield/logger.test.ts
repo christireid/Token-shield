@@ -1,12 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import mitt from "mitt"
-import {
-  TokenShieldLogger,
-  createLogger,
-  logger,
-  type LogEntry,
-  type LogLevel,
-} from "./logger"
+import { TokenShieldLogger, createLogger, logger, type LogEntry } from "./logger"
 import type { TokenShieldEvents } from "./event-bus"
 
 // ---------------------------------------------------------------------------
@@ -254,6 +248,27 @@ describe("TokenShieldLogger - connectEventBus", () => {
     expect(handler).not.toHaveBeenCalled()
   })
 
+  it("second connectEventBus returns same cleanup that still works", () => {
+    const handler = vi.fn()
+    const log = new TokenShieldLogger({ handler, level: "debug" })
+    const bus = mitt<TokenShieldEvents>()
+
+    // First connect
+    const _cleanup1 = log.connectEventBus(bus)
+    // Second connect returns the stored cleanup (not a no-op)
+    const cleanup2 = log.connectEventBus(bus)
+
+    // Events should arrive (connected once, not duplicated)
+    bus.emit("cache:miss", { prompt: "test" })
+    expect(handler).toHaveBeenCalledTimes(1)
+
+    // Cleanup from second call should still disconnect
+    cleanup2()
+    handler.mockClear()
+    bus.emit("cache:miss", { prompt: "test2" })
+    expect(handler).not.toHaveBeenCalled()
+  })
+
   it("maps event types to correct log levels", () => {
     const handler = vi.fn()
     const log = new TokenShieldLogger({ handler, level: "debug" })
@@ -266,7 +281,12 @@ describe("TokenShieldLogger - connectEventBus", () => {
     expect(errorEntry.level).toBe("error")
 
     // breaker:warning should be 'warn'
-    bus.emit("breaker:warning", { limitType: "session", currentSpend: 4, limit: 5, percentUsed: 80 })
+    bus.emit("breaker:warning", {
+      limitType: "session",
+      currentSpend: 4,
+      limit: 5,
+      percentUsed: 80,
+    })
     const warnEntry: LogEntry = handler.mock.calls[handler.mock.calls.length - 1][0]
     expect(warnEntry.level).toBe("warn")
 

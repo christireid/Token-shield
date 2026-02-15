@@ -18,10 +18,9 @@ import {
   useProviderHealth,
   usePipelineMetrics,
 } from "./react"
-import type { EventLogEntry } from "./react"
 import type { CostCircuitBreaker } from "./circuit-breaker"
 import type { UserBudgetManager } from "./user-budget-manager"
-import type { ProviderAdapter, ProviderHealth } from "./provider-adapter"
+import type { ProviderAdapter } from "./provider-adapter"
 
 // -------------------------------------------------------
 // Utility functions
@@ -63,9 +62,13 @@ export function Gauge({
 
   return (
     <div style={{ marginBottom: 8 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 2 }}>
+      <div
+        style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 2 }}
+      >
         <span>{label}</span>
-        <span>{formatDollars(value)} / {formatDollars(max)}</span>
+        <span>
+          {formatDollars(value)} / {formatDollars(max)}
+        </span>
       </div>
       <div
         role="progressbar"
@@ -92,14 +95,23 @@ export function Gauge({
 /** Stat card */
 export function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div style={{
-      padding: "12px 16px",
-      background: "#f9fafb",
-      borderRadius: 8,
-      border: "1px solid #e5e7eb",
-      minWidth: 120,
-    }}>
-      <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+    <div
+      style={{
+        padding: "12px 16px",
+        background: "#f9fafb",
+        borderRadius: 8,
+        border: "1px solid #e5e7eb",
+        minWidth: 120,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          color: "#6b7280",
+          textTransform: "uppercase",
+          letterSpacing: "0.05em",
+        }}
+      >
         {label}
       </div>
       <div style={{ fontSize: 20, fontWeight: 600, marginTop: 2 }}>{value}</div>
@@ -169,9 +181,7 @@ export function BreakerSection({ breaker }: { breaker: CostCircuitBreaker }) {
           label={budget.limitType ? `${budget.limitType} limit` : "Budget"}
         />
       )}
-      <div style={{ fontSize: 12, color: "#6b7280" }}>
-        {budget.percentUsed.toFixed(1)}% used
-      </div>
+      <div style={{ fontSize: 12, color: "#6b7280" }}>{budget.percentUsed.toFixed(1)}% used</div>
     </div>
   )
 }
@@ -197,18 +207,10 @@ export function UserBudgetSection({
         Tier: {status.tier} | In-flight: {formatDollars(status.inflight)}
       </div>
       {status.limits?.daily != null && status.limits.daily > 0 && (
-        <Gauge
-          value={status.spend.daily}
-          max={status.limits.daily}
-          label="Daily"
-        />
+        <Gauge value={status.spend.daily} max={status.limits.daily} label="Daily" />
       )}
       {status.limits?.monthly != null && status.limits.monthly > 0 && (
-        <Gauge
-          value={status.spend.monthly}
-          max={status.limits.monthly}
-          label="Monthly"
-        />
+        <Gauge value={status.spend.monthly} max={status.limits.monthly} label="Monthly" />
       )}
     </div>
   )
@@ -242,7 +244,12 @@ export const DEFAULT_EVENT_COLOR = "#6b7280"
 
 export function formatTime(ts: number): string {
   const d = new Date(ts)
-  return d.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
+  return d.toLocaleTimeString("en-US", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  })
 }
 
 /** Summarize key data fields from an event into a short string. */
@@ -317,15 +324,52 @@ export function EventLogSection() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #e5e7eb", background: "#f3f4f6" }}>
-                <th scope="col" style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#374151" }}>Time</th>
-                <th scope="col" style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#374151" }}>Event</th>
-                <th scope="col" style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#374151" }}>Details</th>
+                <th
+                  scope="col"
+                  style={{
+                    padding: "6px 10px",
+                    textAlign: "left",
+                    fontWeight: 600,
+                    color: "#374151",
+                  }}
+                >
+                  Time
+                </th>
+                <th
+                  scope="col"
+                  style={{
+                    padding: "6px 10px",
+                    textAlign: "left",
+                    fontWeight: 600,
+                    color: "#374151",
+                  }}
+                >
+                  Event
+                </th>
+                <th
+                  scope="col"
+                  style={{
+                    padding: "6px 10px",
+                    textAlign: "left",
+                    fontWeight: 600,
+                    color: "#374151",
+                  }}
+                >
+                  Details
+                </th>
               </tr>
             </thead>
             <tbody>
               {visibleEvents.map((evt) => (
                 <tr key={evt.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                  <td style={{ padding: "4px 10px", fontFamily: "monospace", color: "#6b7280", whiteSpace: "nowrap" }}>
+                  <td
+                    style={{
+                      padding: "4px 10px",
+                      fontFamily: "monospace",
+                      color: "#6b7280",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     {formatTime(evt.timestamp)}
                   </td>
                   <td style={{ padding: "4px 10px", whiteSpace: "nowrap" }}>
@@ -338,7 +382,16 @@ export function EventLogSection() {
                       {evt.type}
                     </span>
                   </td>
-                  <td style={{ padding: "4px 10px", color: "#6b7280", maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <td
+                    style={{
+                      padding: "4px 10px",
+                      color: "#6b7280",
+                      maxWidth: 300,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     {summarizeEventData(evt.type, evt.data)}
                   </td>
                 </tr>
@@ -377,11 +430,61 @@ export function ProviderHealthSection({ adapter }: { adapter: ProviderAdapter })
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
           <thead>
             <tr style={{ borderBottom: "1px solid #e5e7eb", background: "#f3f4f6" }}>
-              <th scope="col" style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#374151" }}>Provider</th>
-              <th scope="col" style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, color: "#374151" }}>Status</th>
-              <th scope="col" style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "#374151" }}>Latency</th>
-              <th scope="col" style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "#374151" }}>Failures</th>
-              <th scope="col" style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600, color: "#374151" }}>Requests</th>
+              <th
+                scope="col"
+                style={{
+                  padding: "6px 10px",
+                  textAlign: "left",
+                  fontWeight: 600,
+                  color: "#374151",
+                }}
+              >
+                Provider
+              </th>
+              <th
+                scope="col"
+                style={{
+                  padding: "6px 10px",
+                  textAlign: "left",
+                  fontWeight: 600,
+                  color: "#374151",
+                }}
+              >
+                Status
+              </th>
+              <th
+                scope="col"
+                style={{
+                  padding: "6px 10px",
+                  textAlign: "right",
+                  fontWeight: 600,
+                  color: "#374151",
+                }}
+              >
+                Latency
+              </th>
+              <th
+                scope="col"
+                style={{
+                  padding: "6px 10px",
+                  textAlign: "right",
+                  fontWeight: 600,
+                  color: "#374151",
+                }}
+              >
+                Failures
+              </th>
+              <th
+                scope="col"
+                style={{
+                  padding: "6px 10px",
+                  textAlign: "right",
+                  fontWeight: 600,
+                  color: "#374151",
+                }}
+              >
+                Requests
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -403,13 +506,34 @@ export function ProviderHealthSection({ adapter }: { adapter: ProviderAdapter })
                   <td style={{ padding: "6px 10px" }}>
                     <span style={{ color: statusColor, fontWeight: 500 }}>{statusLabel}</span>
                   </td>
-                  <td style={{ padding: "6px 10px", textAlign: "right", fontFamily: "monospace", color: "#6b7280" }}>
+                  <td
+                    style={{
+                      padding: "6px 10px",
+                      textAlign: "right",
+                      fontFamily: "monospace",
+                      color: "#6b7280",
+                    }}
+                  >
                     {h.avgLatencyMs > 0 ? `${Math.round(h.avgLatencyMs)}ms` : "--"}
                   </td>
-                  <td style={{ padding: "6px 10px", textAlign: "right", fontFamily: "monospace", color: h.totalFailures > 0 ? "#ef4444" : "#6b7280" }}>
+                  <td
+                    style={{
+                      padding: "6px 10px",
+                      textAlign: "right",
+                      fontFamily: "monospace",
+                      color: h.totalFailures > 0 ? "#ef4444" : "#6b7280",
+                    }}
+                  >
                     {h.totalFailures}
                   </td>
-                  <td style={{ padding: "6px 10px", textAlign: "right", fontFamily: "monospace", color: "#6b7280" }}>
+                  <td
+                    style={{
+                      padding: "6px 10px",
+                      textAlign: "right",
+                      fontFamily: "monospace",
+                      color: "#6b7280",
+                    }}
+                  >
                     {h.totalRequests}
                   </td>
                 </tr>
@@ -429,26 +553,20 @@ export function PipelineMetricsSection() {
     <div>
       <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}>Pipeline Metrics</h3>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <Stat
-          label="Total Requests"
-          value={String(metrics.totalRequests)}
-        />
+        <Stat label="Total Requests" value={String(metrics.totalRequests)} />
         <Stat
           label="Avg Latency"
           value={metrics.avgLatencyMs > 0 ? `${metrics.avgLatencyMs}ms` : "--"}
         />
-        <Stat
-          label="Cache Hit Rate"
-          value={formatPercent(metrics.cacheHitRate)}
-        />
-        <Stat
-          label="Blocked Rate"
-          value={formatPercent(metrics.blockedRate)}
-        />
+        <Stat label="Cache Hit Rate" value={formatPercent(metrics.cacheHitRate)} />
+        <Stat label="Blocked Rate" value={formatPercent(metrics.blockedRate)} />
       </div>
       {metrics.lastEvent && (
         <div style={{ marginTop: 8, fontSize: 11, color: "#9ca3af" }}>
-          Last event: <span style={{ color: EVENT_COLORS[metrics.lastEvent.type] ?? DEFAULT_EVENT_COLOR }}>{metrics.lastEvent.type}</span>{" "}
+          Last event:{" "}
+          <span style={{ color: EVENT_COLORS[metrics.lastEvent.type] ?? DEFAULT_EVENT_COLOR }}>
+            {metrics.lastEvent.type}
+          </span>{" "}
           at {formatTime(metrics.lastEvent.timestamp)}
         </div>
       )}

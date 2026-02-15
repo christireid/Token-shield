@@ -40,8 +40,15 @@ console.log("[v0] 2-message chat =>", count2, "tokens")
 // Test 3: 4-message chat
 const chat4 = [
   { role: "system", content: "You are a helpful assistant." },
-  { role: "user", content: "I'm building a React app with TypeScript. Should I use Vite or Next.js?" },
-  { role: "assistant", content: "It depends on your needs. If you need SSR, API routes, and file-based routing, Next.js is better." },
+  {
+    role: "user",
+    content: "I'm building a React app with TypeScript. Should I use Vite or Next.js?",
+  },
+  {
+    role: "assistant",
+    content:
+      "It depends on your needs. If you need SSR, API routes, and file-based routing, Next.js is better.",
+  },
   { role: "user", content: "How do I handle form validation?" },
 ]
 const count4 = countChatTokensLocal(chat4)

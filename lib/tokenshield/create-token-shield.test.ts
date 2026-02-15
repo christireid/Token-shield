@@ -126,7 +126,14 @@ describe("createTokenShield", () => {
     const shield = createTokenShield({
       preset: "chatApp",
       config: {
-        modules: { guard: false, cache: false, context: false, router: false, prefix: false, ledger: false },
+        modules: {
+          guard: false,
+          cache: false,
+          context: false,
+          router: false,
+          prefix: false,
+          ledger: false,
+        },
       },
     })
     const health = shield.healthCheck()

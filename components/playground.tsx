@@ -8,15 +8,9 @@ import {
   calculateRealCost,
   type LLMResult,
 } from "@/lib/tokenshield/api-client"
-import {
-  countExactTokens,
-  countChatTokens,
-} from "@/lib/tokenshield/token-counter"
+import { countExactTokens, countChatTokens } from "@/lib/tokenshield/token-counter"
 import { fitToBudget, type Message } from "@/lib/tokenshield/context-manager"
-import {
-  ResponseCache,
-  textSimilarity,
-} from "@/lib/tokenshield/response-cache"
+import { ResponseCache, textSimilarity } from "@/lib/tokenshield/response-cache"
 import { analyzeComplexity } from "@/lib/tokenshield/model-router"
 import { RequestGuard } from "@/lib/tokenshield/request-guard"
 import {
@@ -53,8 +47,7 @@ type TestStatus = "idle" | "running" | "done" | "error"
 const DEV_CONVERSATION: Message[] = [
   {
     role: "system",
-    content:
-      "You are a senior full-stack engineer. Be concise and use code examples.",
+    content: "You are a senior full-stack engineer. Be concise and use code examples.",
   },
   {
     role: "user",
@@ -77,8 +70,7 @@ const DEV_CONVERSATION: Message[] = [
   },
   {
     role: "user",
-    content:
-      "Can you show me the actual code for the JWT middleware?",
+    content: "Can you show me the actual code for the JWT middleware?",
   },
   {
     role: "assistant",
@@ -87,8 +79,7 @@ const DEV_CONVERSATION: Message[] = [
   },
   {
     role: "user",
-    content:
-      "What about refresh tokens? How do I handle token expiration?",
+    content: "What about refresh tokens? How do I handle token expiration?",
   },
   {
     role: "assistant",
@@ -97,8 +88,7 @@ const DEV_CONVERSATION: Message[] = [
   },
   {
     role: "user",
-    content:
-      "How should I store the refresh tokens securely on the server side?",
+    content: "How should I store the refresh tokens securely on the server side?",
   },
   {
     role: "assistant",
@@ -107,8 +97,7 @@ const DEV_CONVERSATION: Message[] = [
   },
   {
     role: "user",
-    content:
-      "Now I need to add rate limiting to prevent brute force attacks on the login endpoint",
+    content: "Now I need to add rate limiting to prevent brute force attacks on the login endpoint",
   },
   {
     role: "assistant",
@@ -117,8 +106,7 @@ const DEV_CONVERSATION: Message[] = [
   },
   {
     role: "user",
-    content:
-      "What about CORS? My frontend is on a different domain.",
+    content: "What about CORS? My frontend is on a different domain.",
   },
   {
     role: "assistant",
@@ -127,8 +115,7 @@ const DEV_CONVERSATION: Message[] = [
   },
   {
     role: "user",
-    content:
-      "I'm also worried about SQL injection since I'm using raw queries in some places",
+    content: "I'm also worried about SQL injection since I'm using raw queries in some places",
   },
   {
     role: "assistant",
@@ -176,9 +163,7 @@ export function Playground() {
 
     try {
       // ===== TEST 1: Token Counter Accuracy (OpenAI) =====
-      setCurrentTest(
-        "Verifying token counter accuracy against OpenAI..."
-      )
+      setCurrentTest("Verifying token counter accuracy against OpenAI...")
       const testPrompts = [
         "Hello, world!",
         "The quick brown fox jumps over the lazy dog.",
@@ -191,17 +176,11 @@ export function Playground() {
 
       for (const prompt of testPrompts) {
         const clientCount = countExactTokens(prompt)
-        const res = await callOpenAI(
-          [{ role: "user", content: prompt }],
-          "gpt-4o-mini",
-          { max_tokens: 1 }
-        )
-        const chatCount = countChatTokens([
-          { role: "user", content: prompt },
-        ])
-        const diff = Math.abs(
-          chatCount.total - res.usage.input_tokens
-        )
+        const res = await callOpenAI([{ role: "user", content: prompt }], "gpt-4o-mini", {
+          max_tokens: 1,
+        })
+        const chatCount = countChatTokens([{ role: "user", content: prompt }])
+        const diff = Math.abs(chatCount.total - res.usage.input_tokens)
         totalDiff += diff
         if (diff <= 2) matchCount++
 
@@ -225,9 +204,7 @@ export function Playground() {
       })
 
       // ===== TEST 2: Token Counter Accuracy (Anthropic) =====
-      setCurrentTest(
-        "Verifying token counter accuracy against Anthropic..."
-      )
+      setCurrentTest("Verifying token counter accuracy against Anthropic...")
 
       let anthropicMatchCount = 0
       let anthropicTotalDiff = 0
@@ -240,7 +217,7 @@ export function Playground() {
           res = await callAnthropic(
             [{ role: "user", content: prompt }],
             "claude-3-5-haiku-20241022",
-            { max_tokens: 1 }
+            { max_tokens: 1 },
           )
         } catch (e) {
           anthropicAccuracyRaw.push({
@@ -249,13 +226,9 @@ export function Playground() {
           })
           continue
         }
-        const chatCount = countChatTokens([
-          { role: "user", content: prompt },
-        ])
+        const chatCount = countChatTokens([{ role: "user", content: prompt }])
         // Anthropic uses a different tokenizer, so we compare raw content tokens
-        const diff = Math.abs(
-          clientCount.tokens - res.usage.input_tokens
-        )
+        const diff = Math.abs(clientCount.tokens - res.usage.input_tokens)
         anthropicTotalDiff += diff
         // Anthropic tokenizer differs from OpenAI's BPE; allow wider margin
         if (diff <= 5) anthropicMatchCount++
@@ -269,9 +242,7 @@ export function Playground() {
         })
       }
 
-      const testedAnthropic = anthropicAccuracyRaw.filter(
-        (r) => !r.error
-      ).length
+      const testedAnthropic = anthropicAccuracyRaw.filter((r) => !r.error).length
 
       addResult({
         module: "tokenizer-anthropic",
@@ -287,9 +258,7 @@ export function Playground() {
       })
 
       // ===== TEST 3: Token Counter Accuracy (Google) =====
-      setCurrentTest(
-        "Verifying token counter accuracy against Google Gemini..."
-      )
+      setCurrentTest("Verifying token counter accuracy against Google Gemini...")
 
       let googleMatchCount = 0
       let googleTotalDiff = 0
@@ -299,11 +268,9 @@ export function Playground() {
         const clientCount = countExactTokens(prompt)
         let res: LLMResult
         try {
-          res = await callGoogle(
-            [{ role: "user", content: prompt }],
-            "gemini-2.0-flash",
-            { max_tokens: 1 }
-          )
+          res = await callGoogle([{ role: "user", content: prompt }], "gemini-2.0-flash", {
+            max_tokens: 1,
+          })
         } catch (e) {
           googleAccuracyRaw.push({
             prompt: prompt.slice(0, 50),
@@ -311,9 +278,7 @@ export function Playground() {
           })
           continue
         }
-        const diff = Math.abs(
-          clientCount.tokens - res.usage.input_tokens
-        )
+        const diff = Math.abs(clientCount.tokens - res.usage.input_tokens)
         googleTotalDiff += diff
         // Gemini also uses a different tokenizer, allow wider margin
         if (diff <= 5) googleMatchCount++
@@ -326,9 +291,7 @@ export function Playground() {
         })
       }
 
-      const testedGoogle = googleAccuracyRaw.filter(
-        (r) => !r.error
-      ).length
+      const testedGoogle = googleAccuracyRaw.filter((r) => !r.error).length
 
       addResult({
         module: "tokenizer-google",
@@ -344,12 +307,9 @@ export function Playground() {
       })
 
       // ===== TEST 4: Cross-Provider Cost Comparison =====
-      setCurrentTest(
-        "Running same prompt across OpenAI, Anthropic, and Google..."
-      )
+      setCurrentTest("Running same prompt across OpenAI, Anthropic, and Google...")
 
-      const crossPrompt =
-        "Explain the difference between TCP and UDP in 2 sentences."
+      const crossPrompt = "Explain the difference between TCP and UDP in 2 sentences."
       const crossResults: {
         provider: string
         model: string
@@ -360,15 +320,13 @@ export function Playground() {
 
       // OpenAI
       try {
-        const oaiRes = await callOpenAI(
-          [{ role: "user", content: crossPrompt }],
-          "gpt-4o-mini",
-          { max_tokens: 100 }
-        )
+        const oaiRes = await callOpenAI([{ role: "user", content: crossPrompt }], "gpt-4o-mini", {
+          max_tokens: 100,
+        })
         const oaiCost = calculateRealCost(
           "gpt-4o-mini",
           oaiRes.usage.input_tokens,
-          oaiRes.usage.output_tokens
+          oaiRes.usage.output_tokens,
         )
         crossResults.push({
           provider: "OpenAI",
@@ -389,12 +347,12 @@ export function Playground() {
         const claudeRes = await callAnthropic(
           [{ role: "user", content: crossPrompt }],
           "claude-3-5-haiku-20241022",
-          { max_tokens: 100 }
+          { max_tokens: 100 },
         )
         const claudeCost = calculateRealCost(
           "claude-3-5-haiku-20241022",
           claudeRes.usage.input_tokens,
-          claudeRes.usage.output_tokens
+          claudeRes.usage.output_tokens,
         )
         crossResults.push({
           provider: "Anthropic",
@@ -415,12 +373,12 @@ export function Playground() {
         const geminiRes = await callGoogle(
           [{ role: "user", content: crossPrompt }],
           "gemini-2.0-flash",
-          { max_tokens: 100 }
+          { max_tokens: 100 },
         )
         const geminiCost = calculateRealCost(
           "gemini-2.0-flash",
           geminiRes.usage.input_tokens,
-          geminiRes.usage.output_tokens
+          geminiRes.usage.output_tokens,
         )
         crossResults.push({
           provider: "Google",
@@ -438,24 +396,23 @@ export function Playground() {
 
       const successResults = crossResults.filter((r) => r.result)
       const cheapest = successResults.sort(
-        (a, b) => (a.cost?.totalCost ?? 99) - (b.cost?.totalCost ?? 99)
+        (a, b) => (a.cost?.totalCost ?? 99) - (b.cost?.totalCost ?? 99),
       )[0]
       const mostExpensive = successResults.sort(
-        (a, b) => (b.cost?.totalCost ?? 0) - (a.cost?.totalCost ?? 0)
+        (a, b) => (b.cost?.totalCost ?? 0) - (a.cost?.totalCost ?? 0),
       )[0]
 
       const crossProof = crossResults
         .map((r) =>
           r.result
             ? `${r.provider} (${r.model}): ${r.result.usage.input_tokens}+${r.result.usage.output_tokens} tokens, $${r.cost?.totalCost.toFixed(6)}, ${r.result.latencyMs}ms`
-            : `${r.provider}: FAILED (${r.error})`
+            : `${r.provider}: FAILED (${r.error})`,
         )
         .join(". ")
 
       const savingsVsExpensive =
         cheapest && mostExpensive && cheapest !== mostExpensive
-          ? (mostExpensive.cost?.totalCost ?? 0) -
-            (cheapest.cost?.totalCost ?? 0)
+          ? (mostExpensive.cost?.totalCost ?? 0) - (cheapest.cost?.totalCost ?? 0)
           : 0
 
       addResult({
@@ -491,23 +448,19 @@ export function Playground() {
       })
 
       // ===== TEST 5: Cross-Provider Model Routing =====
-      setCurrentTest(
-        "Testing model routing: simple query across budget models..."
-      )
+      setCurrentTest("Testing model routing: simple query across budget models...")
 
       const simpleComplexity = analyzeComplexity(SIMPLE_PROMPT)
       const complexComplexity = analyzeComplexity(COMPLEX_PROMPT)
 
       // Simple query on expensive model vs budget models across providers
-      const expensiveRes = await callOpenAI(
-        [{ role: "user", content: SIMPLE_PROMPT }],
-        "gpt-4o",
-        { max_tokens: 50 }
-      )
+      const expensiveRes = await callOpenAI([{ role: "user", content: SIMPLE_PROMPT }], "gpt-4o", {
+        max_tokens: 50,
+      })
       const expensiveCost = calculateRealCost(
         "gpt-4o",
         expensiveRes.usage.input_tokens,
-        expensiveRes.usage.output_tokens
+        expensiveRes.usage.output_tokens,
       )
 
       // Budget model per provider
@@ -523,7 +476,7 @@ export function Playground() {
       const oaiBudgetRes = await callOpenAI(
         [{ role: "user", content: SIMPLE_PROMPT }],
         "gpt-4o-mini",
-        { max_tokens: 50 }
+        { max_tokens: 50 },
       )
       budgetResults.push({
         provider: "OpenAI",
@@ -532,7 +485,7 @@ export function Playground() {
         cost: calculateRealCost(
           "gpt-4o-mini",
           oaiBudgetRes.usage.input_tokens,
-          oaiBudgetRes.usage.output_tokens
+          oaiBudgetRes.usage.output_tokens,
         ),
       })
 
@@ -541,7 +494,7 @@ export function Playground() {
         const haikuRes = await callAnthropic(
           [{ role: "user", content: SIMPLE_PROMPT }],
           "claude-3-5-haiku-20241022",
-          { max_tokens: 50 }
+          { max_tokens: 50 },
         )
         budgetResults.push({
           provider: "Anthropic",
@@ -550,7 +503,7 @@ export function Playground() {
           cost: calculateRealCost(
             "claude-3-5-haiku-20241022",
             haikuRes.usage.input_tokens,
-            haikuRes.usage.output_tokens
+            haikuRes.usage.output_tokens,
           ),
         })
       } catch (e) {
@@ -566,7 +519,7 @@ export function Playground() {
         const flashRes = await callGoogle(
           [{ role: "user", content: SIMPLE_PROMPT }],
           "gemini-2.0-flash",
-          { max_tokens: 50 }
+          { max_tokens: 50 },
         )
         budgetResults.push({
           provider: "Google",
@@ -575,7 +528,7 @@ export function Playground() {
           cost: calculateRealCost(
             "gemini-2.0-flash",
             flashRes.usage.input_tokens,
-            flashRes.usage.output_tokens
+            flashRes.usage.output_tokens,
           ),
         })
       } catch (e) {
@@ -588,16 +541,13 @@ export function Playground() {
 
       const cheapestBudget = budgetResults
         .filter((r) => r.result)
-        .sort(
-          (a, b) =>
-            (a.cost?.totalCost ?? 99) - (b.cost?.totalCost ?? 99)
-        )[0]
+        .sort((a, b) => (a.cost?.totalCost ?? 99) - (b.cost?.totalCost ?? 99))[0]
 
       const routerProof = budgetResults
         .map((r) =>
           r.result
             ? `${r.provider} ${r.model}: "${r.result.content.trim().slice(0, 60)}" - $${r.cost?.totalCost.toFixed(6)}`
-            : `${r.provider}: unavailable`
+            : `${r.provider}: unavailable`,
         )
         .join(". ")
 
@@ -616,9 +566,7 @@ export function Playground() {
         },
         saved: {
           tokens: 0,
-          cost:
-            expensiveCost.totalCost -
-            (cheapestBudget?.cost?.totalCost ?? 0),
+          cost: expensiveCost.totalCost - (cheapestBudget?.cost?.totalCost ?? 0),
           calls: 0,
         },
         proof: `Complexity: ${simpleComplexity.score}/100 (${simpleComplexity.tier}). GPT-4o: "${expensiveRes.content.trim().slice(0, 60)}" = $${expensiveCost.totalCost.toFixed(6)}. ${routerProof}. Router picks ${cheapestBudget?.provider ?? "N/A"} for ${((1 - (cheapestBudget?.cost?.totalCost ?? 0) / expensiveCost.totalCost) * 100).toFixed(0)}% savings. Complex prompt: ${complexComplexity.score}/100 (${complexComplexity.tier}) -- would keep expensive model.`,
@@ -641,15 +589,13 @@ export function Playground() {
       })
 
       // ===== TEST 6: Context Manager =====
-      setCurrentTest(
-        "Testing context manager: 20 messages raw vs trimmed..."
-      )
+      setCurrentTest("Testing context manager: 20 messages raw vs trimmed...")
 
       const rawChatTokens = countChatTokens(
         DEV_CONVERSATION.map((m) => ({
           role: m.role,
           content: m.content,
-        }))
+        })),
       )
 
       const rawRes = await callOpenAI(
@@ -658,12 +604,12 @@ export function Playground() {
           content: m.content,
         })),
         "gpt-4o-mini",
-        { max_tokens: 200 }
+        { max_tokens: 200 },
       )
       const rawCost = calculateRealCost(
         "gpt-4o-mini",
         rawRes.usage.input_tokens,
-        rawRes.usage.output_tokens
+        rawRes.usage.output_tokens,
       )
 
       const trimmed = fitToBudget(DEV_CONVERSATION, {
@@ -681,7 +627,7 @@ export function Playground() {
       const trimCost = calculateRealCost(
         "gpt-4o-mini",
         trimRes.usage.input_tokens,
-        trimRes.usage.output_tokens
+        trimRes.usage.output_tokens,
       )
 
       addResult({
@@ -698,8 +644,7 @@ export function Playground() {
           calls: 1,
         },
         saved: {
-          tokens:
-            rawRes.usage.input_tokens - trimRes.usage.input_tokens,
+          tokens: rawRes.usage.input_tokens - trimRes.usage.input_tokens,
           cost: rawCost.totalCost - trimCost.totalCost,
           calls: 0,
         },
@@ -716,9 +661,7 @@ export function Playground() {
       })
 
       // ===== TEST 7: Response Cache =====
-      setCurrentTest(
-        "Testing response cache: first call vs cached responses..."
-      )
+      setCurrentTest("Testing response cache: first call vs cached responses...")
 
       const cache = new ResponseCache({
         maxEntries: 100,
@@ -727,20 +670,16 @@ export function Playground() {
       })
       await cache.clear()
 
-      const cachePrompt =
-        "Explain what a closure is in JavaScript in one sentence."
-      const rephrased =
-        "What is a JavaScript closure? Give me a one-sentence explanation."
+      const cachePrompt = "Explain what a closure is in JavaScript in one sentence."
+      const rephrased = "What is a JavaScript closure? Give me a one-sentence explanation."
 
-      const firstRes = await callOpenAI(
-        [{ role: "user", content: cachePrompt }],
-        "gpt-4o-mini",
-        { max_tokens: 100 }
-      )
+      const firstRes = await callOpenAI([{ role: "user", content: cachePrompt }], "gpt-4o-mini", {
+        max_tokens: 100,
+      })
       const firstCost = calculateRealCost(
         "gpt-4o-mini",
         firstRes.usage.input_tokens,
-        firstRes.usage.output_tokens
+        firstRes.usage.output_tokens,
       )
 
       await cache.store(
@@ -748,7 +687,7 @@ export function Playground() {
         firstRes.content,
         "gpt-4o-mini",
         firstRes.usage.input_tokens,
-        firstRes.usage.output_tokens
+        firstRes.usage.output_tokens,
       )
 
       const exactLookup = await cache.lookup(cachePrompt, "gpt-4o-mini")
@@ -757,8 +696,7 @@ export function Playground() {
 
       addResult({
         module: "cache",
-        label:
-          "Original query, exact repeat, and rephrased query",
+        label: "Original query, exact repeat, and rephrased query",
         without: {
           tokens: firstRes.usage.total_tokens * 3,
           cost: firstCost.totalCost * 3,
@@ -787,21 +725,17 @@ export function Playground() {
       })
 
       // ===== TEST 8: Request Guard =====
-      setCurrentTest(
-        "Testing request guard: rapid-fire calls without vs with guard..."
-      )
+      setCurrentTest("Testing request guard: rapid-fire calls without vs with guard...")
 
       const guardPrompt = "What is 2 + 2?"
 
-      const singleRes = await callOpenAI(
-        [{ role: "user", content: guardPrompt }],
-        "gpt-4o-mini",
-        { max_tokens: 10 }
-      )
+      const singleRes = await callOpenAI([{ role: "user", content: guardPrompt }], "gpt-4o-mini", {
+        max_tokens: 10,
+      })
       const singleCost = calculateRealCost(
         "gpt-4o-mini",
         singleRes.usage.input_tokens,
-        singleRes.usage.output_tokens
+        singleRes.usage.output_tokens,
       )
       const fiveCallCost = singleCost.totalCost * 5
 
@@ -853,9 +787,7 @@ export function Playground() {
       })
 
       // ===== TEST 9: Prefix Optimizer =====
-      setCurrentTest(
-        "Analyzing prefix optimization for provider cache hits..."
-      )
+      setCurrentTest("Analyzing prefix optimization for provider cache hits...")
 
       const prefixMessages = trimmed.messages.map((m) => ({
         role: m.role as "system" | "user" | "assistant",
@@ -870,20 +802,14 @@ export function Playground() {
       ] as const
 
       const prefixResults = providers.map((p) => {
-        const result = optimizePrefix(
-          prefixMessages,
-          p.model,
-          p.price
-        )
+        const result = optimizePrefix(prefixMessages, p.model, p.price)
         const provider = detectProvider(p.model)
         const discount = getCacheDiscountRate(provider)
         return { ...p, result, provider, discount }
       })
 
       const bestPrefix = prefixResults.sort(
-        (a, b) =>
-          b.result.estimatedPrefixSavings -
-          a.result.estimatedPrefixSavings
+        (a, b) => b.result.estimatedPrefixSavings - a.result.estimatedPrefixSavings,
       )[0]
 
       addResult({
@@ -892,12 +818,13 @@ export function Playground() {
         without: { tokens: 0, cost: 0, calls: 0 },
         with: { tokens: 0, cost: 0, calls: 0 },
         saved: { tokens: 0, cost: 0, calls: 0 },
-        proof: prefixResults
-          .map(
-            (p) =>
-              `${p.name} (${(p.discount * 100).toFixed(0)}% discount): ${p.result.prefixTokens} prefix tokens, eligible=${p.result.prefixEligibleForCaching}, saves $${p.result.estimatedPrefixSavings.toFixed(6)}/req`
-          )
-          .join(". ") +
+        proof:
+          prefixResults
+            .map(
+              (p) =>
+                `${p.name} (${(p.discount * 100).toFixed(0)}% discount): ${p.result.prefixTokens} prefix tokens, eligible=${p.result.prefixEligibleForCaching}, saves $${p.result.estimatedPrefixSavings.toFixed(6)}/req`,
+            )
+            .join(". ") +
           `. Best cache savings: ${bestPrefix.name} at $${bestPrefix.result.estimatedPrefixSavings.toFixed(6)}/req. Anthropic has 90% discount vs OpenAI's 50%.`,
         raw: {
           providers: prefixResults.map((p) => ({
@@ -914,9 +841,7 @@ export function Playground() {
       })
 
       // ===== TEST 10: Tool Definition Token Overhead =====
-      setCurrentTest(
-        "Measuring hidden token cost of tool/function definitions..."
-      )
+      setCurrentTest("Measuring hidden token cost of tool/function definitions...")
 
       const sampleTools: ToolDefinition[] = [
         {
@@ -930,13 +855,11 @@ export function Playground() {
               properties: {
                 query: {
                   type: "string",
-                  description:
-                    "The search query string to look up on the web",
+                  description: "The search query string to look up on the web",
                 },
                 num_results: {
                   type: "integer",
-                  description:
-                    "Number of search results to return, between 1 and 10",
+                  description: "Number of search results to return, between 1 and 10",
                 },
                 language: {
                   type: "string",
@@ -959,8 +882,7 @@ export function Playground() {
               properties: {
                 location: {
                   type: "string",
-                  description:
-                    "City name or coordinates (lat,lon)",
+                  description: "City name or coordinates (lat,lon)",
                 },
                 units: {
                   type: "string",
@@ -983,18 +905,15 @@ export function Playground() {
               properties: {
                 code: {
                   type: "string",
-                  description:
-                    "The Python code to execute in the sandbox environment",
+                  description: "The Python code to execute in the sandbox environment",
                 },
                 timeout: {
                   type: "integer",
-                  description:
-                    "Maximum execution time in seconds",
+                  description: "Maximum execution time in seconds",
                 },
                 packages: {
                   type: "array",
-                  description:
-                    "Additional pip packages to install",
+                  description: "Additional pip packages to install",
                   items: { type: "string" },
                 },
               },
@@ -1013,8 +932,7 @@ export function Playground() {
               properties: {
                 path: {
                   type: "string",
-                  description:
-                    "The file path relative to the workspace root",
+                  description: "The file path relative to the workspace root",
                 },
                 encoding: {
                   type: "string",
@@ -1037,8 +955,7 @@ export function Playground() {
               properties: {
                 prompt: {
                   type: "string",
-                  description:
-                    "A detailed description of the image to generate",
+                  description: "A detailed description of the image to generate",
                 },
                 size: {
                   type: "string",
@@ -1059,10 +976,7 @@ export function Playground() {
 
       const toolResult = countToolTokens(sampleTools, 0.15)
       const optimized = optimizeToolDefinitions(sampleTools)
-      const optimizedToolResult = countToolTokens(
-        optimized.optimized,
-        0.15
-      )
+      const optimizedToolResult = countToolTokens(optimized.optimized, 0.15)
 
       const costPer1000Requests = toolResult.costPerRequest * 1000
 
@@ -1080,13 +994,8 @@ export function Playground() {
           calls: 100,
         },
         saved: {
-          tokens:
-            (toolResult.totalTokens - optimizedToolResult.totalTokens) *
-            100,
-          cost:
-            (toolResult.costPerRequest -
-              optimizedToolResult.costPerRequest) *
-            100,
+          tokens: (toolResult.totalTokens - optimizedToolResult.totalTokens) * 100,
+          cost: (toolResult.costPerRequest - optimizedToolResult.costPerRequest) * 100,
           calls: 0,
         },
         proof: `${sampleTools.length} tools inject ${toolResult.totalTokens} hidden tokens into every request (${toolResult.overheadTokens} overhead + content). Per tool: ${toolResult.perTool.map((t) => `${t.name}=${t.tokens}`).join(", ")}. At 1K requests: $${costPer1000Requests.toFixed(4)} just for tool definitions. After optimization: ${optimizedToolResult.totalTokens} tokens (saved ${optimized.savedTokens}).`,
@@ -1101,9 +1010,7 @@ export function Playground() {
       })
 
       // ===== TEST 11: Image Token Counting =====
-      setCurrentTest(
-        "Calculating vision model token costs for different image sizes..."
-      )
+      setCurrentTest("Calculating vision model token costs for different image sizes...")
 
       const imageSizes = [
         { w: 512, h: 512, label: "512x512 thumbnail" },
@@ -1120,33 +1027,24 @@ export function Playground() {
 
       const screenResult = imageResults.find((r) => r.w === 1920)!
       const thumbResult = imageResults.find((r) => r.w === 512)!
-      const bestRecommendation = imageResults.find(
-        (r) => r.high.recommendation
-      )
+      const bestRecommendation = imageResults.find((r) => r.high.recommendation)
 
       addResult({
         module: "vision",
         label: `Image token costs: ${imageSizes.length} sizes compared (high vs low detail)`,
         without: {
           tokens: screenResult.high.tokens,
-          cost:
-            (screenResult.high.tokens / 1_000_000) * 2.5,
+          cost: (screenResult.high.tokens / 1_000_000) * 2.5,
           calls: 1,
         },
         with: {
           tokens: thumbResult.high.tokens,
-          cost:
-            (thumbResult.high.tokens / 1_000_000) * 2.5,
+          cost: (thumbResult.high.tokens / 1_000_000) * 2.5,
           calls: 1,
         },
         saved: {
-          tokens:
-            screenResult.high.tokens - thumbResult.high.tokens,
-          cost:
-            ((screenResult.high.tokens -
-              thumbResult.high.tokens) /
-              1_000_000) *
-            2.5,
+          tokens: screenResult.high.tokens - thumbResult.high.tokens,
+          cost: ((screenResult.high.tokens - thumbResult.high.tokens) / 1_000_000) * 2.5,
           calls: 0,
         },
         proof: `Image tokens (high detail): ${imageResults.map((r) => `${r.label}=${r.high.tokens}tok/${r.high.tiles}tiles`).join(", ")}. Low detail: fixed 85 tokens regardless of size.${bestRecommendation?.high.recommendation ? ` Resize ${bestRecommendation.label} to ${bestRecommendation.high.recommendation.suggestedWidth}x${bestRecommendation.high.recommendation.suggestedHeight} to save ${bestRecommendation.high.recommendation.savedTokens} tokens.` : ""}`,
@@ -1163,9 +1061,7 @@ export function Playground() {
       })
 
       // ===== TEST 12: Output Token Prediction =====
-      setCurrentTest(
-        "Testing output length prediction and smart max_tokens..."
-      )
+      setCurrentTest("Testing output length prediction and smart max_tokens...")
 
       const predictionPrompts = [
         {
@@ -1189,15 +1085,10 @@ export function Playground() {
       }))
 
       const blanketTotal = 4096 * predictions.length
-      const smartTotal = predictions.reduce(
-        (sum, p) => sum + p.prediction.suggestedMaxTokens,
-        0
-      )
+      const smartTotal = predictions.reduce((sum, p) => sum + p.prediction.suggestedMaxTokens, 0)
       const outputPricePer1M = 0.6
-      const estimatedBlanketCost =
-        ((blanketTotal * 0.6) / 1_000_000) * outputPricePer1M
-      const estimatedSmartCost =
-        ((smartTotal * 0.8) / 1_000_000) * outputPricePer1M
+      const estimatedBlanketCost = ((blanketTotal * 0.6) / 1_000_000) * outputPricePer1M
+      const estimatedSmartCost = ((smartTotal * 0.8) / 1_000_000) * outputPricePer1M
 
       addResult({
         module: "output",
@@ -1213,9 +1104,7 @@ export function Playground() {
           calls: predictions.length,
         },
         saved: {
-          tokens:
-            Math.round(blanketTotal * 0.6) -
-            Math.round(smartTotal * 0.8),
+          tokens: Math.round(blanketTotal * 0.6) - Math.round(smartTotal * 0.8),
           cost: estimatedBlanketCost - estimatedSmartCost,
           calls: 0,
         },
@@ -1235,9 +1124,7 @@ export function Playground() {
       })
 
       // ===== TEST 13: Streaming Token Tracker =====
-      setCurrentTest(
-        "Demonstrating streaming token tracking with simulated abort..."
-      )
+      setCurrentTest("Demonstrating streaming token tracking with simulated abort...")
 
       const streamTracker = new StreamTokenTracker({
         modelId: "gpt-4o-mini",
@@ -1299,8 +1186,7 @@ export function Playground() {
           calls: 1,
         },
         saved: {
-          tokens:
-            fullUsage.outputTokens - abortUsage.outputTokens,
+          tokens: fullUsage.outputTokens - abortUsage.outputTokens,
           cost: overEstimate,
           calls: 0,
         },
@@ -1315,18 +1201,14 @@ export function Playground() {
       })
 
       // ===== TEST 14: Circuit Breaker =====
-      setCurrentTest(
-        "Testing cost circuit breaker with spending limits..."
-      )
+      setCurrentTest("Testing cost circuit breaker with spending limits...")
 
       const breaker = new CostCircuitBreaker({
         limits: { perSession: 0.5, perHour: 0.25 },
         action: "stop",
       })
 
-      const simulatedRequestCosts = [
-        0.05, 0.08, 0.06, 0.04, 0.05, 0.03, 0.02,
-      ]
+      const simulatedRequestCosts = [0.05, 0.08, 0.06, 0.04, 0.05, 0.03, 0.02]
       const breakerResults: {
         cost: number
         allowed: boolean
@@ -1367,9 +1249,7 @@ export function Playground() {
         },
         saved: {
           tokens: 0,
-          cost:
-            simulatedRequestCosts.reduce((s, c) => s + c, 0) -
-            totalSpent,
+          cost: simulatedRequestCosts.reduce((s, c) => s + c, 0) - totalSpent,
           calls: totalBlocked,
         },
         proof: `Hourly budget: $0.25. ${simulatedRequestCosts.length} requests at ${simulatedRequestCosts.map((c) => `$${c.toFixed(2)}`).join(", ")}. Breaker tripped after $${totalSpent.toFixed(2)} spent, blocking ${totalBlocked} remaining request(s). Remaining budget: session=$${breakerStatus.remaining.session?.toFixed(4) ?? "N/A"}, hour=$${breakerStatus.remaining.hour?.toFixed(4) ?? "N/A"}. This prevents the $847 -> $34,127 runaway cost scenarios seen in production.`,
@@ -1383,9 +1263,7 @@ export function Playground() {
 
       setStatus("done")
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Unknown error"
-      )
+      setError(err instanceof Error ? err.message : "Unknown error")
       setStatus("error")
     }
   }, [addResult])
@@ -1402,11 +1280,7 @@ export function Playground() {
         >
           {status === "running" ? (
             <>
-              <svg
-                className="h-4 w-4 shrink-0 animate-spin"
-                viewBox="0 0 24 24"
-                fill="none"
-              >
+              <svg className="h-4 w-4 shrink-0 animate-spin" viewBox="0 0 24 24" fill="none">
                 <circle
                   className="opacity-25"
                   cx="12"
@@ -1430,9 +1304,7 @@ export function Playground() {
           )}
         </button>
         {status === "running" && currentTest && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            {currentTest}
-          </p>
+          <p className="mt-2 text-xs text-muted-foreground">{currentTest}</p>
         )}
       </div>
 

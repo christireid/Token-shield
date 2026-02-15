@@ -12,18 +12,16 @@ describe("model-router", () => {
     it("scores a complex prompt higher", () => {
       const result = analyzeComplexity(
         "Analyze the trade-offs between microservices and monoliths. " +
-        "Compare their implications for team scalability, evaluate " +
-        "deployment complexity, and recommend an approach for a startup " +
-        "with 5 engineers. Output your analysis as JSON."
+          "Compare their implications for team scalability, evaluate " +
+          "deployment complexity, and recommend an approach for a startup " +
+          "with 5 engineers. Output your analysis as JSON.",
       )
       expect(result.score).toBeGreaterThan(35)
       expect(result.signals.reasoningKeywords).toBeGreaterThan(0)
     })
 
     it("detects code signals", () => {
-      const result = analyzeComplexity(
-        "```typescript\nfunction hello() { return 'world' }\n```"
-      )
+      const result = analyzeComplexity("```typescript\nfunction hello() { return 'world' }\n```")
       expect(result.signals.codeSignals).toBeGreaterThan(0)
     })
 
@@ -75,9 +73,7 @@ describe("model-router", () => {
       const ranked = rankModels(1000, 500)
       expect(ranked.length).toBeGreaterThan(0)
       for (let i = 1; i < ranked.length; i++) {
-        expect(ranked[i].cost.totalCost).toBeGreaterThanOrEqual(
-          ranked[i - 1].cost.totalCost
-        )
+        expect(ranked[i].cost.totalCost).toBeGreaterThanOrEqual(ranked[i - 1].cost.totalCost)
       }
     })
   })

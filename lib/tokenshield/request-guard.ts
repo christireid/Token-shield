@@ -47,6 +47,14 @@ export interface GuardConfig {
    * identical prompts for five seconds.
    */
   deduplicateWindow?: number
+
+  /**
+   * Maximum number of characters allowed in a prompt.
+   * Prompts longer than this are rejected before tokenization to prevent
+   * the tokenizer from hanging on very large inputs.
+   * Default: 500_000 (~125k tokens). Set to 0 to disable.
+   */
+  maxInputChars?: number
 }
 
 export interface GuardResult {
@@ -79,7 +87,24 @@ const DEFAULT_CONFIG: GuardConfig = {
   maxInputTokens: Infinity,
   // No time‑window deduplication by default
   deduplicateWindow: 0,
+  // Cap at 500k chars (~125k tokens) to prevent tokenizer hangs
+  maxInputChars: 500_000,
 }
+
+/** Hard cap on tracked request timestamps to prevent unbounded growth during bursts */
+const MAX_TRACKED_TIMESTAMPS = 200
+/** In-flight map size threshold that triggers stale entry eviction */
+const IN_FLIGHT_EVICTION_THRESHOLD = 50
+/** Entries older than this are considered stale and evicted (5 minutes) */
+const STALE_REQUEST_AGE_MS = 5 * 60 * 1000
+/** Hard cap on cost log entries to prevent unbounded growth in high-throughput */
+const MAX_COST_LOG_ENTRIES = 500
+/** Hard cap on recent prompts map to prevent unbounded growth in long-running processes */
+const MAX_RECENT_PROMPTS = 1000
+/** One minute in milliseconds */
+const ONE_MINUTE_MS = 60_000
+/** One hour in milliseconds */
+const ONE_HOUR_MS = 3_600_000
 
 export class RequestGuard {
   private config: GuardConfig
@@ -104,52 +129,53 @@ export class RequestGuard {
   }
 
   /**
-   * Check if a request should proceed. Returns a gate decision
-   * with the reason if blocked.
+   * Check if a request should proceed. Call before every API call.
+   * Returns a gate decision with the reason if blocked.
    *
    * @param modelId - Optional model ID for cost estimation. Falls back to
-   *   config.modelId when not provided (backward-compatible).
+   *   config.modelId when not provided.
    */
   check(prompt: string, expectedOutputTokens = 500, modelId?: string): GuardResult {
     const now = Date.now()
+
+    // -1. Max character length check (before tokenization to avoid hanging on huge inputs)
+    const maxChars = this.config.maxInputChars ?? DEFAULT_CONFIG.maxInputChars
+    if (maxChars && maxChars > 0 && prompt.length > maxChars) {
+      this.blockedCount++
+      this.totalBlocked++
+      return {
+        allowed: false,
+        reason: `Prompt too long: ${prompt.length.toLocaleString()} chars exceeds ${maxChars.toLocaleString()} char limit`,
+        blockedCount: this.blockedCount,
+        estimatedCost: 0,
+        currentHourlySpend: this.getCurrentHourlySpend(),
+      }
+    }
+
     const inputTokens = countTokens(prompt)
     const effectiveModel = modelId ?? this.config.modelId
-    const cost = estimateCost(
-      effectiveModel,
-      inputTokens,
-      expectedOutputTokens
-    )
+    let costTotal: number
+    try {
+      costTotal = estimateCost(effectiveModel, inputTokens, expectedOutputTokens).totalCost
+    } catch {
+      // Unknown model — use zero cost so guard checks still run
+      // (the cost gate will be skipped, but debounce/rate/dedup still apply)
+      costTotal = 0
+    }
+    const cost = { totalCost: costTotal }
 
     const normalized = prompt.trim().toLowerCase()
 
     // 0. Minimum length check
     const minLen = this.config.minInputLength ?? DEFAULT_CONFIG.minInputLength
     if (minLen !== undefined && prompt.trim().length < minLen) {
-      this.blockedCount++
-      this.totalBlocked++
-      this.totalSaved += cost.totalCost
-      return {
-        allowed: false,
-        reason: `Too short: ${prompt.trim().length} chars < ${minLen}`,
-        blockedCount: this.blockedCount,
-        estimatedCost: cost.totalCost,
-        currentHourlySpend: this.getCurrentHourlySpend(),
-      }
+      return this.blocked(`Too short: ${prompt.trim().length} chars < ${minLen}`, cost.totalCost)
     }
 
     // 0.5 Maximum token check
     const maxTok = this.config.maxInputTokens ?? DEFAULT_CONFIG.maxInputTokens
     if (maxTok !== undefined && Number.isFinite(maxTok) && inputTokens > maxTok) {
-      this.blockedCount++
-      this.totalBlocked++
-      this.totalSaved += cost.totalCost
-      return {
-        allowed: false,
-        reason: `Over budget: ${inputTokens} tokens > ${maxTok}`,
-        blockedCount: this.blockedCount,
-        estimatedCost: cost.totalCost,
-        currentHourlySpend: this.getCurrentHourlySpend(),
-      }
+      return this.blocked(`Over budget: ${inputTokens} tokens > ${maxTok}`, cost.totalCost)
     }
 
     // Time-based deduplication check
@@ -157,81 +183,47 @@ export class RequestGuard {
     if (dedupWindow && this.recentPrompts.has(normalized)) {
       const lastTime = this.recentPrompts.get(normalized)!
       if (now - lastTime < dedupWindow) {
-        this.blockedCount++
-        this.totalBlocked++
-        this.totalSaved += cost.totalCost
-        return {
-          allowed: false,
-          reason: `Deduped: identical prompt within ${dedupWindow}ms window`,
-          blockedCount: this.blockedCount,
-          estimatedCost: cost.totalCost,
-          currentHourlySpend: this.getCurrentHourlySpend(),
-        }
+        return this.blocked(
+          `Deduped: identical prompt within ${dedupWindow}ms window`,
+          cost.totalCost,
+        )
       }
     }
     // 1. Debounce check
     if (now - this.lastRequestTime < this.config.debounceMs) {
-      this.blockedCount++
-      this.totalBlocked++
-      this.totalSaved += cost.totalCost
-      return {
-        allowed: false,
-        reason: `Debounced: ${now - this.lastRequestTime}ms since last request (min: ${this.config.debounceMs}ms)`,
-        blockedCount: this.blockedCount,
-        estimatedCost: cost.totalCost,
-        currentHourlySpend: this.getCurrentHourlySpend(),
-      }
+      return this.blocked(
+        `Debounced: ${now - this.lastRequestTime}ms since last request (min: ${this.config.debounceMs}ms)`,
+        cost.totalCost,
+      )
     }
 
     // 2. Rate limit check
-    const oneMinuteAgo = now - 60_000
-    this.requestTimestamps = this.requestTimestamps.filter(
-      (t) => t > oneMinuteAgo
-    )
-    if (
-      this.requestTimestamps.length >= this.config.maxRequestsPerMinute
-    ) {
-      this.blockedCount++
-      this.totalBlocked++
-      this.totalSaved += cost.totalCost
-      return {
-        allowed: false,
-        reason: `Rate limited: ${this.requestTimestamps.length}/${this.config.maxRequestsPerMinute} requests in the last minute`,
-        blockedCount: this.blockedCount,
-        estimatedCost: cost.totalCost,
-        currentHourlySpend: this.getCurrentHourlySpend(),
-      }
+    const oneMinuteAgo = now - ONE_MINUTE_MS
+    this.requestTimestamps = this.requestTimestamps.filter((t) => t > oneMinuteAgo)
+    if (this.requestTimestamps.length >= this.config.maxRequestsPerMinute) {
+      return this.blocked(
+        `Rate limited: ${this.requestTimestamps.length}/${this.config.maxRequestsPerMinute} requests in the last minute`,
+        cost.totalCost,
+      )
     }
 
-    // 3. Cost gate check
+    // 3. Cost gate check (0 = no limit, consistent with UserBudgetManager)
     const currentSpend = this.getCurrentHourlySpend()
-    if (currentSpend + cost.totalCost > this.config.maxCostPerHour) {
-      this.blockedCount++
-      this.totalBlocked++
-      this.totalSaved += cost.totalCost
-      return {
-        allowed: false,
-        reason: `Cost gate: would exceed hourly budget ($${(currentSpend + cost.totalCost).toFixed(4)} > $${this.config.maxCostPerHour.toFixed(2)})`,
-        blockedCount: this.blockedCount,
-        estimatedCost: cost.totalCost,
-        currentHourlySpend: currentSpend,
-      }
+    if (
+      this.config.maxCostPerHour > 0 &&
+      currentSpend + cost.totalCost > this.config.maxCostPerHour
+    ) {
+      return this.blocked(
+        `Cost gate: would exceed hourly budget ($${(currentSpend + cost.totalCost).toFixed(4)} > $${this.config.maxCostPerHour.toFixed(2)})`,
+        cost.totalCost,
+      )
     }
 
     // 4. Deduplication check
     if (this.config.deduplicateInFlight) {
       const existing = this.inFlight.get(normalized)
       if (existing) {
-        this.blockedCount++
-        this.totalBlocked++
-        this.totalSaved += cost.totalCost
-        return {
-          allowed: false,
-          reason: "Deduplicated: identical request already in flight",
-          blockedCount: this.blockedCount,
-          estimatedCost: cost.totalCost,
-          currentHourlySpend: currentSpend,
-        }
+        return this.blocked("Deduplicated: identical request already in flight", cost.totalCost)
       }
     }
 
@@ -239,8 +231,8 @@ export class RequestGuard {
     this.lastRequestTime = now
     this.requestTimestamps.push(now)
     // Hard cap: keep only last 200 timestamps to prevent growth during bursts
-    if (this.requestTimestamps.length > 200) {
-      this.requestTimestamps = this.requestTimestamps.slice(-200)
+    if (this.requestTimestamps.length > MAX_TRACKED_TIMESTAMPS) {
+      this.requestTimestamps = this.requestTimestamps.slice(-MAX_TRACKED_TIMESTAMPS)
     }
     this.blockedCount = 0
     this.totalAllowed++
@@ -252,6 +244,11 @@ export class RequestGuard {
       const cutoff = now - dedupWindow
       for (const [p, ts] of this.recentPrompts) {
         if (ts < cutoff) this.recentPrompts.delete(p)
+      }
+      // Hard cap: clear if still over limit (e.g. very long dedup windows)
+      if (this.recentPrompts.size > MAX_RECENT_PROMPTS) {
+        this.recentPrompts.clear()
+        this.recentPrompts.set(normalized, now)
       }
     }
 
@@ -284,8 +281,8 @@ export class RequestGuard {
     })
 
     // Evict stale in-flight entries older than 5 minutes (never completed)
-    if (this.inFlight.size > 50) {
-      const staleThreshold = Date.now() - 300_000
+    if (this.inFlight.size > IN_FLIGHT_EVICTION_THRESHOLD) {
+      const staleThreshold = Date.now() - STALE_REQUEST_AGE_MS
       for (const [key, req] of this.inFlight) {
         if (req.startedAt < staleThreshold) {
           req.controller.abort()
@@ -307,20 +304,25 @@ export class RequestGuard {
     prompt: string,
     actualInputTokens: number,
     actualOutputTokens: number,
-    modelId?: string
+    modelId?: string,
   ): void {
     const normalized = prompt.trim().toLowerCase()
     this.inFlight.delete(normalized)
 
-    const cost = estimateCost(
-      modelId ?? this.config.modelId,
-      actualInputTokens,
-      actualOutputTokens
-    )
-    this.costLog.push({ timestamp: Date.now(), cost: cost.totalCost })
+    let completeCost = 0
+    try {
+      completeCost = estimateCost(
+        modelId ?? this.config.modelId,
+        actualInputTokens,
+        actualOutputTokens,
+      ).totalCost
+    } catch {
+      // Unknown model — skip cost logging
+    }
+    this.costLog.push({ timestamp: Date.now(), cost: completeCost })
     // Hard cap: keep only last 500 entries to prevent growth in high-throughput
-    if (this.costLog.length > 500) {
-      this.costLog = this.costLog.slice(-500)
+    if (this.costLog.length > MAX_COST_LOG_ENTRIES) {
+      this.costLog = this.costLog.slice(-MAX_COST_LOG_ENTRIES)
     }
   }
 
@@ -332,7 +334,7 @@ export class RequestGuard {
    * resolves with null immediately (it does not hang).
    */
   debounce<T>(
-    fn: (prompt: string, signal: AbortSignal) => Promise<T>
+    fn: (prompt: string, signal: AbortSignal) => Promise<T>,
   ): (prompt: string) => Promise<T | null> {
     let pendingController: AbortController | null = null
     let pendingResolve: ((value: T | null) => void) | null = null
@@ -379,8 +381,21 @@ export class RequestGuard {
     }
   }
 
+  private blocked(reason: string, cost: number): GuardResult {
+    this.blockedCount++
+    this.totalBlocked++
+    this.totalSaved += cost
+    return {
+      allowed: false,
+      reason,
+      blockedCount: this.blockedCount,
+      estimatedCost: cost,
+      currentHourlySpend: this.getCurrentHourlySpend(),
+    }
+  }
+
   private getCurrentHourlySpend(): number {
-    const oneHourAgo = Date.now() - 3_600_000
+    const oneHourAgo = Date.now() - ONE_HOUR_MS
     this.costLog = this.costLog.filter((c) => c.timestamp > oneHourAgo)
     return this.costLog.reduce((sum, c) => sum + c.cost, 0)
   }
@@ -397,16 +412,14 @@ export class RequestGuard {
     currentHourlySpend: number
     inFlightCount: number
   } {
-    const oneMinuteAgo = Date.now() - 60_000
+    const oneMinuteAgo = Date.now() - ONE_MINUTE_MS
     const total = this.totalBlocked + this.totalAllowed
     return {
       totalBlocked: this.totalBlocked,
       totalAllowed: this.totalAllowed,
       blockedRate: total > 0 ? this.totalBlocked / total : 0,
       totalSavedDollars: this.totalSaved,
-      currentRequestsPerMinute: this.requestTimestamps.filter(
-        (t) => t > oneMinuteAgo
-      ).length,
+      currentRequestsPerMinute: this.requestTimestamps.filter((t) => t > oneMinuteAgo).length,
       currentHourlySpend: this.getCurrentHourlySpend(),
       inFlightCount: this.inFlight.size,
     }
@@ -416,18 +429,20 @@ export class RequestGuard {
    * Read-only snapshot of guard state for dry-run simulation.
    * Does NOT mutate any internal state (debounce timers, timestamps, etc.).
    */
-  getStats(): {
+  getSnapshot(): {
     lastRequestTime: number
     requestsLastMinute: number
     currentHourlySpend: number
   } {
-    const oneMinuteAgo = Date.now() - 60_000
-    const oneHourAgo = Date.now() - 3_600_000
+    const oneMinuteAgo = Date.now() - ONE_MINUTE_MS
+    const oneHourAgo = Date.now() - ONE_HOUR_MS
     return {
       lastRequestTime: this.lastRequestTime,
       requestsLastMinute: this.requestTimestamps.filter((t) => t > oneMinuteAgo).length,
       // Compute without mutating this.costLog (getCurrentHourlySpend filters in-place)
-      currentHourlySpend: this.costLog.filter((c) => c.timestamp > oneHourAgo).reduce((sum, c) => sum + c.cost, 0),
+      currentHourlySpend: this.costLog
+        .filter((c) => c.timestamp > oneHourAgo)
+        .reduce((sum, c) => sum + c.cost, 0),
     }
   }
 

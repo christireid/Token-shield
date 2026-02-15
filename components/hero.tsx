@@ -4,8 +4,18 @@ export function Hero() {
       <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-20">
         <div className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-            <svg className="h-5 w-5 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+            <svg
+              className="h-5 w-5 text-primary-foreground"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2.5}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
+              />
             </svg>
           </div>
           <span className="font-mono text-lg font-bold text-foreground">TokenShield</span>
@@ -18,18 +28,16 @@ export function Hero() {
         </h1>
 
         <p className="mt-4 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg sm:leading-relaxed">
-          11 TypeScript modules that reduce token waste through exact BPE counting,
-          semantic caching, context trimming, smart model routing, tool overhead analysis,
-          streaming abort tracking, and hard spending limits. Works entirely client-side.
+          11 TypeScript modules that reduce token waste through exact BPE counting, semantic
+          caching, context trimming, smart model routing, tool overhead analysis, streaming abort
+          tracking, and hard spending limits. Works entirely client-side.
         </p>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           <code className="rounded-lg bg-background px-4 py-2.5 font-mono text-sm text-muted-foreground">
             npm install tokenshield
           </code>
-          <span className="text-xs text-muted-foreground">
-            2 deps: gpt-tokenizer + idb-keyval
-          </span>
+          <span className="text-xs text-muted-foreground">2 deps: gpt-tokenizer + idb-keyval</span>
         </div>
 
         {/* Key stats */}

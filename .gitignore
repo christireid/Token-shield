@@ -1,14 +1,33 @@
-# v0 runtime files (should only exist in preview, not in git)
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.next/
+out/
+*.tsbuildinfo
+
+# Environment
+.env
+.env*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Lock files (use npm)
+pnpm-lock.yaml
+
+# v0 runtime files
 __v0_runtime_loader.js
 __v0_devtools.tsx
 __v0_jsx-dev-runtime.ts
 instrumentation-client.js
 instrumentation-client.ts
 
-# Common ignores
-node_modules/
-.next/
-dist/
-.env*.local
-.DS_Store
-*.tsbuildinfo
+# Coverage
+coverage/

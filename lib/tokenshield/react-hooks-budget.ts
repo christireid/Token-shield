@@ -7,15 +7,10 @@
  * per-user budget tracking, and session savings accumulation.
  */
 
-import {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  useSyncExternalStore,
-} from "react"
+import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from "react"
 import { CostCircuitBreaker } from "./circuit-breaker"
 import { UserBudgetManager, type UserBudgetStatus } from "./user-budget-manager"
+import { subscribeToEvent } from "./event-bus"
 import { useTokenShield } from "./react-context"
 
 // -------------------------------------------------------
@@ -51,11 +46,11 @@ function getServerSnapshot(): LedgerSnapshot {
  * Uses a version-based cache so that getSnapshot returns a referentially
  * stable object when the underlying data hasn't changed.
  */
-export function useCostLedger(featureName?: string) {
+export function useCostLedger(featureName?: string): LedgerSnapshot {
   const { ledger } = useTokenShield()
   if (!ledger) {
     throw new Error(
-      "useCostLedger requires TokenShieldProvider with ledgerConfig; no ledger is available"
+      "useCostLedger requires TokenShieldProvider with ledgerConfig; no ledger is available",
     )
   }
 
@@ -71,7 +66,7 @@ export function useCostLedger(featureName?: string) {
         versionRef.current++
         listener()
       }),
-    [ledger]
+    [ledger],
   )
 
   const getSnapshot = useCallback((): LedgerSnapshot => {
@@ -87,10 +82,7 @@ export function useCostLedger(featureName?: string) {
         totalSpent: data?.cost ?? 0,
         totalSaved: data?.saved ?? 0,
         totalCalls: data?.calls ?? 0,
-        savingsRate:
-          data && data.cost + data.saved > 0
-            ? data.saved / (data.cost + data.saved)
-            : 0,
+        savingsRate: data && data.cost + data.saved > 0 ? data.saved / (data.cost + data.saved) : 0,
         breakdown: data,
       }
     } else {
@@ -100,8 +92,7 @@ export function useCostLedger(featureName?: string) {
         totalCalls: summary.totalCalls,
         savingsRate:
           summary.totalSpent + summary.totalSaved > 0
-            ? summary.totalSaved /
-              (summary.totalSpent + summary.totalSaved)
+            ? summary.totalSaved / (summary.totalSpent + summary.totalSaved)
             : 0,
         breakdown: summary.byFeature,
       }
@@ -117,7 +108,7 @@ export function useCostLedger(featureName?: string) {
 /**
  * Alias for useCostLedger that emphasizes per-feature cost tracking.
  */
-export function useFeatureCost(featureName: string) {
+export function useFeatureCost(featureName: string): LedgerSnapshot {
   return useCostLedger(featureName)
 }
 
@@ -159,7 +150,7 @@ export function useBudgetAlert(breaker?: CostCircuitBreaker): {
 
       if (status.trippedLimits.length > 0) {
         const worst = status.trippedLimits.reduce((a, b) =>
-          a.percentUsed >= b.percentUsed ? a : b
+          a.percentUsed >= b.percentUsed ? a : b,
         )
         setBudgetState({
           isOverBudget: status.tripped,
@@ -245,19 +236,10 @@ export function useBudgetAlert(breaker?: CostCircuitBreaker): {
  * Subscribes to a UserBudgetManager instance and returns the current
  * budget state for the given userId.
  */
-export function useUserBudget(
-  manager: UserBudgetManager,
-  userId: string
-): UserBudgetStatus {
-  const getSnapshot = useCallback(
-    () => manager.getStatus(userId),
-    [manager, userId]
-  )
+export function useUserBudget(manager: UserBudgetManager, userId: string): UserBudgetStatus {
+  const getSnapshot = useCallback(() => manager.getStatus(userId), [manager, userId])
 
-  const subscribe = useCallback(
-    (listener: () => void) => manager.subscribe(listener),
-    [manager]
-  )
+  const subscribe = useCallback((listener: () => void) => manager.subscribe(listener), [manager])
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
@@ -300,8 +282,7 @@ export function useSessionSavings(): SessionSavingsState {
         requestCount: prev.requestCount + 1,
       }))
     }
-    eventBus.on("ledger:entry", handler as any)
-    return () => eventBus.off("ledger:entry", handler as any)
+    return subscribeToEvent(eventBus, "ledger:entry", handler)
   }, [eventBus])
 
   return state
