@@ -199,9 +199,8 @@ export class ProviderAdapter {
   }
 
   getProviderForModel(modelId: string): ProviderName | undefined {
-    const entries = Array.from(this.configs.entries())
-    for (let i = 0; i < entries.length; i++) {
-      if (entries[i][1].models.includes(modelId)) return entries[i][0]
+    for (const [name, cfg] of this.configs) {
+      if (cfg.models.includes(modelId)) return name
     }
     return undefined
   }

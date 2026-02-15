@@ -42,6 +42,18 @@ export function buildTransformParams(ctx: MiddlewareContext) {
     adapter: _adapter,
   } = ctx
 
+  /** Emit an event, swallowing any listener errors (non-fatal). */
+  function safeEmit<K extends keyof import("./event-bus").TokenShieldEvents>(
+    name: K,
+    data: import("./event-bus").TokenShieldEvents[K],
+  ): void {
+    try {
+      instanceEvents.emit(name, data)
+    } catch {
+      /* non-fatal */
+    }
+  }
+
   return async ({ params }: { params: Record<string, unknown> }) => {
     const meta: ShieldMeta = {}
     const prompt = params.prompt as
@@ -151,14 +163,10 @@ export function buildTransformParams(ctx: MiddlewareContext) {
         const breakCheck = breaker.check(modelId, estimatedInput, expectedOut)
         if (!breakCheck.allowed) {
           const estCost = safeCost(modelId, estimatedInput, expectedOut)
-          try {
-            instanceEvents.emit("request:blocked", {
-              reason: breakCheck.reason ?? "Budget exceeded",
-              estimatedCost: estCost,
-            })
-          } catch {
-            /* non-fatal */
-          }
+          safeEmit("request:blocked", {
+            reason: breakCheck.reason ?? "Budget exceeded",
+            estimatedCost: estCost,
+          })
           config.onBlocked?.(breakCheck.reason ?? "Budget exceeded")
           throw new TokenShieldBlockedError(
             breakCheck.reason ?? "Request blocked by TokenShield breaker",
@@ -224,16 +232,12 @@ export function buildTransformParams(ctx: MiddlewareContext) {
           params = { ...params, modelId: tierModel }
           meta.tierRouted = true
 
-          try {
-            instanceEvents.emit("router:downgraded", {
-              originalModel: originalModelId,
-              selectedModel: tierModel,
-              complexity: 0,
-              savedCost: tierSaved,
-            })
-          } catch {
-            /* non-fatal */
-          }
+          safeEmit("router:downgraded", {
+            originalModel: originalModelId,
+            selectedModel: tierModel,
+            complexity: 0,
+            savedCost: tierSaved,
+          })
         }
       }
 
@@ -250,25 +254,17 @@ export function buildTransformParams(ctx: MiddlewareContext) {
               countTokens(lastUserText),
               config.context?.reserveForOutput ?? DEFAULT_RESERVE_OUTPUT_TOKENS,
             )
-            try {
-              instanceEvents.emit("request:blocked", {
-                reason: check.reason ?? "Request blocked",
-                estimatedCost: estCost,
-              })
-            } catch {
-              /* non-fatal */
-            }
+            safeEmit("request:blocked", {
+              reason: check.reason ?? "Request blocked",
+              estimatedCost: estCost,
+            })
             config.onBlocked?.(check.reason ?? "Request blocked")
             throw new TokenShieldBlockedError(
               check.reason ?? "Request blocked by TokenShield guard",
               ERROR_CODES.GUARD_RATE_LIMIT,
             )
           }
-          try {
-            instanceEvents.emit("request:allowed", { prompt: lastUserText, model: guardModelId })
-          } catch {
-            /* non-fatal */
-          }
+          safeEmit("request:allowed", { prompt: lastUserText, model: guardModelId })
         }
 
         // -- 2. CACHE LOOKUP --
@@ -282,24 +278,16 @@ export function buildTransformParams(ctx: MiddlewareContext) {
               outputTokens: lookup.entry.outputTokens,
             }
             const savedCost = safeCost(modelId, lookup.entry.inputTokens, lookup.entry.outputTokens)
-            try {
-              instanceEvents.emit("cache:hit", {
-                matchType: lookup.matchType ?? "fuzzy",
-                similarity: lookup.similarity ?? 1,
-                savedCost,
-              })
-            } catch {
-              /* non-fatal */
-            }
+            safeEmit("cache:hit", {
+              matchType: lookup.matchType ?? "fuzzy",
+              similarity: lookup.similarity ?? 1,
+              savedCost,
+            })
             ;(params as Record<string | symbol, unknown>)[SHIELD_META] = meta
             span?.end({ cacheHit: true, contextSaved: 0 })
             return params // wrapGenerate will short-circuit
           } else {
-            try {
-              instanceEvents.emit("cache:miss", { prompt: lastUserText })
-            } catch {
-              /* non-fatal */
-            }
+            safeEmit("cache:miss", { prompt: lastUserText })
           }
         }
       } catch (err) {
@@ -359,15 +347,11 @@ export function buildTransformParams(ctx: MiddlewareContext) {
             role: m.role,
             content: m.content,
           }))
-          try {
-            instanceEvents.emit("context:trimmed", {
-              originalTokens: originalInputTokens,
-              trimmedTokens: originalInputTokens - trimResult.evictedTokens,
-              savedTokens: trimResult.evictedTokens,
-            })
-          } catch {
-            /* non-fatal */
-          }
+          safeEmit("context:trimmed", {
+            originalTokens: originalInputTokens,
+            trimmedTokens: originalInputTokens - trimResult.evictedTokens,
+            savedTokens: trimResult.evictedTokens,
+          })
         }
       }
 
@@ -377,30 +361,22 @@ export function buildTransformParams(ctx: MiddlewareContext) {
         if (overrideModel && overrideModel !== params.modelId) {
           if (!meta.originalModel) meta.originalModel = String(params.modelId)
           params = { ...params, modelId: overrideModel }
-          try {
-            instanceEvents.emit("router:downgraded", {
-              originalModel: meta.originalModel,
-              selectedModel: overrideModel,
-              complexity: 0,
-              savedCost: 0,
-            })
-          } catch {
-            /* non-fatal */
-          }
+          safeEmit("router:downgraded", {
+            originalModel: meta.originalModel,
+            selectedModel: overrideModel,
+            complexity: 0,
+            savedCost: 0,
+          })
         }
       } else if (modules.router && !meta.tierRouted && lastUserText) {
         // A/B test holdback: skip routing for a fraction of requests
         const holdback = config.router?.abTestHoldback ?? 0
         if (holdback > 0 && Math.random() < holdback) {
           meta.abTestHoldout = true
-          try {
-            instanceEvents.emit("router:holdback", {
-              model: String(params.modelId),
-              holdbackRate: holdback,
-            })
-          } catch {
-            /* non-fatal */
-          }
+          safeEmit("router:holdback", {
+            model: String(params.modelId),
+            holdbackRate: holdback,
+          })
         } else {
           // Smart Routing Logic
           const complexity = analyzeComplexity(lastUserText)
@@ -463,16 +439,12 @@ export function buildTransformParams(ctx: MiddlewareContext) {
             if (!meta.originalModel) meta.originalModel = originalModelId
             params = { ...params, modelId: selectedModelId }
 
-            try {
-              instanceEvents.emit("router:downgraded", {
-                originalModel: originalModelId,
-                selectedModel: selectedModelId,
-                complexity: complexity.score,
-                savedCost: complexitySaved,
-              })
-            } catch {
-              /* non-fatal */
-            }
+            safeEmit("router:downgraded", {
+              originalModel: originalModelId,
+              selectedModel: selectedModelId,
+              complexity: complexity.score,
+              savedCost: complexitySaved,
+            })
           }
         } // end holdback else
       }
@@ -488,15 +460,11 @@ export function buildTransformParams(ctx: MiddlewareContext) {
             reservedOutputTokens: config.context?.reserveForOutput ?? DEFAULT_RESERVE_OUTPUT_TOKENS,
           })
           if (optimized.contextWindowExceeded) {
-            try {
-              instanceEvents.emit("context:trimmed", {
-                originalTokens: optimized.prefixTokens + optimized.volatileTokens,
-                trimmedTokens: optimized.prefixTokens + optimized.volatileTokens,
-                savedTokens: 0,
-              })
-            } catch {
-              /* non-fatal */
-            }
+            safeEmit("context:trimmed", {
+              originalTokens: optimized.prefixTokens + optimized.volatileTokens,
+              trimmedTokens: optimized.prefixTokens + optimized.volatileTokens,
+              savedTokens: 0,
+            })
             log?.warn("prefix", "Total tokens exceed context window", {
               total: optimized.prefixTokens + optimized.volatileTokens,
               contextWindow: pricing.contextWindow,

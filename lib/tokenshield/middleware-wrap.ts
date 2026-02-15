@@ -8,6 +8,7 @@
 
 import { MODEL_PRICING } from "./cost-estimator"
 import { StreamTokenTracker } from "./stream-tracker"
+import type { EventBus, TokenShieldEvents } from "./event-bus"
 import {
   extractLastUserText,
   safeCost,
@@ -15,6 +16,19 @@ import {
   type MiddlewareContext,
   type ShieldMeta,
 } from "./middleware-types"
+
+/** Emit an event, swallowing any listener errors (non-fatal). */
+function safeEmit<K extends keyof TokenShieldEvents>(
+  bus: EventBus,
+  name: K,
+  data: TokenShieldEvents[K],
+): void {
+  try {
+    bus.emit(name, data)
+  } catch {
+    /* non-fatal */
+  }
+}
 
 /**
  * Conservative fallback input price ($/M tokens) used when the model isn't
@@ -71,17 +85,13 @@ async function recordPostRequestUsage(
   const perRequestCost = safeCost(modelId, inputTokens, outputTokens)
   const perRequestSaved = contextSavedDollars + routerSavedDollars + prefixSavedDollars
 
-  try {
-    instanceEvents.emit("ledger:entry", {
-      model: modelId,
-      inputTokens,
-      outputTokens,
-      cost: perRequestCost,
-      saved: perRequestSaved,
-    })
-  } catch {
-    /* non-fatal */
-  }
+  safeEmit(instanceEvents, "ledger:entry", {
+    model: modelId,
+    inputTokens,
+    outputTokens,
+    cost: perRequestCost,
+    saved: perRequestSaved,
+  })
 
   config.onUsage?.({
     model: modelId,
@@ -117,11 +127,7 @@ async function recordPostRequestUsage(
   if (anomalyDetector) {
     const anomaly = anomalyDetector.check(perRequestCost, inputTokens + outputTokens)
     if (anomaly) {
-      try {
-        instanceEvents.emit("anomaly:detected", anomaly)
-      } catch {
-        /* non-fatal */
-      }
+      safeEmit(instanceEvents, "anomaly:detected", anomaly)
       config.anomaly?.onAnomalyDetected?.(anomaly)
     }
   }
@@ -417,15 +423,11 @@ export function buildWrapStream(ctx: MiddlewareContext) {
             const usage = tracker.finish()
             recordStreamUsageOnce(usage)
 
-            try {
-              instanceEvents.emit("stream:complete", {
-                inputTokens: usage.inputTokens,
-                outputTokens: usage.outputTokens,
-                totalCost: safeCost(modelId, usage.inputTokens, usage.outputTokens),
-              })
-            } catch {
-              /* non-fatal */
-            }
+            safeEmit(instanceEvents, "stream:complete", {
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              totalCost: safeCost(modelId, usage.inputTokens, usage.outputTokens),
+            })
 
             try {
               controller.close()
@@ -439,15 +441,11 @@ export function buildWrapStream(ctx: MiddlewareContext) {
           if (c && c.type === "text-delta" && typeof c.textDelta === "string") {
             tracker.addChunk(c.textDelta)
 
-            try {
-              const chunkUsage = tracker.getUsage()
-              instanceEvents.emit("stream:chunk", {
-                outputTokens: chunkUsage.outputTokens,
-                estimatedCost: chunkUsage.estimatedCost,
-              })
-            } catch {
-              /* non-fatal */
-            }
+            const chunkUsage = tracker.getUsage()
+            safeEmit(instanceEvents, "stream:chunk", {
+              outputTokens: chunkUsage.outputTokens,
+              estimatedCost: chunkUsage.estimatedCost,
+            })
           }
 
           try {
@@ -459,15 +457,11 @@ export function buildWrapStream(ctx: MiddlewareContext) {
           const usage = tracker.abort()
           recordStreamUsageOnce(usage)
 
-          try {
-            instanceEvents.emit("stream:abort", {
-              inputTokens: usage.inputTokens,
-              outputTokens: usage.outputTokens,
-              estimatedCost: safeCost(modelId, usage.inputTokens, usage.outputTokens),
-            })
-          } catch {
-            /* non-fatal */
-          }
+          safeEmit(instanceEvents, "stream:abort", {
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            estimatedCost: safeCost(modelId, usage.inputTokens, usage.outputTokens),
+          })
 
           try {
             controller.error(err)
