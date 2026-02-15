@@ -135,7 +135,37 @@ export function tokenShieldMiddleware(
 
   const ledger = modules.ledger ? new CostLedger({ persist: config.ledger?.persist }) : null
 
-  const breaker = config.breaker ? new CostCircuitBreaker(config.breaker) : null
+  const breaker = config.breaker
+    ? new CostCircuitBreaker({
+        ...config.breaker,
+        onWarning: (detail) => {
+          config.breaker?.onWarning?.(detail)
+          try {
+            instanceEvents.emit("breaker:warning", {
+              limitType: detail.limitType,
+              currentSpend: detail.currentSpend,
+              limit: detail.limit,
+              percentUsed: detail.percentUsed,
+            })
+          } catch { /* non-fatal */ }
+        },
+        onTripped: (detail) => {
+          config.breaker?.onTripped?.(detail)
+          try {
+            instanceEvents.emit("breaker:tripped", {
+              limitType: detail.limitType,
+              currentSpend: detail.currentSpend,
+              limit: detail.limit,
+              action: config.breaker?.action ?? "stop",
+            })
+          } catch { /* non-fatal */ }
+        },
+        onReset: (window) => {
+          config.breaker?.onReset?.(window)
+          // breaker:reset is not an event bus type — call audit log directly if available
+        },
+      })
+    : null
 
   const userBudgetManager = config.userBudget
     ? new UserBudgetManager({

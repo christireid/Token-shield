@@ -559,8 +559,8 @@ export class AuditLog {
     if (this.config.persist) {
       try {
         await set(this.config.storageKey, [])
-      } catch {
-        /* IDB not available */
+      } catch (err) {
+        this.config.onPersistError(err)
       }
     }
   }
