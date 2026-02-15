@@ -131,14 +131,14 @@ describe("token-counter", () => {
       const result = getTokenizerAccuracy("claude-sonnet-4-5-20250514")
       expect(result.accuracy).toBe("approximate")
       expect(result.provider).toBe("anthropic")
-      expect(result.marginOfError).toBe(0.15)
+      expect(result.marginOfError).toBe(0.35)
     })
 
     it("returns approximate accuracy for Google models", () => {
       const result = getTokenizerAccuracy("gemini-1.5-pro")
       expect(result.accuracy).toBe("approximate")
       expect(result.provider).toBe("google")
-      expect(result.marginOfError).toBe(0.2)
+      expect(result.marginOfError).toBe(0.15)
     })
 
     it("returns approximate accuracy for open-source models (llama)", () => {

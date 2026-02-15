@@ -13,7 +13,7 @@ import { optimizePrefix } from "./prefix-optimizer"
 import { MODEL_PRICING, estimateCost } from "./cost-estimator"
 import { countToolTokens, predictOutputTokens, type ToolDefinition } from "./tool-token-counter"
 import type { ChatMessage } from "./token-counter"
-import { TokenShieldBlockedError, ERROR_CODES, type ErrorCode } from "./errors"
+import { TokenShieldBlockedError, ERROR_CODES } from "./errors"
 import {
   SHIELD_META,
   MSG_OVERHEAD_TOKENS,
@@ -21,72 +21,6 @@ import {
   type MiddlewareContext,
   type ShieldMeta,
 } from "./middleware-types"
-
-/** Default expected output tokens when no explicit reserve is configured */
-const DEFAULT_RESERVE_OUTPUT_TOKENS = 500
-
-/** Map circuit-breaker limit type (from reason string) to specific error code. */
-const BREAKER_LIMIT_CODE: Record<string, ErrorCode> = {
-  session: ERROR_CODES.BREAKER_SESSION_LIMIT,
-  hour: ERROR_CODES.BREAKER_HOUR_LIMIT,
-  day: ERROR_CODES.BREAKER_DAY_LIMIT,
-  month: ERROR_CODES.BREAKER_MONTH_LIMIT,
-}
-
-/** Extract the limit type keyword from a breaker reason string like "Circuit breaker: day limit exceeded ..." */
-function parseBreakerLimitType(reason: string): string {
-  const match = reason.match(/Circuit breaker:\s*(\w+)\s+limit/)
-  return match?.[1] ?? "session"
-}
-
-/** Map guard reason strings to the correct error code and an actionable suggestion. */
-function resolveGuardError(reason: string): { code: ErrorCode; suggestion: string } {
-  if (reason.startsWith("Too short")) {
-    return {
-      code: ERROR_CODES.GUARD_MIN_LENGTH,
-      suggestion: "Provide a longer prompt, or lower config.guard.minInputLength.",
-    }
-  }
-  if (reason.startsWith("Over budget")) {
-    return {
-      code: ERROR_CODES.GUARD_MAX_TOKENS,
-      suggestion:
-        "Shorten the prompt or increase config.guard.maxInputTokens. Consider enabling context trimming (config.context.maxInputTokens) to auto-fit large prompts.",
-    }
-  }
-  if (reason.startsWith("Dedup") || reason.startsWith("Deduplicated")) {
-    return {
-      code: ERROR_CODES.GUARD_DUPLICATE,
-      suggestion:
-        "This identical prompt was sent recently. Wait for the dedup window to pass, or disable deduplication via config.guard.deduplicateInFlight / config.guard.deduplicateWindow.",
-    }
-  }
-  if (reason.startsWith("Debounced")) {
-    return {
-      code: ERROR_CODES.GUARD_RATE_LIMIT,
-      suggestion:
-        "Requests are arriving too fast. Wait at least config.guard.debounceMs between calls, or lower the debounce threshold.",
-    }
-  }
-  if (reason.startsWith("Rate limited")) {
-    return {
-      code: ERROR_CODES.GUARD_RATE_LIMIT,
-      suggestion:
-        "Request rate exceeded config.guard.maxRequestsPerMinute. Slow down requests or increase the rate limit.",
-    }
-  }
-  if (reason.startsWith("Cost gate")) {
-    return {
-      code: ERROR_CODES.GUARD_COST_LIMIT,
-      suggestion:
-        "Hourly cost budget reached. Wait for the hour window to roll over, or increase config.guard.maxCostPerHour.",
-    }
-  }
-  return {
-    code: ERROR_CODES.GUARD_RATE_LIMIT,
-    suggestion: "Review your guard configuration to adjust limits.",
-  }
-}
 
 /**
  * Build the transformParams function for the middleware pipeline.
@@ -100,22 +34,11 @@ export function buildTransformParams(ctx: MiddlewareContext) {
     cache,
     breaker,
     userBudgetManager,
+    anomalyDetector,
     instanceEvents,
     log,
     adapter: _adapter,
   } = ctx
-
-  /** Emit an event, swallowing any listener errors (non-fatal). */
-  function safeEmit<K extends keyof import("./event-bus").TokenShieldEvents>(
-    name: K,
-    data: import("./event-bus").TokenShieldEvents[K],
-  ): void {
-    try {
-      instanceEvents.emit(name, data)
-    } catch {
-      /* non-fatal */
-    }
-  }
 
   return async ({ params }: { params: Record<string, unknown> }) => {
     const meta: ShieldMeta = {}
@@ -156,6 +79,52 @@ export function buildTransformParams(ctx: MiddlewareContext) {
           (sum, m) => sum + countTokens(m.content) + MSG_OVERHEAD_TOKENS,
           0,
         )
+        const expectedOut = config.context?.reserveForOutput ?? 500
+        const estimatedCost = safeCost(modelId, inputTokens, expectedOut)
+
+        // Breaker dry-run check
+        if (breaker && lastUserText) {
+          const breakStatus = breaker.getStatus()
+          const hourlySpend = breakStatus.spend.lastHour
+          const wouldTrip =
+            breakStatus.tripped ||
+            (config.breaker?.limits?.perHour !== undefined &&
+              hourlySpend + estimatedCost > config.breaker.limits.perHour)
+          config.onDryRun?.({
+            module: "breaker",
+            description: wouldTrip
+              ? `Would be blocked (spend: $${hourlySpend.toFixed(4)}, est cost: $${estimatedCost.toFixed(4)})`
+              : `Would pass breaker (spend: $${hourlySpend.toFixed(4)})`,
+          })
+        }
+
+        // User budget dry-run check
+        if (userBudgetManager && config.userBudget) {
+          try {
+            const userId = config.userBudget.getUserId()
+            if (userId) {
+              const status = userBudgetManager.getStatus(userId)
+              const wouldExceedDaily = status.limits?.daily
+                ? status.spend.daily + estimatedCost >= status.limits.daily
+                : false
+              const wouldExceedMonthly = status.limits?.monthly
+                ? status.spend.monthly + estimatedCost >= status.limits.monthly
+                : false
+              config.onDryRun?.({
+                module: "userBudget",
+                description: wouldExceedDaily
+                  ? `User ${userId} would exceed daily budget ($${status.spend.daily.toFixed(4)}/$${status.limits?.daily?.toFixed(2)})`
+                  : wouldExceedMonthly
+                    ? `User ${userId} would exceed monthly budget ($${status.spend.monthly.toFixed(4)}/$${status.limits?.monthly?.toFixed(2)})`
+                    : `User ${userId} within budget (daily: $${status.spend.daily.toFixed(4)}, monthly: $${status.spend.monthly.toFixed(4)})`,
+              })
+            }
+          } catch (e) {
+            log?.warn("userBudget", "getUserId() failed in dry-run", {
+              error: e instanceof Error ? e.message : String(e),
+            })
+          }
+        }
 
         if (guard && lastUserText) {
           const stats = guard.getSnapshot()
@@ -213,6 +182,17 @@ export function buildTransformParams(ctx: MiddlewareContext) {
           }
         }
 
+        // Anomaly dry-run check
+        if (anomalyDetector) {
+          const anomaly = anomalyDetector.check(estimatedCost, inputTokens + expectedOut)
+          config.onDryRun?.({
+            module: "anomaly",
+            description: anomaly
+              ? `Anomaly detected: ${anomaly.type} (z-score: ${anomaly.zScore.toFixed(2)}, value: ${anomaly.value.toFixed(4)}, mean: ${anomaly.mean.toFixed(4)})`
+              : "No anomaly detected",
+          })
+        }
+
         span?.end({ dryRun: true })
         ;(params as Record<string | symbol, unknown>)[SHIELD_META] = meta
         return params // Pass through unchanged
@@ -221,31 +201,24 @@ export function buildTransformParams(ctx: MiddlewareContext) {
       // -- 0. BREAKER CHECK --
       if (breaker && lastUserText) {
         const estimatedInput = countTokens(lastUserText)
-        const expectedOut = config.context?.reserveForOutput ?? DEFAULT_RESERVE_OUTPUT_TOKENS
+        const expectedOut = config.context?.reserveForOutput ?? 500
         const modelId = String(params.modelId ?? "")
         const breakCheck = breaker.check(modelId, estimatedInput, expectedOut)
         if (!breakCheck.allowed) {
           const estCost = safeCost(modelId, estimatedInput, expectedOut)
-          const reason = breakCheck.reason ?? "Budget exceeded"
-          safeEmit("request:blocked", { reason, estimatedCost: estCost })
-          config.onBlocked?.(reason)
-
-          const limitType = parseBreakerLimitType(reason)
-          const code = BREAKER_LIMIT_CODE[limitType] ?? ERROR_CODES.BREAKER_SESSION_LIMIT
-          const { spend, remaining } = breakCheck.status
-          throw new TokenShieldBlockedError(reason, code, {
-            suggestion:
-              limitType === "session"
-                ? "Call breaker.reset() to start a new session, or increase limits via breaker.updateLimits()."
-                : `Wait for the ${limitType} window to roll over, or increase the per-${limitType.charAt(0).toUpperCase() + limitType.slice(1)} limit via config.breaker.limits.`,
-            details: {
-              limitType,
-              spend,
-              remaining,
-              estimatedRequestCost: estCost,
-              totalBlocked: breakCheck.status.requestsBlocked,
-            },
-          })
+          try {
+            instanceEvents.emit("request:blocked", {
+              reason: breakCheck.reason ?? "Budget exceeded",
+              estimatedCost: estCost,
+            })
+          } catch {
+            /* non-fatal */
+          }
+          config.onBlocked?.(breakCheck.reason ?? "Budget exceeded")
+          throw new TokenShieldBlockedError(
+            breakCheck.reason ?? "Request blocked by TokenShield breaker",
+            ERROR_CODES.BREAKER_SESSION_LIMIT,
+          )
         }
       }
 
@@ -259,56 +232,27 @@ export function buildTransformParams(ctx: MiddlewareContext) {
           throw new TokenShieldBlockedError(
             `Failed to resolve user ID: ${msg}`,
             ERROR_CODES.BUDGET_USER_ID_INVALID,
-            {
-              suggestion:
-                "Ensure config.userBudget.getUserId() returns a valid string. Common causes: missing auth context, expired session, or unresolved async user lookup.",
-              cause: err,
-            },
           )
         }
         if (!userId || typeof userId !== "string") {
           throw new TokenShieldBlockedError(
-            `getUserId() returned an invalid value (${JSON.stringify(userId)}). Expected a non-empty string.`,
+            "getUserId() must return a non-empty string",
             ERROR_CODES.BUDGET_USER_ID_INVALID,
-            {
-              suggestion:
-                "config.userBudget.getUserId() must synchronously return a non-empty string identifying the current user (e.g., JWT sub claim, database ID).",
-              details: { returnedValue: userId },
-            },
           )
         }
         meta.userId = userId
         const modelId = String(params.modelId ?? "")
         const estimatedInput = lastUserText ? countTokens(lastUserText) : 0
-        const expectedOut = config.context?.reserveForOutput ?? DEFAULT_RESERVE_OUTPUT_TOKENS
+        const expectedOut = config.context?.reserveForOutput ?? 500
         const budgetCheck = userBudgetManager.check(userId, modelId, estimatedInput, expectedOut)
         if (!budgetCheck.allowed) {
-          const budgetReason = budgetCheck.reason ?? "User budget exceeded"
-          config.onBlocked?.(budgetReason)
-
-          const isDaily =
+          config.onBlocked?.(budgetCheck.reason ?? "User budget exceeded")
+          throw new TokenShieldBlockedError(
+            budgetCheck.reason ?? "Request blocked by user budget limit",
             budgetCheck.status.spend.daily >= (budgetCheck.status.limits?.daily ?? Infinity)
-          const budgetCode = isDaily
-            ? ERROR_CODES.BUDGET_DAILY_EXCEEDED
-            : ERROR_CODES.BUDGET_MONTHLY_EXCEEDED
-          const limitWindow = isDaily ? "daily" : "monthly"
-          const limitVal = isDaily
-            ? budgetCheck.status.limits?.daily
-            : budgetCheck.status.limits?.monthly
-          const spendVal = isDaily
-            ? budgetCheck.status.spend.daily
-            : budgetCheck.status.spend.monthly
-          throw new TokenShieldBlockedError(budgetReason, budgetCode, {
-            suggestion: `User "${userId}" has exhausted their ${limitWindow} budget. Wait for the ${limitWindow} window to reset, or increase the limit via config.userBudget.defaultBudget.${limitWindow} or config.userBudget.userOverrides["${userId}"].`,
-            details: {
-              userId,
-              limitWindow,
-              currentSpend: spendVal,
-              limit: limitVal,
-              remaining: limitVal != null ? Math.max(0, limitVal - (spendVal ?? 0)) : null,
-              model: modelId,
-            },
-          })
+              ? ERROR_CODES.BUDGET_DAILY_EXCEEDED
+              : ERROR_CODES.BUDGET_MONTHLY_EXCEEDED,
+          )
         }
 
         // Store the estimated cost that was reserved as in-flight
@@ -335,12 +279,16 @@ export function buildTransformParams(ctx: MiddlewareContext) {
           params = { ...params, modelId: tierModel }
           meta.tierRouted = true
 
-          safeEmit("router:downgraded", {
-            originalModel: originalModelId,
-            selectedModel: tierModel,
-            complexity: 0,
-            savedCost: tierSaved,
-          })
+          try {
+            instanceEvents.emit("router:downgraded", {
+              originalModel: originalModelId,
+              selectedModel: tierModel,
+              complexity: 0,
+              savedCost: tierSaved,
+            })
+          } catch {
+            /* non-fatal */
+          }
         }
       }
 
@@ -352,27 +300,30 @@ export function buildTransformParams(ctx: MiddlewareContext) {
           const guardModelId = String(params.modelId ?? "")
           const check = guard.check(lastUserText, undefined, guardModelId || undefined)
           if (!check.allowed) {
-            const reason = check.reason ?? "Request blocked"
             const estCost = safeCost(
               guardModelId,
               countTokens(lastUserText),
-              config.context?.reserveForOutput ?? DEFAULT_RESERVE_OUTPUT_TOKENS,
+              config.context?.reserveForOutput ?? 500,
             )
-            safeEmit("request:blocked", { reason, estimatedCost: estCost })
-            config.onBlocked?.(reason)
-
-            const { code: guardCode, suggestion: guardSuggestion } = resolveGuardError(reason)
-            throw new TokenShieldBlockedError(reason, guardCode, {
-              suggestion: guardSuggestion,
-              details: {
-                estimatedCost: check.estimatedCost,
-                currentHourlySpend: check.currentHourlySpend,
-                blockedCount: check.blockedCount,
-                model: guardModelId,
-              },
-            })
+            try {
+              instanceEvents.emit("request:blocked", {
+                reason: check.reason ?? "Request blocked",
+                estimatedCost: estCost,
+              })
+            } catch {
+              /* non-fatal */
+            }
+            config.onBlocked?.(check.reason ?? "Request blocked")
+            throw new TokenShieldBlockedError(
+              check.reason ?? "Request blocked by TokenShield guard",
+              ERROR_CODES.GUARD_RATE_LIMIT,
+            )
           }
-          safeEmit("request:allowed", { prompt: lastUserText, model: guardModelId })
+          try {
+            instanceEvents.emit("request:allowed", { prompt: lastUserText, model: guardModelId })
+          } catch {
+            /* non-fatal */
+          }
         }
 
         // -- 2. CACHE LOOKUP --
@@ -386,16 +337,24 @@ export function buildTransformParams(ctx: MiddlewareContext) {
               outputTokens: lookup.entry.outputTokens,
             }
             const savedCost = safeCost(modelId, lookup.entry.inputTokens, lookup.entry.outputTokens)
-            safeEmit("cache:hit", {
-              matchType: lookup.matchType ?? "fuzzy",
-              similarity: lookup.similarity ?? 1,
-              savedCost,
-            })
+            try {
+              instanceEvents.emit("cache:hit", {
+                matchType: lookup.matchType ?? "fuzzy",
+                similarity: lookup.similarity ?? 1,
+                savedCost,
+              })
+            } catch {
+              /* non-fatal */
+            }
             ;(params as Record<string | symbol, unknown>)[SHIELD_META] = meta
             span?.end({ cacheHit: true, contextSaved: 0 })
             return params // wrapGenerate will short-circuit
           } else {
-            safeEmit("cache:miss", { prompt: lastUserText })
+            try {
+              instanceEvents.emit("cache:miss", { prompt: lastUserText })
+            } catch {
+              /* non-fatal */
+            }
           }
         }
       } catch (err) {
@@ -442,8 +401,9 @@ export function buildTransformParams(ctx: MiddlewareContext) {
         }
 
         const budget = {
-          maxContextTokens: config.context.maxInputTokens + reserveForOutput - toolTokenOverhead,
+          maxContextTokens: config.context.maxInputTokens + reserveForOutput,
           reservedForOutput: reserveForOutput,
+          toolTokenOverhead,
         }
         const trimResult = fitToBudget(
           workingMessages.map((m) => ({ ...m }) as Message),
@@ -455,11 +415,15 @@ export function buildTransformParams(ctx: MiddlewareContext) {
             role: m.role,
             content: m.content,
           }))
-          safeEmit("context:trimmed", {
-            originalTokens: originalInputTokens,
-            trimmedTokens: originalInputTokens - trimResult.evictedTokens,
-            savedTokens: trimResult.evictedTokens,
-          })
+          try {
+            instanceEvents.emit("context:trimmed", {
+              originalTokens: originalInputTokens,
+              trimmedTokens: originalInputTokens - trimResult.evictedTokens,
+              savedTokens: trimResult.evictedTokens,
+            })
+          } catch {
+            /* non-fatal */
+          }
         }
       }
 
@@ -469,22 +433,30 @@ export function buildTransformParams(ctx: MiddlewareContext) {
         if (overrideModel && overrideModel !== params.modelId) {
           if (!meta.originalModel) meta.originalModel = String(params.modelId)
           params = { ...params, modelId: overrideModel }
-          safeEmit("router:downgraded", {
-            originalModel: meta.originalModel,
-            selectedModel: overrideModel,
-            complexity: 0,
-            savedCost: 0,
-          })
+          try {
+            instanceEvents.emit("router:downgraded", {
+              originalModel: meta.originalModel,
+              selectedModel: overrideModel,
+              complexity: 0,
+              savedCost: 0,
+            })
+          } catch {
+            /* non-fatal */
+          }
         }
       } else if (modules.router && !meta.tierRouted && lastUserText) {
         // A/B test holdback: skip routing for a fraction of requests
         const holdback = config.router?.abTestHoldback ?? 0
         if (holdback > 0 && Math.random() < holdback) {
           meta.abTestHoldout = true
-          safeEmit("router:holdback", {
-            model: String(params.modelId),
-            holdbackRate: holdback,
-          })
+          try {
+            instanceEvents.emit("router:holdback", {
+              model: String(params.modelId),
+              holdbackRate: holdback,
+            })
+          } catch {
+            /* non-fatal */
+          }
         } else {
           // Smart Routing Logic
           const complexity = analyzeComplexity(lastUserText)
@@ -515,8 +487,7 @@ export function buildTransformParams(ctx: MiddlewareContext) {
           else {
             // If no custom tiers, use built-in smart routing
             const decision = routeToModel(lastUserText, String(params.modelId), {
-              expectedOutputTokens:
-                config.context?.reserveForOutput ?? DEFAULT_RESERVE_OUTPUT_TOKENS,
+              expectedOutputTokens: config.context?.reserveForOutput ?? 500,
             })
             // Only switch if we found a cheaper model that is suitable
             if (decision.selectedModel.id !== params.modelId) {
@@ -531,12 +502,12 @@ export function buildTransformParams(ctx: MiddlewareContext) {
               const origCost = estimateCost(
                 originalModelId,
                 meta.originalInputTokens ?? 0,
-                config.context?.reserveForOutput ?? DEFAULT_RESERVE_OUTPUT_TOKENS,
+                config.context?.reserveForOutput ?? 500,
               )
               const newCost = estimateCost(
                 selectedModelId,
                 meta.originalInputTokens ?? 0,
-                config.context?.reserveForOutput ?? DEFAULT_RESERVE_OUTPUT_TOKENS,
+                config.context?.reserveForOutput ?? 500,
               )
               complexitySaved = Math.max(0, origCost.totalCost - newCost.totalCost)
               meta.routerSaved = (meta.routerSaved ?? 0) + complexitySaved
@@ -547,12 +518,16 @@ export function buildTransformParams(ctx: MiddlewareContext) {
             if (!meta.originalModel) meta.originalModel = originalModelId
             params = { ...params, modelId: selectedModelId }
 
-            safeEmit("router:downgraded", {
-              originalModel: originalModelId,
-              selectedModel: selectedModelId,
-              complexity: complexity.score,
-              savedCost: complexitySaved,
-            })
+            try {
+              instanceEvents.emit("router:downgraded", {
+                originalModel: originalModelId,
+                selectedModel: selectedModelId,
+                complexity: complexity.score,
+                savedCost: complexitySaved,
+              })
+            } catch {
+              /* non-fatal */
+            }
           }
         } // end holdback else
       }
@@ -565,14 +540,18 @@ export function buildTransformParams(ctx: MiddlewareContext) {
           const optimized = optimizePrefix(workingMessages, modelId, pricing.inputPerMillion, {
             provider: config.prefix?.provider ?? "auto",
             contextWindow: pricing.contextWindow,
-            reservedOutputTokens: config.context?.reserveForOutput ?? DEFAULT_RESERVE_OUTPUT_TOKENS,
+            reservedOutputTokens: config.context?.reserveForOutput ?? 500,
           })
           if (optimized.contextWindowExceeded) {
-            safeEmit("context:trimmed", {
-              originalTokens: optimized.prefixTokens + optimized.volatileTokens,
-              trimmedTokens: optimized.prefixTokens + optimized.volatileTokens,
-              savedTokens: 0,
-            })
+            try {
+              instanceEvents.emit("context:trimmed", {
+                originalTokens: optimized.prefixTokens + optimized.volatileTokens,
+                trimmedTokens: optimized.prefixTokens + optimized.volatileTokens,
+                savedTokens: 0,
+              })
+            } catch {
+              /* non-fatal */
+            }
             log?.warn("prefix", "Total tokens exceed context window", {
               total: optimized.prefixTokens + optimized.volatileTokens,
               contextWindow: pricing.contextWindow,

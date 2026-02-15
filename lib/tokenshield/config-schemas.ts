@@ -23,9 +23,18 @@ export type GuardConfig = v.InferOutput<typeof GuardConfigSchema>
 // Cache
 // ---------------------------------------------------------------------------
 
+const ContentTypeTtlSchema = v.optional(
+  v.object({
+    factual: v.optional(v.pipe(v.number(), v.minValue(0))),
+    general: v.optional(v.pipe(v.number(), v.minValue(0))),
+    "time-sensitive": v.optional(v.pipe(v.number(), v.minValue(0))),
+  }),
+)
+
 export const CacheConfigSchema = v.object({
   maxEntries: v.optional(v.pipe(v.number(), v.finite(), v.minValue(1)), 500),
   ttlMs: v.optional(v.pipe(v.number(), v.finite(), v.minValue(0)), 86_400_000),
+  ttlByContentType: ContentTypeTtlSchema,
   similarityThreshold: v.optional(
     v.pipe(v.number(), v.finite(), v.minValue(0.01), v.maxValue(1)),
     0.85,

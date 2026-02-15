@@ -66,6 +66,58 @@ describe("model-router", () => {
       })
       expect(result.selectedModel.provider).toBe("openai")
     })
+
+    it("defaults crossProvider to false (same-provider routing)", () => {
+      const result = routeToModel("What is 2+2?", "gpt-4o")
+      // With crossProvider=false (default), should stay within OpenAI
+      expect(result.selectedModel.provider).toBe("openai")
+    })
+
+    it("enables cross-provider routing when crossProvider=true", () => {
+      const result = routeToModel("What is 2+2?", "gpt-4o", {
+        crossProvider: true,
+      })
+      // Should consider all providers and pick cheapest
+      expect(result.selectedModel).toBeDefined()
+      expect(result.estimatedCost.totalCost).toBeGreaterThanOrEqual(0)
+    })
+
+    it("disables cross-provider routing when crossProvider=false", () => {
+      const result = routeToModel("Explain quantum computing in detail", "claude-sonnet-4.5", {
+        crossProvider: false,
+      })
+      // Should stay within Anthropic
+      expect(result.selectedModel.provider).toBe("anthropic")
+    })
+
+    it("reports crossProvider flag accurately", () => {
+      const result = routeToModel("What is 2+2?", "gpt-4o", {
+        crossProvider: true,
+      })
+      // crossProvider should be true only if the selected model is from a different provider
+      if (result.selectedModel.provider !== "openai") {
+        expect(result.crossProvider).toBe(true)
+      } else {
+        expect(result.crossProvider).toBe(false)
+      }
+    })
+
+    it("respects minContextWindow filter", () => {
+      const result = routeToModel("Test", "gpt-4o", {
+        crossProvider: true,
+        minContextWindow: 500_000,
+      })
+      expect(result.selectedModel.contextWindow).toBeGreaterThanOrEqual(500_000)
+    })
+
+    it("falls back to default when no candidates match filters", () => {
+      const result = routeToModel("Test", "gpt-4o", {
+        minContextWindow: 999_999_999, // impossibly large
+      })
+      // Should fall back to default model
+      expect(result.selectedModel).toBeDefined()
+      expect(result.savingsVsDefault).toBe(0)
+    })
   })
 
   describe("rankModels", () => {
