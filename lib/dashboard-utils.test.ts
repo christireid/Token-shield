@@ -260,6 +260,7 @@ describe("edge cases", () => {
     const now = Date.now()
     vi.setSystemTime(now)
     expect(formatRelativeTime(now)).toBe("just now")
+    vi.useRealTimers()
   })
 
   it("formatEventType handles empty string", () => {

@@ -25,6 +25,7 @@ export function KpiCards() {
         sparkline: data.sparklines.saved,
         color: COLORS.primary,
         accentClass: "bg-primary",
+        iconColorClass: "text-primary",
         gradientClass: "bg-gradient-to-br from-card/80 via-card/50 to-primary/[0.03]",
         icon: ICON_TRENDING_UP,
         delta: data.kpiDeltas.totalSaved,
@@ -37,6 +38,7 @@ export function KpiCards() {
         sparkline: data.sparklines.spent,
         color: "hsl(215, 15%, 55%)",
         accentClass: "bg-muted-foreground",
+        iconColorClass: "text-muted-foreground",
         gradientClass: "bg-gradient-to-br from-card/80 via-card/50 to-muted-foreground/[0.04]",
         icon: ICON_DOLLAR_SIGN,
         delta: data.kpiDeltas.totalSpent,
@@ -58,6 +60,12 @@ export function KpiCards() {
             : data.savingsRate >= 15
               ? "bg-chart-3"
               : "bg-destructive",
+        iconColorClass:
+          data.savingsRate >= 30
+            ? "text-primary"
+            : data.savingsRate >= 15
+              ? "text-chart-3"
+              : "text-destructive",
         gradientClass:
           data.savingsRate >= 30
             ? "bg-gradient-to-br from-card/80 via-card/50 to-primary/[0.03]"
@@ -74,6 +82,7 @@ export function KpiCards() {
         sparkline: data.sparklines.cacheHitRate,
         color: COLORS.cyan,
         accentClass: "bg-chart-2",
+        iconColorClass: "text-chart-2",
         gradientClass: "bg-gradient-to-br from-card/80 via-card/50 to-cyan-500/[0.04]",
         icon: ICON_ZAP,
         delta: data.kpiDeltas.cacheHitRate,
@@ -85,6 +94,7 @@ export function KpiCards() {
         sparkline: data.sparklines.blocked,
         color: COLORS.amber,
         accentClass: "bg-chart-3",
+        iconColorClass: "text-chart-3",
         gradientClass: "bg-gradient-to-br from-card/80 via-card/50 to-amber-500/[0.04]",
         icon: ICON_SHIELD_OFF,
         delta: data.kpiDeltas.requestsBlocked,
@@ -96,6 +106,7 @@ export function KpiCards() {
         sparkline: data.sparklines.latency,
         color: "hsl(215, 15%, 55%)",
         accentClass: "bg-muted-foreground",
+        iconColorClass: "text-muted-foreground",
         gradientClass: "bg-gradient-to-br from-card/80 via-card/50 to-slate-500/[0.04]",
         icon: ICON_TIMER,
         delta: data.kpiDeltas.avgLatency,

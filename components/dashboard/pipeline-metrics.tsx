@@ -106,7 +106,6 @@ const StageRow = React.memo(function StageRow({
 }) {
   const color = STAGE_COLORS[metric.stage] ?? "hsl(215, 15%, 45%)"
 
-  const rowStyle = React.useMemo(() => ({ ["--stage-color" as string]: color }), [color])
   const handleBorderEnter = React.useCallback(
     (e: React.SyntheticEvent<HTMLDivElement>) => {
       e.currentTarget.style.borderLeftColor = color
@@ -124,7 +123,6 @@ const StageRow = React.memo(function StageRow({
         "hover:bg-secondary/30",
         index % 2 === 1 && "bg-secondary/10",
       )}
-      style={rowStyle}
       tabIndex={0}
       onMouseEnter={handleBorderEnter}
       onMouseLeave={handleBorderLeave}

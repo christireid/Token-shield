@@ -36,17 +36,26 @@ const ModelTableRow = React.memo(function ModelTableRow({
   const handleMouseEnter = React.useCallback(() => onHover(entry.id), [onHover, entry.id])
   const handleMouseLeave = React.useCallback(() => onHover(null), [onHover])
 
+  const rowStyle = React.useMemo(
+    () => ({
+      backgroundColor: isHovered ? `color-mix(in srgb, ${entry.color} 8%, transparent)` : undefined,
+      boxShadow: isHovered ? `inset 2px 0 0 ${entry.color}, 0 0 12px ${entry.color}15` : undefined,
+    }),
+    [isHovered, entry.color],
+  )
+
+  const dotStyle = React.useMemo(
+    () => ({
+      backgroundColor: entry.color,
+      boxShadow: isHovered ? `0 0 8px 2px ${entry.color}60` : "none",
+    }),
+    [isHovered, entry.color],
+  )
+
   return (
     <TableRow
       className="border-border/20 cursor-default transition-all duration-200"
-      style={{
-        backgroundColor: isHovered
-          ? `color-mix(in srgb, ${entry.color} 8%, transparent)`
-          : undefined,
-        boxShadow: isHovered
-          ? `inset 2px 0 0 ${entry.color}, 0 0 12px ${entry.color}15`
-          : undefined,
-      }}
+      style={rowStyle}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
@@ -54,10 +63,7 @@ const ModelTableRow = React.memo(function ModelTableRow({
         <div className="flex items-center gap-2">
           <div
             className="h-2.5 w-2.5 rounded-full transition-shadow duration-200"
-            style={{
-              backgroundColor: entry.color,
-              boxShadow: isHovered ? `0 0 8px 2px ${entry.color}60` : "none",
-            }}
+            style={dotStyle}
           />
           <span className="font-mono text-xs text-foreground">{entry.id}</span>
         </div>

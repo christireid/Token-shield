@@ -137,6 +137,8 @@ function EditableLimit({ value, onSave }: { value: number; onSave: (v: number) =
       setInvalid(true)
       clearTimeout(invalidTimerRef.current)
       invalidTimerRef.current = setTimeout(() => setInvalid(false), 1000)
+      setDraft(value.toFixed(0))
+      setEditing(false)
       return
     }
     onSave(parsed)

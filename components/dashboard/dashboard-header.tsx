@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef } from "react"
 import { useDashboard, type TimeRange } from "./dashboard-provider"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -76,6 +76,11 @@ export function DashboardHeader() {
 
   const dataRef = useRef(data)
   dataRef.current = data
+  const revokeTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  useEffect(() => {
+    return () => clearTimeout(revokeTimerRef.current)
+  }, [])
 
   const handleExport = useCallback((format: "json" | "csv") => {
     if (typeof document === "undefined") return
@@ -111,7 +116,8 @@ export function DashboardHeader() {
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
-    setTimeout(() => URL.revokeObjectURL(url), 10_000)
+    clearTimeout(revokeTimerRef.current)
+    revokeTimerRef.current = setTimeout(() => URL.revokeObjectURL(url), 10_000)
   }, [])
 
   const togglePause = useCallback(() => {

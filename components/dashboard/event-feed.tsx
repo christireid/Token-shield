@@ -73,6 +73,8 @@ export function EventFeed() {
   const [paused, setPaused] = React.useState(false)
   const [frozenEvents, setFrozenEvents] = React.useState<DashboardEvent[]>([])
   const scrollRef = React.useRef<HTMLDivElement>(null)
+  const latestEventsRef = React.useRef(data.events)
+  latestEventsRef.current = data.events
   const togglePause = React.useCallback(() => setPaused((p) => !p), [])
 
   const events = paused ? frozenEvents : data.events
@@ -80,9 +82,8 @@ export function EventFeed() {
 
   React.useEffect(() => {
     if (paused) {
-      setFrozenEvents(data.events)
+      setFrozenEvents(latestEventsRef.current)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paused])
 
   React.useEffect(() => {
@@ -127,7 +128,12 @@ export function EventFeed() {
       </CardHeader>
       <CardContent className="p-0">
         <ScrollArea className="h-[350px] px-4 pb-4" ref={scrollRef}>
-          <div className="flex flex-col gap-1" role="log" aria-live="polite">
+          <div
+            className="flex flex-col gap-1"
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions"
+          >
             {displayEvents.map((ev, index) => (
               <EventRow key={ev.id} event={ev} isLast={index === displayEvents.length - 1} />
             ))}

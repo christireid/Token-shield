@@ -119,6 +119,7 @@ export interface KpiCardProps {
   sparkline: number[]
   color: string
   accentClass: string
+  iconColorClass: string
   gradientClass: string
   icon: React.ReactNode
   delta: KpiDelta
@@ -132,6 +133,7 @@ export const KpiCard = React.memo(function KpiCard({
   sparkline,
   color,
   accentClass,
+  iconColorClass,
   gradientClass,
   icon,
   delta,
@@ -200,7 +202,7 @@ export const KpiCard = React.memo(function KpiCard({
           <div
             className={cn(
               "flex h-8 w-8 items-center justify-center rounded-lg border border-border/30",
-              accentClass.replace("bg-", "text-"),
+              iconColorClass,
             )}
           >
             {icon}

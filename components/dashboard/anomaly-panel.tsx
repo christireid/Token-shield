@@ -210,6 +210,7 @@ export function AnomalyPanel() {
             className="flex flex-col gap-1"
             role="log"
             aria-live="polite"
+            aria-relevant="additions"
             aria-label="Anomaly events"
           >
             {displayAnomalies.map((anomaly) => (
