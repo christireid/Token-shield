@@ -72,6 +72,11 @@ export interface AuditLogConfig {
   persist?: boolean
   /** IndexedDB storage key prefix (default: "shield_audit_log") */
   storageKey?: string
+  /**
+   * Called when IndexedDB persistence fails (e.g., quota exceeded, IDB disabled).
+   * Without this callback, persistence errors are silently ignored.
+   */
+  onPersistError?: (error: unknown) => void
 }
 
 const SEVERITY_RANK: Record<AuditSeverity, number> = {
@@ -88,6 +93,7 @@ const DEFAULT_CONFIG: Required<AuditLogConfig> = {
   onEntry: () => {},
   persist: false,
   storageKey: "shield_audit_log",
+  onPersistError: () => {},
 }
 
 // -------------------------------------------------------
@@ -567,7 +573,9 @@ export class AuditLog {
   }
 
   private persistAsync(): void {
-    set(this.config.storageKey, this.entries).catch(() => {})
+    set(this.config.storageKey, this.entries).catch((err) => {
+      this.config.onPersistError(err)
+    })
   }
 
   private createNoopEntry(

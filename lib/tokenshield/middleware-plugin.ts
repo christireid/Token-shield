@@ -11,6 +11,7 @@
  * an extensibility point for additional modules.
  */
 
+import { subscribeToAnyEvent } from "./event-bus"
 import type { EventBus, TokenShieldEvents } from "./event-bus"
 import type { AuditLog } from "./audit-log"
 import type { TokenShieldLogger } from "./logger"
@@ -112,16 +113,16 @@ export function initializePlugins(ctx: PluginContext): PluginCleanup[] {
       const cleanup = plugin.init(ctx)
       if (cleanup) cleanups.push(cleanup)
 
-      // Auto-wire event subscriptions
+      // Auto-wire event subscriptions using the type-safe subscribeToAnyEvent helper
       if (plugin.events) {
         for (const [eventName, handler] of Object.entries(plugin.events)) {
           if (typeof handler === "function") {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ctx.events.on(eventName as any, handler as any)
-            cleanups.push(() => {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              ctx.events.off(eventName as any, handler as any)
-            })
+            const unsub = subscribeToAnyEvent(
+              ctx.events,
+              eventName as keyof TokenShieldEvents,
+              handler as (data: unknown) => void,
+            )
+            cleanups.push(unsub)
           }
         }
       }

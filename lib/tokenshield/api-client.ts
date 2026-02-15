@@ -52,6 +52,12 @@ export interface LLMMessage {
 // OpenAI
 // -------------------------------------------------------
 
+/**
+ * Call the OpenAI Chat Completions API via the `/api/openai` proxy route.
+ *
+ * @throws {TokenShieldAPIError} If the API returns a non-OK status code.
+ * @throws {Error} If the network request fails entirely.
+ */
 export async function callOpenAI(
   messages: LLMMessage[],
   model: string,
@@ -111,6 +117,13 @@ export async function callOpenAI(
 // Anthropic
 // -------------------------------------------------------
 
+/**
+ * Call the Anthropic Messages API via the `/api/anthropic` proxy route.
+ * System messages are extracted and sent in the `system` field.
+ *
+ * @throws {TokenShieldAPIError} If the API returns a non-OK status code.
+ * @throws {Error} If the network request fails entirely.
+ */
 export async function callAnthropic(
   messages: LLMMessage[],
   model: string,
@@ -174,6 +187,12 @@ export async function callAnthropic(
 // Google Gemini
 // -------------------------------------------------------
 
+/**
+ * Call the Google Gemini API via the `/api/google` proxy route.
+ *
+ * @throws {TokenShieldAPIError} If the API returns a non-OK status code.
+ * @throws {Error} If the network request fails entirely.
+ */
 export async function callGoogle(
   messages: LLMMessage[],
   model: string,
@@ -232,6 +251,14 @@ export async function callGoogle(
 // Universal caller
 // -------------------------------------------------------
 
+/**
+ * Call any supported LLM provider (OpenAI, Anthropic, Google) via the
+ * appropriate proxy route. Dispatches to the provider-specific function
+ * based on the `provider` parameter.
+ *
+ * @throws {TokenShieldAPIError} If the API returns a non-OK status code.
+ * @throws {Error} If the provider is unsupported or the network request fails.
+ */
 export async function callLLM(
   provider: Provider,
   messages: LLMMessage[],

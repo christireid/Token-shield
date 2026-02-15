@@ -232,6 +232,7 @@ export {
   shieldEvents,
   createEventBus,
   subscribeToEvent,
+  subscribeToAnyEvent,
   type EventBus,
   type TokenShieldEvents,
 } from "./event-bus"

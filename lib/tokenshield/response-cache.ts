@@ -68,6 +68,11 @@ export interface CacheConfig {
    * @example { cost: 10, price: 10, billing: 10, budget: 10 }
    */
   semanticSeeds?: Record<string, number>
+  /**
+   * Called when IndexedDB operations fail (e.g., quota exceeded, IDB disabled).
+   * Without this callback, storage errors are silently ignored.
+   */
+  onStorageError?: (error: unknown) => void
 }
 
 /** Default per-content-type TTL values */
@@ -451,7 +456,7 @@ export class ResponseCache {
 
     // Teach the holographic engine about this entry
     if (this.holoEngine) {
-      this.holoEngine.learn(prompt, response, model, inputTokens, outputTokens).catch(() => {})
+      this.holoEngine.learn(prompt, response, model, inputTokens, outputTokens).catch((err) => { this.config.onStorageError?.(err) })
     }
 
     // Evict LRU if over capacity
@@ -469,7 +474,7 @@ export class ResponseCache {
         // Evict from IDB to keep stores coherent
         try {
           const store = this.getStore()
-          if (store) del(oldestKey, store).catch(() => {})
+          if (store) del(oldestKey, store).catch((err) => { this.config.onStorageError?.(err) })
         } catch {
           /* IDB not available */
         }
@@ -517,7 +522,7 @@ export class ResponseCache {
                 entry.inputTokens,
                 entry.outputTokens,
               )
-              .catch(() => {})
+              .catch((err) => { this.config.onStorageError?.(err) })
           }
           loaded++
         } else if (entry) {
