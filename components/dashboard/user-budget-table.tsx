@@ -115,9 +115,11 @@ function EditableLimit({ value, onSave }: { value: number; onSave: (v: number) =
   const [editing, setEditing] = React.useState(false)
   const [draft, setDraft] = React.useState(String(value))
   const inputRef = React.useRef<HTMLInputElement>(null)
+  const committedRef = React.useRef(false)
 
   React.useEffect(() => {
     if (editing) {
+      committedRef.current = false
       setDraft(value.toFixed(0))
       const timeoutId = setTimeout(() => inputRef.current?.select(), 0)
       return () => clearTimeout(timeoutId)
@@ -132,6 +134,8 @@ function EditableLimit({ value, onSave }: { value: number; onSave: (v: number) =
   }, [])
 
   const commit = () => {
+    if (committedRef.current) return
+    committedRef.current = true
     const parsed = parseFloat(draft)
     if (isNaN(parsed) || parsed < 0 || parsed > 1_000_000) {
       setInvalid(true)
@@ -237,6 +241,7 @@ function AddUserDialog() {
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Jane Smith"
               className="border-border/50 bg-secondary/30 text-sm"
+              maxLength={100}
               required
             />
           </div>

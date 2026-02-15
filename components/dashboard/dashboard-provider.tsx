@@ -349,14 +349,13 @@ function generateInitialProviderHealth(): ProviderHealthRecord[] {
   }))
 }
 
-function generateInitialAnomalies(eventIdRef: React.MutableRefObject<number>): AnomalyRecord[] {
+function generateInitialAnomalies(nextId: () => number): AnomalyRecord[] {
   const now = Date.now()
   const anomalies: AnomalyRecord[] = []
   const types: AnomalyRecord["type"][] = ["cost_spike", "token_spike", "cost_rate_change"]
   for (let i = 0; i < 3; i++) {
-    eventIdRef.current++
     anomalies.push({
-      id: eventIdRef.current,
+      id: nextId(),
       timestamp: now - randInt(5, 45) * 60_000,
       type: types[i],
       severity: (["low", "medium", "high"] as const)[randInt(0, 3)],
@@ -380,12 +379,11 @@ function generateInitialAnomalies(eventIdRef: React.MutableRefObject<number>): A
   return anomalies
 }
 
-function generateInitialAlerts(eventIdRef: React.MutableRefObject<number>): DashboardAlert[] {
+function generateInitialAlerts(nextId: () => number): DashboardAlert[] {
   const now = Date.now()
-  eventIdRef.current++
   return [
     {
-      id: eventIdRef.current,
+      id: nextId(),
       timestamp: now - 120_000,
       severity: "warning",
       title: "Budget threshold approaching",
@@ -444,7 +442,13 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       remaining: { session: 50, hour: 10, day: 50, month: 500 },
       limits: { session: 50, hour: 10, day: 50, month: 500 },
     },
-    users: INITIAL_USERS.map((u) => ({ ...u })),
+    users: INITIAL_USERS.map((u) => ({
+      ...u,
+      limits: { ...u.limits },
+      spend: { ...u.spend },
+      remaining: { ...u.remaining },
+      percentUsed: { ...u.percentUsed },
+    })),
     anomalies: [],
     pipelineMetrics: generateInitialPipelineMetrics(),
     providerHealth: generateInitialProviderHealth(),
@@ -464,7 +468,13 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       const modules = { guard: 0, cache: 0, context: 0, router: 0, prefix: 0 }
       const models: DashboardData["byModel"] = {}
       const events: DashboardEvent[] = []
-      const users = INITIAL_USERS.map((u) => ({ ...u }))
+      const users = INITIAL_USERS.map((u) => ({
+        ...u,
+        limits: { ...u.limits },
+        spend: { ...u.spend },
+        remaining: { ...u.remaining },
+        percentUsed: { ...u.percentUsed },
+      }))
 
       // Track mid-point for delta computation
       let midSpent = 0
@@ -503,9 +513,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         user.spend.monthly += spent
 
         const evType = EVENT_TYPES[randInt(0, EVENT_TYPES.length)]
-        eventIdRef.current++
+        const evId = ++eventIdRef.current
         events.push({
-          id: eventIdRef.current,
+          id: evId,
           timestamp: ts,
           type: evType,
           message: generateEventMessage(evType, model.id, saved),
@@ -592,14 +602,22 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           limits: { session: 50, hour: 10, day: 50, month: 500 },
         },
         users: updatedUsers,
-        anomalies: generateInitialAnomalies(eventIdRef),
+        anomalies: generateInitialAnomalies(() => ++eventIdRef.current),
         pipelineMetrics: generateInitialPipelineMetrics(),
         providerHealth: generateInitialProviderHealth(),
-        alerts: generateInitialAlerts(eventIdRef),
+        alerts: generateInitialAlerts(() => ++eventIdRef.current),
       }
     })
 
     const interval = setInterval(() => {
+      // Pre-generate IDs outside the state updater to avoid ref
+      // mutations inside a pure function (React 18 concurrent safety)
+      const eventId = ++eventIdRef.current
+      const shouldGenerateAnomaly = Math.random() < 0.02
+      const anomalyId = shouldGenerateAnomaly ? ++eventIdRef.current : 0
+      const shouldGenerateAlert = Math.random() < 0.01
+      const alertId = shouldGenerateAlert ? ++eventIdRef.current : 0
+
       setData((prev) => {
         const now = Date.now()
         const model = pickWeighted(MODELS)
@@ -652,9 +670,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           : isCacheHit
             ? ("cache:hit" as const)
             : EVENT_TYPES[randInt(0, EVENT_TYPES.length)]
-        eventIdRef.current++
         const newEvent: DashboardEvent = {
-          id: eventIdRef.current,
+          id: eventId,
           timestamp: now,
           type: evType,
           message: generateEventMessage(evType, model.id, saved),
@@ -716,9 +733,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           }
         })
 
-        // Occasionally generate anomaly (2% chance)
+        // Occasionally generate anomaly
         let newAnomalies = prev.anomalies
-        if (Math.random() < 0.02) {
+        if (shouldGenerateAnomaly) {
           const anomalyTypes: AnomalyRecord["type"][] = [
             "cost_spike",
             "token_spike",
@@ -727,9 +744,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
             "cost_percentile",
           ]
           const type = anomalyTypes[randInt(0, anomalyTypes.length)]
-          eventIdRef.current++
           const newAnomaly: AnomalyRecord = {
-            id: eventIdRef.current,
+            id: anomalyId,
             timestamp: now,
             type,
             severity: (["low", "medium", "high"] as const)[randInt(0, 3)],
@@ -751,9 +767,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           newAnomalies = [...prev.anomalies, newAnomaly].slice(-20)
         }
 
-        // Occasionally generate alert (1% chance)
+        // Occasionally generate alert
         let newAlerts = prev.alerts
-        if (Math.random() < 0.01) {
+        if (shouldGenerateAlert) {
           const alertTemplates = [
             {
               severity: "warning" as const,
@@ -781,10 +797,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
             },
           ]
           const template = alertTemplates[randInt(0, alertTemplates.length)]
-          eventIdRef.current++
           newAlerts = [
             ...prev.alerts,
-            { ...template, id: eventIdRef.current, timestamp: now, dismissed: false },
+            { ...template, id: alertId, timestamp: now, dismissed: false },
           ].slice(-10)
         }
 
@@ -870,19 +885,22 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
   const addUser = React.useCallback(
     (user: Omit<UserBudget, "spend" | "remaining" | "percentUsed" | "isOverBudget">) => {
-      setData((prev) => ({
-        ...prev,
-        users: [
-          ...prev.users,
-          {
-            ...user,
-            spend: { daily: 0, monthly: 0 },
-            remaining: { daily: user.limits.daily, monthly: user.limits.monthly },
-            percentUsed: { daily: 0, monthly: 0 },
-            isOverBudget: false,
-          },
-        ],
-      }))
+      setData((prev) => {
+        if (prev.users.some((u) => u.userId === user.userId)) return prev
+        return {
+          ...prev,
+          users: [
+            ...prev.users,
+            {
+              ...user,
+              spend: { daily: 0, monthly: 0 },
+              remaining: { daily: user.limits.daily, monthly: user.limits.monthly },
+              percentUsed: { daily: 0, monthly: 0 },
+              isOverBudget: false,
+            },
+          ],
+        }
+      })
     },
     [],
   )

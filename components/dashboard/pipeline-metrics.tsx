@@ -106,28 +106,19 @@ const StageRow = React.memo(function StageRow({
 }) {
   const color = STAGE_COLORS[metric.stage] ?? "hsl(215, 15%, 45%)"
 
-  const handleBorderEnter = React.useCallback(
-    (e: React.SyntheticEvent<HTMLDivElement>) => {
-      e.currentTarget.style.borderLeftColor = color
-    },
+  const rowStyle = React.useMemo(
+    () => ({ "--stage-hover-color": color }) as React.CSSProperties,
     [color],
   )
-  const handleBorderLeave = React.useCallback((e: React.SyntheticEvent<HTMLDivElement>) => {
-    e.currentTarget.style.borderLeftColor = "transparent"
-  }, [])
 
   return (
     <div
       className={cn(
         "group grid grid-cols-[1fr_auto_auto_auto_auto_auto] items-center gap-x-4 rounded-md border-l-2 border-l-transparent px-2 py-1.5 transition-all",
-        "hover:bg-secondary/30",
+        "hover:border-l-[var(--stage-hover-color)] hover:bg-secondary/30",
         index % 2 === 1 && "bg-secondary/10",
       )}
-      tabIndex={0}
-      onMouseEnter={handleBorderEnter}
-      onMouseLeave={handleBorderLeave}
-      onFocus={handleBorderEnter}
-      onBlur={handleBorderLeave}
+      style={rowStyle}
     >
       {/* Stage name with color dot */}
       <div className="flex items-center gap-2 min-w-0">
@@ -188,6 +179,16 @@ const StageRow = React.memo(function StageRow({
 /*  Main component                                                     */
 /* ------------------------------------------------------------------ */
 
+const PIPELINE_STYLES = `
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.35); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-\\[pulse-glow_2s_ease-in-out_infinite\\] { animation: none; }
+  }
+`
+
 export function PipelineMetrics() {
   const { data } = useDashboard()
   const metrics = data.pipelineMetrics
@@ -214,15 +215,7 @@ export function PipelineMetrics() {
   return (
     <>
       {/* Pulse-glow keyframe for top-saver dot */}
-      <style>{`
-        @keyframes pulse-glow {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.7; transform: scale(1.35); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .animate-\\[pulse-glow_2s_ease-in-out_infinite\\] { animation: none; }
-        }
-      `}</style>
+      <style>{PIPELINE_STYLES}</style>
       <Card className="border-border/40 bg-card/50">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">

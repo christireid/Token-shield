@@ -66,23 +66,25 @@ const RADIAL_BG_STYLE: React.CSSProperties = {
   background: "radial-gradient(ellipse 80% 50% at 50% 0%, hsl(152 60% 52% / 0.03), transparent)",
 }
 
+const DASHBOARD_STYLES = `
+  .dashboard-dot-grid {
+    background-image: radial-gradient(circle, hsl(215 20% 25% / 0.3) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dashboard-dot-grid *,
+    .dashboard-dot-grid *::before,
+    .dashboard-dot-grid *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+`
+
 export function DashboardShell() {
   return (
     <DashboardProvider>
-      <style>{`
-        .dashboard-dot-grid {
-          background-image: radial-gradient(circle, hsl(215 20% 25% / 0.3) 1px, transparent 1px);
-          background-size: 24px 24px;
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .dashboard-dot-grid *,
-          .dashboard-dot-grid *::before,
-          .dashboard-dot-grid *::after {
-            transition-duration: 0.01ms !important;
-            animation-duration: 0.01ms !important;
-          }
-        }
-      `}</style>
+      <style>{DASHBOARD_STYLES}</style>
 
       <div className="dashboard-dot-grid flex min-h-screen flex-col bg-background">
         <DashboardHeader />

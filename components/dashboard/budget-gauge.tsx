@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, useId, useMemo } from "react"
+import { memo, useId } from "react"
 import { useDashboard } from "./dashboard-provider"
 import { useReducedMotion } from "@/hooks/use-reduced-motion"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -38,6 +38,30 @@ function describeArc(start: number, end: number) {
   const largeArc = end - start > 180 ? 1 : 0
   return `M ${s.x} ${s.y} A ${GAUGE_RADIUS} ${GAUGE_RADIUS} 0 ${largeArc} 1 ${e.x} ${e.y}`
 }
+
+/* Pre-computed tick marks and label positions (all inputs are module-level constants) */
+const TICK_PERCENTS = [0, 25, 50, 75, 100]
+const TICK_LENGTH = 8
+const TICKS = TICK_PERCENTS.map((tp) => {
+  const angle = START_ANGLE + (TOTAL_ANGLE * tp) / 100
+  const inner = polarToCartesian(angle)
+  const outerRadius = GAUGE_RADIUS + TICK_LENGTH
+  const rad = ((angle - 90) * Math.PI) / 180
+  const outer = {
+    x: GAUGE_CX + outerRadius * Math.cos(rad),
+    y: GAUGE_CY + outerRadius * Math.sin(rad),
+  }
+  return { percent: tp, inner, outer, angle }
+})
+const LABEL_RADIUS = GAUGE_RADIUS + TICK_LENGTH + 10
+const LABEL_START_POS = (() => {
+  const rad = ((START_ANGLE - 90) * Math.PI) / 180
+  return { x: GAUGE_CX + LABEL_RADIUS * Math.cos(rad), y: GAUGE_CY + LABEL_RADIUS * Math.sin(rad) }
+})()
+const LABEL_END_POS = (() => {
+  const rad = ((END_ANGLE - 90) * Math.PI) / 180
+  return { x: GAUGE_CX + LABEL_RADIUS * Math.cos(rad), y: GAUGE_CY + LABEL_RADIUS * Math.sin(rad) }
+})()
 
 interface MiniBarProps {
   label: string
@@ -80,6 +104,16 @@ const MiniBar = memo(function MiniBar({ label, value, max }: MiniBarProps) {
   )
 })
 
+const BUDGET_GAUGE_STYLES = `
+  @keyframes budget-pulse {
+    0%, 100% { box-shadow: 0 0 20px hsl(0 72% 51% / 0.1); }
+    50% { box-shadow: 0 0 30px hsl(0 72% 51% / 0.2); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-\\[budget-pulse_2s_ease-in-out_infinite\\] { animation: none; }
+  }
+`
+
 export function BudgetGauge() {
   const { data } = useDashboard()
   const { budget } = data
@@ -94,49 +128,11 @@ export function BudgetGauge() {
   const strokeWidth = 10
   const fillAngle = START_ANGLE + (TOTAL_ANGLE * percent) / 100
 
-  // Tick marks at 0%, 25%, 50%, 75%, 100% — all inputs are constants
-  const { ticks, labelStartPos, labelEndPos } = useMemo(() => {
-    const tickPercents = [0, 25, 50, 75, 100]
-    const tickLength = 8
-    const ticks = tickPercents.map((tp) => {
-      const angle = START_ANGLE + (TOTAL_ANGLE * tp) / 100
-      const inner = polarToCartesian(angle)
-      const outerRadius = GAUGE_RADIUS + tickLength
-      const rad = ((angle - 90) * Math.PI) / 180
-      const outer = {
-        x: GAUGE_CX + outerRadius * Math.cos(rad),
-        y: GAUGE_CY + outerRadius * Math.sin(rad),
-      }
-      return { percent: tp, inner, outer, angle }
-    })
-
-    // Label positions (slightly further out than tick marks)
-    const labelRadius = GAUGE_RADIUS + tickLength + 10
-    const labelStartRad = ((START_ANGLE - 90) * Math.PI) / 180
-    const labelEndRad = ((END_ANGLE - 90) * Math.PI) / 180
-    const labelStartPos = {
-      x: GAUGE_CX + labelRadius * Math.cos(labelStartRad),
-      y: GAUGE_CY + labelRadius * Math.sin(labelStartRad),
-    }
-    const labelEndPos = {
-      x: GAUGE_CX + labelRadius * Math.cos(labelEndRad),
-      y: GAUGE_CY + labelRadius * Math.sin(labelEndRad),
-    }
-
-    return { ticks, labelStartPos, labelEndPos }
-  }, [])
+  // Tick marks and label positions are pre-computed at module scope
 
   return (
     <>
-      <style>{`
-        @keyframes budget-pulse {
-          0%, 100% { box-shadow: 0 0 20px hsl(0 72% 51% / 0.1); }
-          50% { box-shadow: 0 0 30px hsl(0 72% 51% / 0.2); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .animate-\\[budget-pulse_2s_ease-in-out_infinite\\] { animation: none; }
-        }
-      `}</style>
+      <style>{BUDGET_GAUGE_STYLES}</style>
       <Card
         className={cn(
           "border-border/40 bg-card/50 transition-all",
@@ -190,7 +186,7 @@ export function BudgetGauge() {
                 </defs>
 
                 {/* Tick marks */}
-                {ticks.map((tick) => (
+                {TICKS.map((tick) => (
                   <line
                     key={tick.percent}
                     x1={tick.inner.x}
@@ -204,8 +200,8 @@ export function BudgetGauge() {
 
                 {/* Labels at 0% and 100% */}
                 <text
-                  x={labelStartPos.x}
-                  y={labelStartPos.y}
+                  x={LABEL_START_POS.x}
+                  y={LABEL_START_POS.y}
                   fontSize="8"
                   fill="hsl(215, 20%, 50%)"
                   textAnchor="middle"
@@ -214,8 +210,8 @@ export function BudgetGauge() {
                   0%
                 </text>
                 <text
-                  x={labelEndPos.x}
-                  y={labelEndPos.y}
+                  x={LABEL_END_POS.x}
+                  y={LABEL_END_POS.y}
                   fontSize="8"
                   fill="hsl(215, 20%, 50%)"
                   textAnchor="middle"

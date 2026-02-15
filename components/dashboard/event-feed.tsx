@@ -89,7 +89,11 @@ export function EventFeed() {
   React.useEffect(() => {
     if (!paused && scrollRef.current) {
       const viewport = scrollRef.current.querySelector("[data-radix-scroll-area-viewport]")
-      if (viewport) viewport.scrollTop = 0
+      if (viewport) {
+        viewport.scrollTop = 0
+      } else if (process.env.NODE_ENV === "development") {
+        console.warn("EventFeed: Could not find scroll area viewport element")
+      }
     }
   }, [data.events.length, paused])
 

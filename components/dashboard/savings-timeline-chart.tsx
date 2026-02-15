@@ -30,7 +30,7 @@ const LEGEND_NOSHIELD_STYLE: React.CSSProperties = {
   borderColor: "hsl(215, 15%, 35%)",
 }
 
-const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" })
+const timeFormatter = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit" })
 
 export function SavingsTimelineChart() {
   const { data } = useDashboard()

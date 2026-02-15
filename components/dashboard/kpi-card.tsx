@@ -151,7 +151,8 @@ export const KpiCard = React.memo(function KpiCard({
         : "text-red-500"
 
   const cardGlowStyle = React.useMemo(
-    () => ({ "--card-glow": color + "20" }) as React.CSSProperties,
+    () =>
+      ({ "--card-glow": `color-mix(in srgb, ${color} 12%, transparent)` }) as React.CSSProperties,
     [color],
   )
 
