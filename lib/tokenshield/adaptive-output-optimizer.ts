@@ -20,7 +20,6 @@
  * All client-side. Zero network overhead. Zero backend.
  */
 
-import { countTokens } from "gpt-tokenizer"
 import { get, set } from "./storage-adapter"
 import { predictOutputTokens, type OutputPrediction } from "./output-predictor"
 
@@ -74,7 +73,7 @@ export interface AdaptivePrediction {
   confidence: "high" | "medium" | "low"
   /** Number of observations this prediction is based on */
   observations: number
-  /** Estimated tokens saved vs blanket 4096 */
+  /** Estimated tokens saved vs blanket max (absoluteMax, default 8192) */
   savingsVsBlanket: number
   /** The task type detected */
   taskType: string
@@ -221,11 +220,13 @@ export class AdaptiveOutputOptimizer {
       const diff = actualOutputTokens - oldEma
       const newEmVar = (1 - alpha) * (existing.emVar + alpha * diff * diff)
 
-      // Keep last 100 observations for percentile calculation
-      const observations = [...existing.observations, actualOutputTokens]
-      if (observations.length > 100) {
-        observations.shift()
+      // Keep last 100 observations for percentile calculation.
+      // Avoid spread+shift (both create copies/shift O(n)). Mutate in-place.
+      existing.observations.push(actualOutputTokens)
+      if (existing.observations.length > 100) {
+        existing.observations.shift()
       }
+      const observations = existing.observations
 
       existing.count++
       existing.ema = newEma

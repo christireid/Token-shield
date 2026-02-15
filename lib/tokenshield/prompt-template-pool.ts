@@ -73,7 +73,12 @@ export interface CompiledTemplate {
 export interface TemplateRenderResult {
   /** The rendered prompt text */
   rendered: string
-  /** Total token count (static + dynamic) */
+  /**
+   * Total token count (static + dynamic). This is a fast estimate that may
+   * overcount by 1-2 tokens due to BPE boundary merges between segments.
+   * For exact counts, use `countTokens(result.rendered)` at the cost of a
+   * full re-encode.
+   */
   totalTokens: number
   /** Token count for static parts (cached) */
   staticTokens: number

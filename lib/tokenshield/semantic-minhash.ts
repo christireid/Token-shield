@@ -50,7 +50,7 @@ export interface MinHashEntry<T = unknown> {
   signature: Uint32Array
   /** Arbitrary metadata associated with this entry */
   data: T
-  /** Insertion timestamp for LRU eviction */
+  /** Insertion order (monotonic counter for LRU eviction) */
   insertedAt: number
 }
 
@@ -118,6 +118,9 @@ export class SemanticMinHashIndex<T = unknown> {
   private entries: MinHashEntry<T>[] = []
   /** LSH buckets: band index -> bucket hash -> entry indices */
   private buckets: Map<number, Map<number, number[]>> = new Map()
+  /** Monotonic insertion counter — used as a proxy for "oldest" so we can
+   *  avoid Date.now() overhead and get deterministic ordering */
+  private insertionCounter = 0
 
   constructor(config?: MinHashConfig) {
     this.config = { ...DEFAULT_CONFIG, ...config }
@@ -222,7 +225,7 @@ export class SemanticMinHashIndex<T = unknown> {
       prompt,
       signature,
       data,
-      insertedAt: Date.now(),
+      insertedAt: this.insertionCounter++,
     })
 
     // Insert into LSH buckets
@@ -358,6 +361,7 @@ export class SemanticMinHashIndex<T = unknown> {
   /** Clear all entries and buckets. */
   clear(): void {
     this.entries = []
+    this.insertionCounter = 0
     for (let b = 0; b < this.config.bands; b++) {
       this.buckets.set(b, new Map())
     }

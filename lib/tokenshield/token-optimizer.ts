@@ -85,12 +85,13 @@ export interface OptimizeResult {
   totalTokens: number
   /** Total tokens saved across all techniques */
   totalSaved: number
-  /** Breakdown of savings by technique */
+  /** Breakdown of token savings by technique */
   savings: {
     compression: number
     deltaEncoding: number
     contextTrimming: number
-    prefixOptimization: number
+    /** Estimated dollar savings from prefix caching (not tokens — prefix optimization doesn't reduce token count) */
+    prefixCacheDollarSavings: number
   }
   /** Suggested max_tokens for the API call (from adaptive learning) */
   suggestedMaxTokens: number
@@ -198,7 +199,7 @@ export class TokenOptimizer {
       compression: 0,
       deltaEncoding: 0,
       contextTrimming: 0,
-      prefixOptimization: 0,
+      prefixCacheDollarSavings: 0,
     }
 
     // Extract last user message for cache lookup and prediction
@@ -295,7 +296,7 @@ export class TokenOptimizer {
           content: m.content,
         }))
         const prefixed = optimizePrefix(chatMessages, effectiveModel, pricing.inputPerMillion)
-        savings.prefixOptimization = Math.round(prefixed.estimatedPrefixSavings * 1_000_000) // convert to approximate tokens
+        savings.prefixCacheDollarSavings = prefixed.estimatedPrefixSavings
         workingMessages = prefixed.messages
       }
     }
@@ -326,7 +327,7 @@ export class TokenOptimizer {
       cacheHit: false,
       estimatedCost,
       estimatedCostWithout,
-      dollarSavings: Math.max(0, estimatedCostWithout - estimatedCost),
+      dollarSavings: Math.max(0, estimatedCostWithout - estimatedCost) + savings.prefixCacheDollarSavings,
     }
   }
 

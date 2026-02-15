@@ -270,6 +270,7 @@ function compressStopwords(text: string): string {
   // Remove single-word stops (only when surrounded by spaces, not at sentence start)
   const words = result.split(/(\s+)/)
   const filtered: string[] = []
+  let lastNonSpace = "" // track last non-whitespace word to avoid O(n²) rescan
 
   for (let i = 0; i < words.length; i++) {
     const word = words[i]
@@ -282,14 +283,14 @@ function compressStopwords(text: string): string {
     }
 
     // Don't remove first word of a sentence
-    const prevNonSpace = filtered.filter(w => !/^\s+$/.test(w)).pop()
-    const isFirstWord = !prevNonSpace || /[.!?]$/.test(prevNonSpace)
+    const isFirstWord = !lastNonSpace || /[.!?]$/.test(lastNonSpace)
 
     if (!isFirstWord && SINGLE_WORD_STOPS.has(lower)) {
       continue // elide
     }
 
     filtered.push(word)
+    lastNonSpace = word
   }
 
   result = filtered.join("")
@@ -476,8 +477,15 @@ export function compressPrompt(
   // Check if compression meets minimum savings threshold
   const applied = savedTokens >= cfg.minSavingsTokens
 
-  // If the ratio dropped below the floor, compression was too aggressive — return original
-  if (ratio < cfg.maxCompressionRatio) {
+  // If the ratio dropped below the floor, compression was too aggressive — return
+  // original. On short prompts (<50 tokens) using the DEFAULT floor (0.6), apply a
+  // more lenient floor (0.3) since removing a handful of filler words can legitimately
+  // push the ratio below 0.6 without destroying meaning. When the user explicitly
+  // sets a custom maxCompressionRatio, always respect it regardless of prompt length.
+  const effectiveFloor = (originalTokens < 50 && cfg.maxCompressionRatio === DEFAULT_CONFIG.maxCompressionRatio)
+    ? 0.3
+    : cfg.maxCompressionRatio
+  if (ratio < effectiveFloor) {
     return {
       compressed: prompt, // return original — too much was removed
       originalTokens,

@@ -183,7 +183,7 @@ export function encodeDelta(
     }
   }
 
-  const optimized = messages.map((msg, idx) => {
+  const optimized = messages.map((msg) => {
     // Don't modify system or tool messages
     if (msg.role === "system" || msg.role === "tool") {
       // Add system paragraphs to seen set
