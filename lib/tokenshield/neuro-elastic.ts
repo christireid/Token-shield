@@ -60,7 +60,10 @@ export interface FindResult {
 
 export class NeuroElasticEngine {
   private memory: MemorySlot[] = []
-  private config: Required<Pick<NeuroElasticConfig, 'threshold' | 'maxMemories' | 'enableInhibition' | 'persist'>> & Pick<NeuroElasticConfig, 'seeds'>
+  private config: Required<
+    Pick<NeuroElasticConfig, "threshold" | "maxMemories" | "enableInhibition" | "persist">
+  > &
+    Pick<NeuroElasticConfig, "seeds">
   private isHydrated = false
   /** Global noise vector — bits active in >50% of memories (IDF inhibition) */
   private noiseVector: Uint32Array = new Uint32Array(DIMENSIONS)
@@ -88,7 +91,9 @@ export class NeuroElasticEngine {
         this.isHydrated = true
         return stored.length
       }
-    } catch { /* IDB not available */ }
+    } catch {
+      /* IDB not available */
+    }
     this.isHydrated = true
     return 0
   }
@@ -117,7 +122,9 @@ export class NeuroElasticEngine {
       }
     }
 
-    // Dynamic thresholding: stricter for short prompts (< 10 chars get +0.05)
+    // Dynamic thresholding: stricter for short prompts because they produce
+    // fewer trigrams, reducing encoding uniqueness and increasing false-positive
+    // risk. A +0.05 penalty prevents short queries like "help" from matching "hi".
     const effectiveThreshold = this.config.threshold + (prompt.length < 10 ? 0.05 : 0)
 
     if (bestScore >= effectiveThreshold && bestMatch) {
@@ -141,7 +148,13 @@ export class NeuroElasticEngine {
   }
 
   /** Learn a new prompt->response pair. */
-  async learn(prompt: string, response: string, model: string, inputTokens: number, outputTokens: number): Promise<void> {
+  async learn(
+    prompt: string,
+    response: string,
+    model: string,
+    inputTokens: number,
+    outputTokens: number,
+  ): Promise<void> {
     const hologram = this.encode(prompt)
 
     // LRU eviction if at capacity — O(n) linear scan for oldest
@@ -188,7 +201,11 @@ export class NeuroElasticEngine {
     this.memory = []
     this.noiseDirty = true
     if (this.config.persist) {
-      try { await set(DB_KEY, []) } catch { /* IDB not available */ }
+      try {
+        await set(DB_KEY, [])
+      } catch {
+        /* IDB not available */
+      }
     }
   }
 
@@ -210,8 +227,11 @@ export class NeuroElasticEngine {
   /** Encode text into a holographic bit vector (Uint32Array). */
   private encode(input: string): Uint32Array {
     const vec = new Uint32Array(DIMENSIONS)
-    const normalized = input.toLowerCase().replace(/[^\w\s]/g, "").trim()
-    const tokens = normalized.split(/\s+/).filter(t => t.length > 0)
+    const normalized = input
+      .toLowerCase()
+      .replace(/[^\w\s]/g, "")
+      .trim()
+    const tokens = normalized.split(/\s+/).filter((t) => t.length > 0)
 
     for (const token of tokens) {
       // Short tokens (1-2 chars): use the token itself as a single "trigram"
@@ -229,7 +249,7 @@ export class NeuroElasticEngine {
       if (this.config.seeds && this.config.seeds[token] != null) {
         const seed = this.config.seeds[token]
         if (seed >= 0) {
-          vec[seed % DIMENSIONS] |= (1 << (seed % 32))
+          vec[seed % DIMENSIONS] |= 1 << (seed % 32)
         }
       }
 
@@ -250,7 +270,7 @@ export class NeuroElasticEngine {
     // Set 3 bits (sparsity = 3) for each trigram
     for (let i = 0; i < 3; i++) {
       h = (h * 1664525 + 1013904223) >>> 0
-      vec[h % DIMENSIONS] |= (1 << ((h >> 6) % 32))
+      vec[h % DIMENSIONS] |= 1 << ((h >> 6) % 32)
     }
   }
 
@@ -284,11 +304,17 @@ export class NeuroElasticEngine {
 
       // Popcount for intersection (AND)
       let x = aBits & bBits
-      while (x) { intersection++; x &= x - 1 }
+      while (x) {
+        intersection++
+        x &= x - 1
+      }
 
       // Popcount for union (OR)
       let y = aBits | bBits
-      while (y) { union++; y &= y - 1 }
+      while (y) {
+        union++
+        y &= y - 1
+      }
     }
 
     return union === 0 ? 0 : intersection / union
@@ -300,6 +326,12 @@ export class NeuroElasticEngine {
    * This implements IDF-like inhibition without explicit term frequencies.
    */
   private rebuildNoiseVector(): void {
+    // Need at least 2 memories to meaningfully identify noise bits
+    if (this.memory.length < 2) {
+      this.noiseVector = new Uint32Array(DIMENSIONS)
+      return
+    }
+
     const counts = new Uint32Array(DIMENSIONS * 32) // bit-level counts
     const threshold = Math.floor(this.memory.length * 0.5)
 
@@ -320,7 +352,7 @@ export class NeuroElasticEngine {
       for (let i = 0; i < DIMENSIONS; i++) {
         for (let bit = 0; bit < 32; bit++) {
           if (counts[i * 32 + bit] > threshold) {
-            this.noiseVector[i] |= (1 << bit)
+            this.noiseVector[i] |= 1 << bit
           }
         }
       }
@@ -331,7 +363,9 @@ export class NeuroElasticEngine {
 
   /** Persist to IDB. Returns a promise so callers can await if needed. */
   private persistAsync(): Promise<void> {
-    return set(DB_KEY, this.memory).catch(() => { /* IDB not available */ })
+    return set(DB_KEY, this.memory).catch(() => {
+      /* IDB not available */
+    })
   }
 }
 

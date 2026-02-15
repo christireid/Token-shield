@@ -12,7 +12,7 @@
  */
 
 import { get, set, del, keys, createStore } from "./storage-adapter"
-import { NeuroElasticEngine, type NeuroElasticConfig } from "./neuro-elastic"
+import { NeuroElasticEngine } from "./neuro-elastic"
 
 /**
  * Content type classification for TTL-aware caching.
@@ -72,9 +72,9 @@ export interface CacheConfig {
 
 /** Default per-content-type TTL values */
 const DEFAULT_CONTENT_TTL: Record<ContentType, number> = {
-  factual: 7 * 24 * 60 * 60 * 1000,   // 7 days
-  general: 24 * 60 * 60 * 1000,        // 24 hours
-  "time-sensitive": 5 * 60 * 1000,     // 5 minutes
+  factual: 7 * 24 * 60 * 60 * 1000, // 7 days
+  general: 24 * 60 * 60 * 1000, // 24 hours
+  "time-sensitive": 5 * 60 * 1000, // 5 minutes
 }
 
 const DEFAULT_CONFIG: CacheConfig = {
@@ -225,10 +225,16 @@ export class ResponseCache {
 
   /** Resolve the TTL for a cache entry based on its content type */
   private getTtl(contentType: ContentType): number {
+    // Check explicit per-content-type overrides first
     const overrides = this.config.ttlByContentType
     if (overrides && overrides[contentType] !== undefined) {
       return overrides[contentType]!
     }
+    // For "general" content, respect the user-configured ttlMs (backward compat)
+    if (contentType === "general") {
+      return this.config.ttlMs
+    }
+    // For factual/time-sensitive, use built-in defaults
     return DEFAULT_CONTENT_TTL[contentType]
   }
 
@@ -246,13 +252,25 @@ export class ResponseCache {
   }
 
   /**
+   * Copy-on-read: create a new entry with incremented access count.
+   * Avoids shared mutable state across concurrent lookups.
+   */
+  private touchEntry(entry: CacheEntry): CacheEntry {
+    return {
+      ...entry,
+      accessCount: entry.accessCount + 1,
+      lastAccessed: Date.now(),
+    }
+  }
+
+  /**
    * Read-only cache probe. Returns hit/miss info without mutating
    * access counts or timestamps. Used by dry-run mode to avoid
    * side-effects while still reporting what would happen.
    */
   peek(
     prompt: string,
-    model: string
+    model: string,
   ): { hit: boolean; matchType?: "exact" | "fuzzy"; similarity?: number; entry?: CacheEntry } {
     const key = hashKey(prompt, model)
     const normalized = normalizeText(prompt)
@@ -292,7 +310,7 @@ export class ResponseCache {
    */
   async lookup(
     prompt: string,
-    model: string
+    model: string,
   ): Promise<{
     hit: boolean
     entry?: CacheEntry
@@ -309,45 +327,44 @@ export class ResponseCache {
       if (!this.isExpired(memHit)) {
         // Verify normalized prompt matches to guard against djb2 hash collisions
         if (memHit.normalizedKey === normalized) {
-          // Copy-on-read: create a new object to avoid shared mutable state
-          // across concurrent lookups that could cause inconsistent IDB writes
-          const updated: CacheEntry = { ...memHit, accessCount: memHit.accessCount + 1, lastAccessed: Date.now() }
+          const updated = this.touchEntry(memHit)
           this.memoryCache.set(key, updated)
           this.totalHits++
           return { hit: true, entry: updated, matchType: "exact", similarity: 1 }
         }
       } else {
-        // Expired
         this.memoryCache.delete(key)
       }
     }
 
     // 2. Exact match from IDB
-    try {
-      const store = this.getStore()
-      if (!store) throw new Error("no idb")
-      const idbHit = await get<CacheEntry>(key, store)
-      if (idbHit) {
-        if (!this.isExpired(idbHit)) {
-          // Verify normalized prompt matches to guard against hash collisions
-          if (idbHit.normalizedKey === normalized) {
-            // Copy-on-read: create a fresh object before mutating and storing
-            const updated: CacheEntry = { ...idbHit, accessCount: idbHit.accessCount + 1, lastAccessed: Date.now() }
-            this.memoryCache.set(key, updated)
-            await set(key, updated, store)
-            this.totalHits++
-            return {
-              hit: true,
-              entry: updated,
-              matchType: "exact",
-              similarity: 1,
+    const lookupStore = this.getStore()
+    if (lookupStore) {
+      try {
+        const idbHit = await get<CacheEntry>(key, lookupStore)
+        if (idbHit) {
+          if (!this.isExpired(idbHit)) {
+            // Verify normalized prompt matches to guard against hash collisions
+            if (idbHit.normalizedKey === normalized) {
+              const updated = this.touchEntry(idbHit)
+              this.memoryCache.set(key, updated)
+              await set(key, updated, lookupStore)
+              this.totalHits++
+              return {
+                hit: true,
+                entry: updated,
+                matchType: "exact",
+                similarity: 1,
+              }
             }
           }
+          await del(key, lookupStore)
         }
-        await del(key, store)
+      } catch (err) {
+        // IDB read failed — fall through to fuzzy match (in-memory)
+        // eslint-disable-next-line no-console
+        console.warn("[TokenShield] Cache IDB read failed, falling back to in-memory lookup:", err)
       }
-    } catch {
-      // IDB not available (SSR), fall through
     }
 
     // 3. Fuzzy match against memory cache
@@ -359,9 +376,8 @@ export class ResponseCache {
           // Find the corresponding cache entry by prompt, with TTL check
           for (const [entryKey, entry] of this.memoryCache.entries()) {
             if (entry.prompt === holoResult.prompt && (!model || entry.model === model)) {
-              // TTL check — skip expired entries
               if (this.isExpired(entry)) continue
-              const updated: CacheEntry = { ...entry, accessCount: entry.accessCount + 1, lastAccessed: Date.now() }
+              const updated = this.touchEntry(entry)
               this.memoryCache.set(entryKey, updated)
               this.totalHits++
               return {
@@ -391,7 +407,7 @@ export class ResponseCache {
       }
 
       if (bestMatch) {
-        const updated: CacheEntry = { ...bestMatch, accessCount: bestMatch.accessCount + 1, lastAccessed: Date.now() }
+        const updated = this.touchEntry(bestMatch)
         this.memoryCache.set(updated.key, updated)
         this.totalHits++
         return {
@@ -414,7 +430,7 @@ export class ResponseCache {
     response: string,
     model: string,
     inputTokens: number,
-    outputTokens: number
+    outputTokens: number,
   ): Promise<void> {
     const key = hashKey(prompt, model)
     const entry: CacheEntry = {
@@ -454,17 +470,21 @@ export class ResponseCache {
         try {
           const store = this.getStore()
           if (store) del(oldestKey, store).catch(() => {})
-        } catch { /* IDB not available */ }
+        } catch {
+          /* IDB not available */
+        }
       }
     }
 
     // Persist to IDB
-    try {
-      const store = this.getStore()
-      if (!store) throw new Error("no idb")
-      await set(key, entry, store)
-    } catch {
-      // IDB not available (SSR)
+    const persistStore = this.getStore()
+    if (persistStore) {
+      try {
+        await set(key, entry, persistStore)
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("[TokenShield] Cache IDB write failed (SSR or quota exceeded):", err)
+      }
     }
   }
 
@@ -489,7 +509,15 @@ export class ResponseCache {
           this.memoryCache.set(key, entry)
           // Populate holographic engine so fuzzy matching works after reload
           if (this.holoEngine) {
-            this.holoEngine.learn(entry.prompt, entry.response, entry.model, entry.inputTokens, entry.outputTokens).catch(() => {})
+            this.holoEngine
+              .learn(
+                entry.prompt,
+                entry.response,
+                entry.model,
+                entry.inputTokens,
+                entry.outputTokens,
+              )
+              .catch(() => {})
           }
           loaded++
         } else if (entry) {
@@ -514,8 +542,7 @@ export class ResponseCache {
   } {
     let totalSavedTokens = 0
     for (const entry of this.memoryCache.values()) {
-      totalSavedTokens +=
-        (entry.inputTokens + entry.outputTokens) * entry.accessCount
+      totalSavedTokens += (entry.inputTokens + entry.outputTokens) * entry.accessCount
     }
     return {
       entries: this.memoryCache.size,

@@ -140,7 +140,7 @@ describe("UserBudgetManager", () => {
 
   it("check blocks when inflight + estimated would exceed limit", async () => {
     const mgr = new UserBudgetManager({
-      users: { "u1": { daily: 0.01, monthly: 100 } },
+      users: { u1: { daily: 0.01, monthly: 100 } },
     })
     await mgr.recordSpend("u1", 0.008, "gpt-4o-mini")
     // Small check passes: projected = $0.008 + ~$0.00045 < $0.01
@@ -248,7 +248,7 @@ describe("UserBudgetManager", () => {
   it("fires onBudgetWarning at 80% of daily limit", async () => {
     const onWarning = vi.fn()
     const mgr = new UserBudgetManager({
-      users: { "u1": { daily: 10.0, monthly: 100.0 } },
+      users: { u1: { daily: 10.0, monthly: 100.0 } },
       onBudgetWarning: onWarning,
     })
     await mgr.recordSpend("u1", 8.0, "gpt-4o-mini")
@@ -261,7 +261,7 @@ describe("UserBudgetManager", () => {
   it("fires onBudgetExceeded when daily limit hit", async () => {
     const onExceeded = vi.fn()
     const mgr = new UserBudgetManager({
-      users: { "u1": { daily: 5.0, monthly: 100.0 } },
+      users: { u1: { daily: 5.0, monthly: 100.0 } },
       onBudgetExceeded: onExceeded,
     })
     await mgr.recordSpend("u1", 5.0, "gpt-4o-mini")

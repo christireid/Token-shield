@@ -9,8 +9,8 @@ export function LiveDemo() {
         </h2>
         <p className="mt-2 mb-8 text-sm text-muted-foreground sm:text-base">
           11 tests across every module. API tests hit OpenAI and return real{" "}
-          <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">usage</code>{" "}
-          objects. Client-side tests use exact BPE encoding.
+          <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">usage</code> objects.
+          Client-side tests use exact BPE encoding.
         </p>
         <Playground />
       </div>

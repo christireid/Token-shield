@@ -9,8 +9,13 @@ import type { ResponseCache } from "./response-cache"
 import type { RequestGuard } from "./request-guard"
 import type { CostLedger } from "./cost-ledger"
 import type { CostCircuitBreaker, BreakerConfig } from "./circuit-breaker"
-import type { UserBudgetManager, UserBudgetConfig, BudgetExceededEvent, BudgetWarningEvent } from "./user-budget-manager"
-import type { createEventBus, TokenShieldEvents } from "./event-bus"
+import type {
+  UserBudgetManager,
+  UserBudgetConfig,
+  BudgetExceededEvent,
+  BudgetWarningEvent,
+} from "./user-budget-manager"
+import type { createEventBus } from "./event-bus"
 import type { TokenShieldLogger, LogEntry } from "./logger"
 import type { ProviderAdapter, AdapterConfig } from "./provider-adapter"
 import type { ComplexityScore } from "./model-router"
@@ -31,12 +36,13 @@ export const SHIELD_META = Symbol("tokenshield")
 export const MSG_OVERHEAD_TOKENS = 5
 
 /**
- * Fallback pricing used when a model is not in MODEL_PRICING.
- * Uses GPT-4o-mini rates as a conservative middle-ground estimate
- * so that budget enforcement and cost tracking still function.
+ * Fallback pricing for unknown models not found in MODEL_PRICING.
+ * Uses GPT-4o-mini rates ($0.15/1M input, $0.60/1M output) as a conservative
+ * middle-ground estimate. This ensures budget enforcement and cost tracking
+ * remain functional for custom, fine-tuned, or newly released models.
  */
 export const FALLBACK_INPUT_PER_MILLION = 0.15
-export const FALLBACK_OUTPUT_PER_MILLION = 0.60
+export const FALLBACK_OUTPUT_PER_MILLION = 0.6
 
 // -------------------------------------------------------
 // Config Interface
@@ -61,6 +67,14 @@ export interface TokenShieldMiddlewareConfig {
     maxCostPerHour?: number
     /** Window in ms during which identical prompts are deduplicated even after completion (default: 0 = off) */
     deduplicateWindow?: number
+    /** Minimum number of characters required in a prompt (default: 2) */
+    minInputLength?: number
+    /** Maximum input tokens allowed per prompt. Omit to disable (default: no limit) */
+    maxInputTokens?: number
+    /** Model ID for cost calculations (default: "gpt-4o-mini") */
+    modelId?: string
+    /** Whether to deduplicate identical in-flight prompts (default: true) */
+    deduplicateInFlight?: boolean
   }
 
   /** Response cache config */
@@ -130,7 +144,7 @@ export interface TokenShieldMiddlewareConfig {
     /** Function that returns the current user's ID */
     getUserId: () => string
     /** Budget configuration (users, defaultBudget, tierModels, etc.) */
-    budgets: Omit<UserBudgetConfig, 'onBudgetExceeded' | 'onBudgetWarning'>
+    budgets: Omit<UserBudgetConfig, "onBudgetExceeded" | "onBudgetWarning">
     /** Called when a user exceeds their budget */
     onBudgetExceeded?: (userId: string, event: BudgetExceededEvent) => void
     /** Called when a user approaches their budget (80%) */
@@ -182,10 +196,22 @@ export interface TokenShieldMiddlewareConfig {
   /** Called when a request is blocked by the guard */
   onBlocked?: (reason: string) => void
   /** Called with every ledger entry after a request completes */
-  onUsage?: (entry: { model: string; inputTokens: number; outputTokens: number; cost: number; saved: number }) => void
+  onUsage?: (entry: {
+    model: string
+    inputTokens: number
+    outputTokens: number
+    cost: number
+    saved: number
+  }) => void
 
   /** Optional logger for structured observability */
-  logger?: TokenShieldLogger | { level?: 'debug' | 'info' | 'warn' | 'error'; handler?: (entry: LogEntry) => void; enableSpans?: boolean }
+  logger?:
+    | TokenShieldLogger
+    | {
+        level?: "debug" | "info" | "warn" | "error"
+        handler?: (entry: LogEntry) => void
+        enableSpans?: boolean
+      }
 
   /** Optional multi-provider adapter for routing, retries, and health tracking */
   providerAdapter?: ProviderAdapter | AdapterConfig
@@ -220,9 +246,15 @@ export interface TokenShieldMiddleware {
   /** Pre-model transform — runs breaker, budget, guard, cache, context, router, prefix */
   transformParams: (args: { params: Record<string, unknown> }) => Promise<Record<string, unknown>>
   /** Wraps non-streaming model calls with caching, ledger, budget tracking */
-  wrapGenerate: (args: { doGenerate: () => Promise<Record<string, unknown>>; params: Record<string, unknown> }) => Promise<Record<string, unknown>>
+  wrapGenerate: (args: {
+    doGenerate: () => Promise<Record<string, unknown>>
+    params: Record<string, unknown>
+  }) => Promise<Record<string, unknown>>
   /** Wraps streaming model calls with token tracking, caching, budget accounting */
-  wrapStream: (args: { doStream: () => Promise<Record<string, unknown>>; params: Record<string, unknown> }) => Promise<Record<string, unknown>>
+  wrapStream: (args: {
+    doStream: () => Promise<Record<string, unknown>>
+    params: Record<string, unknown>
+  }) => Promise<Record<string, unknown>>
   /** Returns a snapshot of all module health indicators */
   healthCheck: () => HealthCheckResult
   /** Clean up event forwarding listeners. Call when disposing a middleware instance. */
@@ -285,6 +317,14 @@ export interface ShieldMeta {
   lastUserText?: string
 }
 
+/**
+ * Extract ShieldMeta from params without double type assertion at every callsite.
+ * Replaces the repeated `(params as Record<string | symbol, unknown>)[SHIELD_META] as ShieldMeta | undefined` pattern.
+ */
+export function getShieldMeta(params: Record<string, unknown>): ShieldMeta | undefined {
+  return (params as Record<string | symbol, unknown>)[SHIELD_META] as ShieldMeta | undefined
+}
+
 /** AI SDK prompt type used internally for type-safe extraction */
 export type AISDKPrompt = Array<{ role: string; content: Array<{ type: string; text?: string }> }>
 
@@ -329,10 +369,12 @@ export function extractLastUserText(params: Record<string, unknown>): string {
   const prompt = params.prompt as AISDKPrompt | undefined
   if (!prompt || !Array.isArray(prompt)) return ""
   const lastUserMsg = prompt.filter((m) => m.role === "user").pop()
-  return lastUserMsg?.content
-    ?.filter((p: { type: string }) => p.type === "text")
-    .map((p: { text?: string }) => p.text ?? "")
-    .join("") ?? ""
+  return (
+    lastUserMsg?.content
+      ?.filter((p: { type: string }) => p.type === "text")
+      .map((p: { text?: string }) => p.text ?? "")
+      .join("") ?? ""
+  )
 }
 
 /**
@@ -340,12 +382,25 @@ export function extractLastUserText(params: Record<string, unknown>): string {
  * for unknown models instead of returning 0, which would silently bypass
  * budget enforcement and produce incorrect savings calculations.
  */
+/** Set of models we've already warned about to avoid log spam */
+const warnedFallbackModels = new Set<string>()
+
 export function safeCost(modelId: string, inputTokens: number, outputTokens: number): number {
   try {
     return estimateCost(modelId, inputTokens, outputTokens).totalCost
   } catch {
-    // Unknown model — use fallback pricing to keep budget checks functional
-    return (inputTokens / 1_000_000) * FALLBACK_INPUT_PER_MILLION +
-           (outputTokens / 1_000_000) * FALLBACK_OUTPUT_PER_MILLION
+    // Unknown model — use fallback pricing to keep budget checks functional.
+    // Warn once per model so operators notice the inaccuracy.
+    if (modelId && !warnedFallbackModels.has(modelId)) {
+      warnedFallbackModels.add(modelId)
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[TokenShield] Unknown model "${modelId}" — using fallback pricing ($${FALLBACK_INPUT_PER_MILLION}/M input, $${FALLBACK_OUTPUT_PER_MILLION}/M output). Cost estimates may be inaccurate.`,
+      )
+    }
+    return (
+      (inputTokens / 1_000_000) * FALLBACK_INPUT_PER_MILLION +
+      (outputTokens / 1_000_000) * FALLBACK_OUTPUT_PER_MILLION
+    )
   }
 }

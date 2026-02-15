@@ -8,9 +8,7 @@ import { tokenShieldMiddleware, TokenShieldBlockedError } from "./middleware"
 describe("TokenShield E2E", () => {
   const makeParams = (text: string, modelId = "gpt-4o-mini") => ({
     modelId,
-    prompt: [
-      { role: "user", content: [{ type: "text", text }] },
-    ],
+    prompt: [{ role: "user", content: [{ type: "text", text }] }],
   })
 
   const mockDoGenerate = (text = "Response") =>
@@ -35,7 +33,14 @@ describe("TokenShield E2E", () => {
     //   Request 2 (gpt-4o-mini, cached): projected = $0.000045 + $0.000007 = $0.000052 < $0.0001 → passes
     //   Request 3 (gpt-4o, expensive): projected = $0.000045 + $0.00012 = $0.000165 >= $0.0001 → BLOCKED
     const mw = tokenShieldMiddleware({
-      modules: { guard: true, cache: true, context: false, router: false, prefix: false, ledger: true },
+      modules: {
+        guard: true,
+        cache: true,
+        context: false,
+        router: false,
+        prefix: false,
+        ledger: true,
+      },
       guard: { debounceMs: 0, maxRequestsPerMinute: 999, maxCostPerHour: 999 },
       cache: { maxEntries: 100, ttlMs: 60_000, similarityThreshold: 1.0 },
       userBudget: {
@@ -76,9 +81,7 @@ describe("TokenShield E2E", () => {
     // Request 3: budget exceeded — switching to expensive model (gpt-4o) pushes
     // projected cost past the daily limit after request 1's actual spend
     const params3 = makeParams("What is the capital of Germany?", "gpt-4o")
-    await expect(
-      mw.transformParams({ params: params3 })
-    ).rejects.toThrow(TokenShieldBlockedError)
+    await expect(mw.transformParams({ params: params3 })).rejects.toThrow(TokenShieldBlockedError)
     expect(onBlocked).toHaveBeenCalled()
 
     // Verify ledger state

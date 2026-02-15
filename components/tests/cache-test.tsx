@@ -54,9 +54,21 @@ export function CacheTest() {
     try {
       // STEP 1: First call - cache miss, real API call
       // Step 1 is always a cache miss - fresh cache
-      const res1 = await callOpenAI([{ role: "user", content: ORIGINAL_PROMPT }], model, { max_tokens: 150 })
-      const cost1 = calculateRealCost(model, res1.usage.prompt_tokens ?? 0, res1.usage.completion_tokens ?? 0)
-      await cache.store(ORIGINAL_PROMPT, res1.content, model, res1.usage.prompt_tokens ?? 0, res1.usage.completion_tokens ?? 0)
+      const res1 = await callOpenAI([{ role: "user", content: ORIGINAL_PROMPT }], model, {
+        max_tokens: 150,
+      })
+      const cost1 = calculateRealCost(
+        model,
+        res1.usage.prompt_tokens ?? 0,
+        res1.usage.completion_tokens ?? 0,
+      )
+      await cache.store(
+        ORIGINAL_PROMPT,
+        res1.content,
+        model,
+        res1.usage.prompt_tokens ?? 0,
+        res1.usage.completion_tokens ?? 0,
+      )
 
       results.push({
         label: "Step 1: First call (cache miss)",
@@ -114,8 +126,14 @@ export function CacheTest() {
         })
       } else {
         // Fuzzy miss - still make the API call to show the comparison
-        const res3 = await callOpenAI([{ role: "user", content: FUZZY_PROMPT }], model, { max_tokens: 150 })
-        const cost3 = calculateRealCost(model, res3.usage.prompt_tokens ?? 0, res3.usage.completion_tokens ?? 0)
+        const res3 = await callOpenAI([{ role: "user", content: FUZZY_PROMPT }], model, {
+          max_tokens: 150,
+        })
+        const cost3 = calculateRealCost(
+          model,
+          res3.usage.prompt_tokens ?? 0,
+          res3.usage.completion_tokens ?? 0,
+        )
         results.push({
           label: "Step 3: Rephrased (cache miss - fuzzy threshold not met)",
           prompt: FUZZY_PROMPT,
@@ -148,7 +166,9 @@ export function CacheTest() {
       <div>
         <h3 className="text-lg font-semibold text-foreground">Response Cache Test</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Makes 1 real API call, then tests exact and fuzzy cache retrieval. Cache hits cost $0.00 (no API call made). Fuzzy matching uses bigram Dice coefficient - similarity between original and rephrased: {(similarityScore * 100).toFixed(1)}%.
+          Makes 1 real API call, then tests exact and fuzzy cache retrieval. Cache hits cost $0.00
+          (no API call made). Fuzzy matching uses bigram Dice coefficient - similarity between
+          original and rephrased: {(similarityScore * 100).toFixed(1)}%.
         </p>
       </div>
 
@@ -157,7 +177,9 @@ export function CacheTest() {
       </Button>
 
       {error && (
-        <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+        <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
+        </div>
       )}
 
       {steps.map((step, i) => (
@@ -175,12 +197,19 @@ export function CacheTest() {
             <div className="mt-0.5 font-mono text-xs text-foreground">{step.prompt}</div>
           </div>
           <div className="space-y-1.5 text-sm">
-            <Row label="API called" value={step.apiCalled ? "YES" : "NO (cached)"} highlight={!step.apiCalled} />
+            <Row
+              label="API called"
+              value={step.apiCalled ? "YES" : "NO (cached)"}
+              highlight={!step.apiCalled}
+            />
             {step.matchType && <Row label="Match type" value={step.matchType} />}
             {step.similarity !== undefined && (
               <Row label="Similarity" value={`${(step.similarity * 100).toFixed(1)}%`} />
             )}
-            <Row label="Tokens billed" value={step.apiCalled ? `${step.promptTokens + step.completionTokens}` : "0"} />
+            <Row
+              label="Tokens billed"
+              value={step.apiCalled ? `${step.promptTokens + step.completionTokens}` : "0"}
+            />
             <Row label="Cost" value={`$${step.realCost.totalCost.toFixed(6)}`} highlight />
             <Row label="Latency" value={`${step.latencyMs}ms`} />
           </div>
@@ -211,7 +240,9 @@ export function CacheTest() {
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Without caching, 3 identical/similar requests = 3 API calls. With TokenShield cache: 1 API call + 2 instant cache hits. At scale (1000 requests/day with 40% repeat rate), this saves ~400 API calls/day.
+            Without caching, 3 identical/similar requests = 3 API calls. With TokenShield cache: 1
+            API call + 2 instant cache hits. At scale (1000 requests/day with 40% repeat rate), this
+            saves ~400 API calls/day.
           </p>
         </div>
       )}
@@ -223,7 +254,11 @@ function Row({ label, value, highlight }: { label: string; value: string; highli
   return (
     <div className="flex items-baseline justify-between gap-2">
       <span className="text-muted-foreground">{label}</span>
-      <span className={`font-mono text-xs ${highlight ? "font-bold text-primary" : "text-foreground"}`}>{value}</span>
+      <span
+        className={`font-mono text-xs ${highlight ? "font-bold text-primary" : "text-foreground"}`}
+      >
+        {value}
+      </span>
     </div>
   )
 }

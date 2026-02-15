@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from "vitest"
-import { predictOutputTokens, type OutputPrediction } from "./output-predictor"
+import { predictOutputTokens } from "./output-predictor"
 
 describe("predictOutputTokens", () => {
   describe("task type detection", () => {
@@ -32,7 +32,9 @@ describe("predictOutputTokens", () => {
     })
 
     it("detects structured output / JSON requests", () => {
-      const result = predictOutputTokens("Return the data as a JSON object with name and age fields")
+      const result = predictOutputTokens(
+        "Return the data as a JSON object with name and age fields",
+      )
       expect(result.taskType).toBe("structured-output")
       expect(result.confidence).toBe("medium")
       expect(result.predictedTokens).toBe(200)
@@ -127,7 +129,10 @@ describe("predictOutputTokens", () => {
     })
 
     it("respects maxMaxTokens", () => {
-      const result = predictOutputTokens("Explain everything about quantum physics in great detail", { maxMaxTokens: 500 })
+      const result = predictOutputTokens(
+        "Explain everything about quantum physics in great detail",
+        { maxMaxTokens: 500 },
+      )
       expect(result.suggestedMaxTokens).toBeLessThanOrEqual(500)
     })
 
@@ -166,7 +171,9 @@ describe("predictOutputTokens", () => {
 
     it("does not apply length modifiers to classification tasks", () => {
       // "brief" in the prompt should not affect classification predictions
-      const result = predictOutputTokens("Classify this brief text as positive or negative sentiment")
+      const result = predictOutputTokens(
+        "Classify this brief text as positive or negative sentiment",
+      )
       expect(result.taskType).toBe("classification")
       expect(result.predictedTokens).toBe(20) // unchanged by "brief"
     })
@@ -195,12 +202,16 @@ describe("predictOutputTokens", () => {
 
     it("uses 1.0 multiplier for unknown models", () => {
       const base = predictOutputTokens("What is the capital of France?", {})
-      const unknown = predictOutputTokens("What is the capital of France?", { modelId: "unknown-model-xyz" })
+      const unknown = predictOutputTokens("What is the capital of France?", {
+        modelId: "unknown-model-xyz",
+      })
       expect(unknown.predictedTokens).toBe(base.predictedTokens)
     })
 
     it("matches model prefix for versioned models", () => {
-      const versioned = predictOutputTokens("What is the capital of France?", { modelId: "gpt-4o-2024-08-06" })
+      const versioned = predictOutputTokens("What is the capital of France?", {
+        modelId: "gpt-4o-2024-08-06",
+      })
       const base = predictOutputTokens("What is the capital of France?", { modelId: "gpt-4o" })
       expect(versioned.predictedTokens).toBe(base.predictedTokens)
     })
@@ -221,12 +232,7 @@ describe("predictOutputTokens", () => {
     })
 
     it("all numeric fields are non-negative", () => {
-      const prompts = [
-        "What is 1+1?",
-        "Summarize this text",
-        "Write a Python class",
-        "Hello world",
-      ]
+      const prompts = ["What is 1+1?", "Summarize this text", "Write a Python class", "Hello world"]
       for (const prompt of prompts) {
         const result = predictOutputTokens(prompt)
         expect(result.predictedTokens).toBeGreaterThanOrEqual(0)

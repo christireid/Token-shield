@@ -46,8 +46,12 @@ import {
 /** Error boundary that silently renders nothing when a child throws (e.g., useCostLedger with no ledger configured) */
 class OptionalSection extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
   state = { hasError: false }
-  static getDerivedStateFromError() { return { hasError: true } }
-  render() { return this.state.hasError ? null : this.props.children }
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+  render() {
+    return this.state.hasError ? null : this.props.children
+  }
 }
 
 // -------------------------------------------------------
@@ -99,36 +103,47 @@ export function TokenShieldDashboard({
       fontFamily: "system-ui, -apple-system, sans-serif",
       ...style,
     }),
-    [style]
+    [style],
   )
 
   return (
-    <div className={className} style={containerStyle} role="region" aria-label="TokenShield Dashboard">
-      <h2 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 700 }}>
-        TokenShield Dashboard
-      </h2>
+    <div
+      className={className}
+      style={containerStyle}
+      role="region"
+      aria-label="TokenShield Dashboard"
+    >
+      <h2 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 700 }}>TokenShield Dashboard</h2>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }} aria-live="polite">
         <SavingsSection />
 
-        {showLedger && <OptionalSection><LedgerSection /></OptionalSection>}
+        {showLedger && (
+          <OptionalSection>
+            <LedgerSection />
+          </OptionalSection>
+        )}
 
         {breaker && <BreakerSection breaker={breaker} />}
 
-        {budgetManager && userId && (
-          <UserBudgetSection manager={budgetManager} userId={userId} />
-        )}
+        {budgetManager && userId && <UserBudgetSection manager={budgetManager} userId={userId} />}
 
         {showEventLog && (
-          <OptionalSection><EventLogSection /></OptionalSection>
+          <OptionalSection>
+            <EventLogSection />
+          </OptionalSection>
         )}
 
         {providerAdapter && (
-          <OptionalSection><ProviderHealthSection adapter={providerAdapter} /></OptionalSection>
+          <OptionalSection>
+            <ProviderHealthSection adapter={providerAdapter} />
+          </OptionalSection>
         )}
 
         {showPipeline && (
-          <OptionalSection><PipelineMetricsSection /></OptionalSection>
+          <OptionalSection>
+            <PipelineMetricsSection />
+          </OptionalSection>
         )}
       </div>
     </div>

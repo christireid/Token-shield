@@ -8,12 +8,7 @@
  * and internal context — hooks are in separate files.
  */
 
-import React, {
-  createContext,
-  useContext,
-  useRef,
-  useMemo,
-} from "react"
+import React, { createContext, useContext, useRef, useMemo } from "react"
 import { ResponseCache } from "./response-cache"
 import { CostLedger } from "./cost-ledger"
 import { RequestGuard, type GuardConfig } from "./request-guard"
@@ -65,11 +60,9 @@ export function createSavingsStore() {
         events: newEvents.length > MAX_EVENTS ? newEvents.slice(-MAX_EVENTS) : newEvents,
         totalTokensSaved: state.totalTokensSaved + event.tokensSaved,
         totalDollarsSaved: state.totalDollarsSaved + event.dollarsSaved,
-        totalCacheHits:
-          state.totalCacheHits + (event.type === "cache_hit" ? 1 : 0),
+        totalCacheHits: state.totalCacheHits + (event.type === "cache_hit" ? 1 : 0),
         totalRequestsBlocked:
-          state.totalRequestsBlocked +
-          (event.type === "request_blocked" ? 1 : 0),
+          state.totalRequestsBlocked + (event.type === "request_blocked" ? 1 : 0),
       }
       for (const l of listeners) l()
     },
@@ -178,14 +171,10 @@ export function TokenShieldProvider({
       ledger: ledgerRef.current ?? undefined,
       eventBus,
     }),
-    [defaultModelId, eventBus]
+    [defaultModelId, eventBus],
   )
 
-  return (
-    <TokenShieldContext.Provider value={value}>
-      {children}
-    </TokenShieldContext.Provider>
-  )
+  return <TokenShieldContext.Provider value={value}>{children}</TokenShieldContext.Provider>
 }
 
 /**
@@ -206,9 +195,5 @@ export function useTokenShield() {
  */
 export function useSavings() {
   const { savingsStore } = useTokenShield()
-  return useSyncExternalStore(
-    savingsStore.subscribe,
-    savingsStore.getState,
-    savingsStore.getState
-  )
+  return useSyncExternalStore(savingsStore.subscribe, savingsStore.getState, savingsStore.getState)
 }

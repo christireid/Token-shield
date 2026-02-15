@@ -87,7 +87,7 @@ export const PRICING_REGISTRY: Record<string, ModelPricingEntry> = {
     supportsVision: true,
     supportsFunctions: true,
   },
-  "o1": {
+  o1: {
     id: "o1",
     provider: "openai",
     name: "o1",
@@ -111,7 +111,7 @@ export const PRICING_REGISTRY: Record<string, ModelPricingEntry> = {
     supportsVision: false,
     supportsFunctions: false,
   },
-  "o3": {
+  o3: {
     id: "o3",
     provider: "openai",
     name: "o3",
@@ -498,9 +498,7 @@ export function registerModel(entry: ModelPricingEntry): void {
  * Falls back to prefix matching when an exact key is not found,
  * returning the entry whose id is the longest prefix of the query.
  */
-export function getModelPricing(
-  modelId: string
-): ModelPricingEntry | undefined {
+export function getModelPricing(modelId: string): ModelPricingEntry | undefined {
   if (PRICING_REGISTRY[modelId]) {
     return PRICING_REGISTRY[modelId]
   }
@@ -509,10 +507,7 @@ export function getModelPricing(
   let bestLength = 0
 
   for (const entry of Object.values(PRICING_REGISTRY)) {
-    if (
-      modelId.startsWith(entry.id) &&
-      entry.id.length > bestLength
-    ) {
+    if (modelId.startsWith(entry.id) && entry.id.length > bestLength) {
       bestMatch = entry
       bestLength = entry.id.length
     }
@@ -522,12 +517,8 @@ export function getModelPricing(
 }
 
 /** Return every model entry that belongs to the given provider. */
-export function getModelsByProvider(
-  provider: string
-): ModelPricingEntry[] {
-  return Object.values(PRICING_REGISTRY).filter(
-    (entry) => entry.provider === provider
-  )
+export function getModelsByProvider(provider: string): ModelPricingEntry[] {
+  return Object.values(PRICING_REGISTRY).filter((entry) => entry.provider === provider)
 }
 
 // -------------------------------------------------------
@@ -579,7 +570,7 @@ export async function fetchLatestPricing(
     force?: boolean
     /** Additional allowed hostnames beyond the built-in allowlist */
     allowedHosts?: string[]
-  } = {}
+  } = {},
 ): Promise<{
   updated: number
   added: number
@@ -606,7 +597,9 @@ export async function fetchLatestPricing(
     return {
       updated: 0,
       added: 0,
-      errors: [`Host "${parsedUrl.hostname}" is not in the allowed list. Use options.allowedHosts to add it.`],
+      errors: [
+        `Host "${parsedUrl.hostname}" is not in the allowed list. Use options.allowedHosts to add it.`,
+      ],
       fromCache: false,
     }
   }
@@ -628,7 +621,7 @@ export async function fetchLatestPricing(
     try {
       response = await fetch(url, {
         signal: controller.signal,
-        headers: { "Accept": "application/json" },
+        headers: { Accept: "application/json" },
       })
     } finally {
       clearTimeout(timeout)
@@ -676,7 +669,7 @@ export async function fetchLatestPricing(
 /** Validate a single pricing entry from remote data */
 function validatePricingEntry(
   id: string,
-  raw: unknown
+  raw: unknown,
 ): { entry?: ModelPricingEntry; error?: string } {
   if (!raw || typeof raw !== "object") {
     return { error: "Not an object" }

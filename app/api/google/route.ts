@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   if (!apiKey) {
     return NextResponse.json(
       { error: "GOOGLE_GENERATIVE_AI_API_KEY not configured" },
-      { status: 500 }
+      { status: 500 },
     )
   }
 
@@ -35,19 +35,13 @@ export async function POST(request: Request) {
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json(
-      { error: "Invalid JSON body" },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
   const { messages, model, max_tokens, temperature } = body
 
   if (!messages || !model) {
-    return NextResponse.json(
-      { error: "messages and model are required" },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: "messages and model are required" }, { status: 400 })
   }
 
   // Convert OpenAI-style messages to Gemini format
@@ -85,14 +79,14 @@ export async function POST(request: Request) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(requestBody),
-      }
+      },
     )
 
     if (!response.ok) {
       const errorData = await response.text()
       return NextResponse.json(
         { error: `Google API error: ${response.status}`, details: errorData },
-        { status: response.status }
+        { status: response.status },
       )
     }
 
@@ -101,9 +95,8 @@ export async function POST(request: Request) {
 
     // Extract text content from Gemini's response format
     const content =
-      data.candidates?.[0]?.content?.parts
-        ?.map((p: { text?: string }) => p.text ?? "")
-        .join("") ?? ""
+      data.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("") ??
+      ""
 
     const promptTokens = data.usageMetadata?.promptTokenCount ?? 0
     const completionTokens = data.usageMetadata?.candidatesTokenCount ?? 0
@@ -124,7 +117,7 @@ export async function POST(request: Request) {
       {
         error: `Network error: ${err instanceof Error ? err.message : "unknown"}`,
       },
-      { status: 502 }
+      { status: 502 },
     )
   }
 }

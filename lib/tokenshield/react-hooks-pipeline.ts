@@ -7,18 +7,12 @@
  * event logging, pipeline metrics, and provider health monitoring.
  */
 
-import {
-  useMemo,
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-} from "react"
+import { useMemo, useState, useEffect, useCallback, useRef } from "react"
 import { estimateCost } from "./cost-estimator"
-import { smartFit, type Message, type ContextBudget } from "./context-manager"
+import { smartFit, type Message, type ContextBudget, type ContextResult } from "./context-manager"
 import { calculateSavings } from "./cost-estimator"
 import type { GuardResult } from "./request-guard"
-import type { TokenShieldEvents } from "./event-bus"
+import { subscribeToAnyEvent, type TokenShieldEvents } from "./event-bus"
 import type { ProviderAdapter, ProviderHealth } from "./provider-adapter"
 import { useTokenShield } from "./react-context"
 
@@ -32,8 +26,10 @@ import { useTokenShield } from "./react-context"
  */
 export function useContextManager(
   messages: Message[],
-  budget: ContextBudget
-) {
+  budget: ContextBudget,
+): ContextResult & {
+  savings: { tokensSaved: number; dollarsSaved: number; percentSaved: number } | null
+} {
   const { defaultModelId } = useTokenShield()
 
   return useMemo(() => {
@@ -44,7 +40,7 @@ export function useContextManager(
         defaultModelId,
         result.totalTokens + result.evictedTokens,
         result.totalTokens,
-        budget.reservedForOutput
+        budget.reservedForOutput,
       )
       return {
         ...result,
@@ -68,14 +64,30 @@ export function useContextManager(
  * Check the response cache before making an API call.
  * Returns a function that wraps your API call with caching.
  */
-export function useResponseCache() {
+export function useResponseCache(): {
+  cachedFetch: (
+    prompt: string,
+    apiFn: (
+      prompt: string,
+    ) => Promise<{ response: string; inputTokens: number; outputTokens: number }>,
+    model?: string,
+  ) => Promise<{
+    response: string
+    fromCache: boolean
+    matchType: string | undefined
+    similarity: number | undefined
+  }>
+  stats: () => ReturnType<typeof import("./response-cache").ResponseCache.prototype.stats>
+} {
   const { cache, savingsStore, defaultModelId } = useTokenShield()
 
   const cachedFetch = useCallback(
     async (
       prompt: string,
-      apiFn: (prompt: string) => Promise<{ response: string; inputTokens: number; outputTokens: number }>,
-      model?: string
+      apiFn: (
+        prompt: string,
+      ) => Promise<{ response: string; inputTokens: number; outputTokens: number }>,
+      model?: string,
     ) => {
       const modelId = model ?? defaultModelId
 
@@ -84,7 +96,7 @@ export function useResponseCache() {
         const cost = estimateCost(
           modelId,
           cacheResult.entry.inputTokens,
-          cacheResult.entry.outputTokens
+          cacheResult.entry.outputTokens,
         )
         savingsStore.addEvent({
           timestamp: Date.now(),
@@ -112,7 +124,7 @@ export function useResponseCache() {
         similarity: undefined,
       }
     },
-    [cache, savingsStore, defaultModelId]
+    [cache, savingsStore, defaultModelId],
   )
 
   const stats = useCallback(() => cache.stats(), [cache])
@@ -127,7 +139,12 @@ export function useResponseCache() {
 /**
  * Guard requests with debouncing, rate limiting, and cost gating.
  */
-export function useRequestGuard() {
+export function useRequestGuard(): {
+  checkRequest: (prompt: string, expectedOutputTokens?: number) => GuardResult
+  startRequest: (prompt: string) => void
+  completeRequest: (prompt: string, inputTokens: number, outputTokens: number) => void
+  stats: () => ReturnType<import("./request-guard").RequestGuard["stats"]>
+} {
   const { guard, savingsStore } = useTokenShield()
 
   const checkRequest = useCallback(
@@ -144,18 +161,15 @@ export function useRequestGuard() {
       }
       return result
     },
-    [guard, savingsStore]
+    [guard, savingsStore],
   )
 
-  const startRequest = useCallback(
-    (prompt: string) => guard.startRequest(prompt),
-    [guard]
-  )
+  const startRequest = useCallback((prompt: string) => guard.startRequest(prompt), [guard])
 
   const completeRequest = useCallback(
     (prompt: string, inputTokens: number, outputTokens: number) =>
       guard.completeRequest(prompt, inputTokens, outputTokens),
-    [guard]
+    [guard],
   )
 
   const stats = useCallback(() => guard.stats(), [guard])
@@ -212,20 +226,19 @@ export function useEventLog(maxEntries = 50): EventLogEntry[] {
     const handlers: Array<() => void> = []
 
     for (const eventType of allEventTypes) {
-      const handler = (data: Record<string, unknown>) => {
+      const handler = (data: unknown) => {
         const entry: EventLogEntry = {
           id: ++_eventIdCounter,
           timestamp: Date.now(),
           type: eventType,
-          data: data as Record<string, unknown>,
+          data: (data ?? {}) as Record<string, unknown>,
         }
         setLog((prev) => {
           const next = [entry, ...prev]
           return next.length > maxEntries ? next.slice(0, maxEntries) : next
         })
       }
-      eventBus.on(eventType, handler as any)
-      handlers.push(() => eventBus.off(eventType, handler as any))
+      handlers.push(subscribeToAnyEvent(eventBus, eventType, handler))
     }
 
     return () => {
@@ -317,7 +330,8 @@ export function usePipelineMetrics(): PipelineMetrics {
       const c = countersRef.current
       setMetrics({
         totalRequests: c.totalRequests,
-        avgLatencyMs: c.latencySamples > 0 ? Math.round(c.cumulativeLatencyMs / c.latencySamples) : 0,
+        avgLatencyMs:
+          c.latencySamples > 0 ? Math.round(c.cumulativeLatencyMs / c.latencySamples) : 0,
         cacheHitRate: c.totalRequests > 0 ? c.totalCacheHits / c.totalRequests : 0,
         blockedRate: c.totalRequests > 0 ? c.totalBlocked / c.totalRequests : 0,
         lastEvent: lastEventRef.current,
@@ -327,14 +341,15 @@ export function usePipelineMetrics(): PipelineMetrics {
     const handlers: Array<() => void> = []
 
     for (const eventType of trackedEvents) {
-      const handler = (data: Record<string, unknown>) => {
+      const handler = (data: unknown) => {
         const c = countersRef.current
+        const record = (data ?? {}) as Record<string, unknown>
 
         const entry: EventLogEntry = {
           id: ++_eventIdCounter,
           timestamp: Date.now(),
           type: eventType,
-          data: data as Record<string, unknown>,
+          data: record,
         }
         lastEventRef.current = entry
 
@@ -354,7 +369,7 @@ export function usePipelineMetrics(): PipelineMetrics {
             c.totalRequests++
             break
           case "ledger:entry": {
-            const latency = typeof data.latencyMs === "number" ? data.latencyMs : 0
+            const latency = typeof record.latencyMs === "number" ? record.latencyMs : 0
             if (latency > 0) {
               c.cumulativeLatencyMs += latency
               c.latencySamples++
@@ -365,8 +380,7 @@ export function usePipelineMetrics(): PipelineMetrics {
 
         updateMetrics()
       }
-      eventBus.on(eventType, handler as any)
-      handlers.push(() => eventBus.off(eventType, handler as any))
+      handlers.push(subscribeToAnyEvent(eventBus, eventType, handler))
     }
 
     return () => {

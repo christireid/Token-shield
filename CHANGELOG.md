@@ -7,6 +7,7 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 ## [0.3.0] - 2026-02-15
 
 ### Added
+
 - **Open-core license gating**: New `activateLicense()`, `isModulePermitted()`, and `getModuleTier()` functions for tiered feature access (Community/Pro/Team/Enterprise). All features unlocked in development; license keys required for production.
 - **Enterprise audit logging**: New `AuditLog` class with tamper-evident hash chaining, structured event recording, integrity verification, and JSON/CSV export for compliance reporting.
 - **Content-type-aware cache TTL**: ResponseCache now classifies prompts as factual (7d TTL), general (24h), or time-sensitive (5min) using pattern matching. Configurable via `ttlByContentType` option.
@@ -16,6 +17,7 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - **Savings-first README**: Rewrote README.md with ROI calculator, per-module savings estimates, and clearer competitive positioning
 
 ### Changed
+
 - **Model pricing updates**: Added 15+ models (GPT-5 family, Claude 4.5/4.6, Gemini 3, o3-pro, o4-mini). Fixed GPT-4.1 family cached input discount (0.5 → 0.75), Gemini 2.5 Flash pricing, GPT-5.2 context window (128K → 400K).
 - **Token counter accuracy**: Updated Anthropic correction factor (1.10 → 1.35) and Google correction factor (1.15 → 1.12) based on empirical measurement against provider APIs.
 - **CacheConfig schema**: Added `ttlByContentType` field to Valibot validation schema.
@@ -23,12 +25,14 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 ## [0.2.0] - 2026-02-12
 
 ### Fixed
+
 - **ResponseCache model scoping**: Cache keys now include model ID, preventing cross-model contamination where a response cached for one model (e.g. gpt-4o) could be incorrectly served for a different model (e.g. gpt-4o-mini)
 - **ResponseCache shared mutable state**: Cache lookups now use copy-on-read semantics instead of directly mutating shared cache entries, preventing race conditions in concurrent access scenarios
 - **safeCost() silent failure**: Unknown models now use fallback pricing (based on GPT-4o-mini rates) instead of returning $0, which was silently bypassing budget enforcement and circuit breaker limits
 - **Stream usage recording**: The `usageRecorded` flag is now only set after successful recording, allowing retries if the initial write fails (e.g. due to IndexedDB quota)
 
 ### Added
+
 - **MIT LICENSE file**: Clear open-source licensing for adoption by engineering teams
 - **README.md**: Value-proposition-focused documentation with ROI calculator, competitive comparison, and architecture overview
 - **CHANGELOG.md**: This file, for tracking changes across releases
@@ -48,6 +52,7 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 ## [0.1.0] - 2026-01-01
 
 ### Added
+
 - Initial release with 12 core modules
 - Vercel AI SDK middleware integration (`wrapLanguageModel`)
 - Token Counter (BPE-accurate via gpt-tokenizer)

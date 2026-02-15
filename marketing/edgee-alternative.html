@@ -1,213 +1,234 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TokenShield vs Edgee - The Developer-First Alternative</title>
     <style>
-        :root {
-            --primary: #2563eb;
-            --dark: #0f172a;
-            --light: #f8fafc;
-            --accent: #10b981;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            line-height: 1.6;
-            color: #334155;
-            margin: 0;
-            padding: 0;
-            background: var(--light);
-        }
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-        header {
-            text-align: center;
-            padding: 4rem 0;
-            background: #fff;
-            border-bottom: 1px solid #e2e8f0;
-        }
-        h1 {
-            font-size: 3rem;
-            color: var(--dark);
-            margin-bottom: 1rem;
-            line-height: 1.2;
-        }
-        .highlight {
-            color: var(--primary);
-        }
-        .subtitle {
-            font-size: 1.5rem;
-            color: #64748b;
-            max-width: 700px;
-            margin: 0 auto 2rem;
-        }
-        .btn {
-            display: inline-block;
-            background: var(--primary);
-            color: white;
-            padding: 1rem 2rem;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 1.1rem;
-            transition: transform 0.2s;
-        }
-        .btn:hover {
-            transform: translateY(-2px);
-        }
-        .comparison-section {
-            background: white;
-            margin: 4rem 0;
-            padding: 3rem;
-            border-radius: 16px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 2rem;
-        }
-        th, td {
-            text-align: left;
-            padding: 1rem;
-            border-bottom: 1px solid #e2e8f0;
-        }
-        th {
-            font-weight: 700;
-            color: var(--dark);
-        }
-        .check { color: var(--accent); font-weight: bold; }
-        .cross { color: #ef4444; font-weight: bold; }
-        .feature-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-            margin: 4rem 0;
-        }
-        .feature-card {
-            background: white;
-            padding: 2rem;
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
-        }
-        .feature-card h3 { color: var(--dark); margin-top: 0; }
-        .roi-calculator {
-            background: var(--dark);
-            color: white;
-            padding: 3rem;
-            border-radius: 16px;
-            text-align: center;
-        }
-        .roi-stat {
-            font-size: 3.5rem;
-            font-weight: 800;
-            color: var(--accent);
-        }
-        code {
-            background: #f1f5f9;
-            padding: 0.2rem 0.4rem;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 0.9em;
-        }
+      :root {
+        --primary: #2563eb;
+        --dark: #0f172a;
+        --light: #f8fafc;
+        --accent: #10b981;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        line-height: 1.6;
+        color: #334155;
+        margin: 0;
+        padding: 0;
+        background: var(--light);
+      }
+      .container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 2rem;
+      }
+      header {
+        text-align: center;
+        padding: 4rem 0;
+        background: #fff;
+        border-bottom: 1px solid #e2e8f0;
+      }
+      h1 {
+        font-size: 3rem;
+        color: var(--dark);
+        margin-bottom: 1rem;
+        line-height: 1.2;
+      }
+      .highlight {
+        color: var(--primary);
+      }
+      .subtitle {
+        font-size: 1.5rem;
+        color: #64748b;
+        max-width: 700px;
+        margin: 0 auto 2rem;
+      }
+      .btn {
+        display: inline-block;
+        background: var(--primary);
+        color: white;
+        padding: 1rem 2rem;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 1.1rem;
+        transition: transform 0.2s;
+      }
+      .btn:hover {
+        transform: translateY(-2px);
+      }
+      .comparison-section {
+        background: white;
+        margin: 4rem 0;
+        padding: 3rem;
+        border-radius: 16px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 2rem;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 1rem;
+        border-bottom: 1px solid #e2e8f0;
+      }
+      th {
+        font-weight: 700;
+        color: var(--dark);
+      }
+      .check {
+        color: var(--accent);
+        font-weight: bold;
+      }
+      .cross {
+        color: #ef4444;
+        font-weight: bold;
+      }
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+        margin: 4rem 0;
+      }
+      .feature-card {
+        background: white;
+        padding: 2rem;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+      }
+      .feature-card h3 {
+        color: var(--dark);
+        margin-top: 0;
+      }
+      .roi-calculator {
+        background: var(--dark);
+        color: white;
+        padding: 3rem;
+        border-radius: 16px;
+        text-align: center;
+      }
+      .roi-stat {
+        font-size: 3.5rem;
+        font-weight: 800;
+        color: var(--accent);
+      }
+      code {
+        background: #f1f5f9;
+        padding: 0.2rem 0.4rem;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 0.9em;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
+    <header>
+      <div class="container">
+        <h1>Cut LLM Costs 40%.<br /><span class="highlight">No Vendor Lock-In.</span></h1>
+        <p class="subtitle">
+          TokenShield is the developer-first alternative to Edgee. Add it to your existing SDK in 3
+          minutes. Keep your API endpoints. Remove it anytime.
+        </p>
+        <a href="https://www.npmjs.com/package/@tokenshield/ai-sdk" class="btn"
+          >Start Free: npm install @tokenshield/ai-sdk</a
+        >
+        <p style="margin-top: 1rem; font-size: 0.9rem; color: #64748b">
+          MIT Licensed Core • No Credit Card Required
+        </p>
+      </div>
+    </header>
 
-<header>
     <div class="container">
-        <h1>Cut LLM Costs 40%.<br><span class="highlight">No Vendor Lock-In.</span></h1>
-        <p class="subtitle">TokenShield is the developer-first alternative to Edgee. Add it to your existing SDK in 3 minutes. Keep your API endpoints. Remove it anytime.</p>
-        <a href="https://www.npmjs.com/package/@tokenshield/ai-sdk" class="btn">Start Free: npm install @tokenshield/ai-sdk</a>
-        <p style="margin-top: 1rem; font-size: 0.9rem; color: #64748b;">MIT Licensed Core • No Credit Card Required</p>
-    </div>
-</header>
-
-<div class="container">
-
-    <div class="feature-grid">
+      <div class="feature-grid">
         <div class="feature-card">
-            <h3>🚫 The Edgee Risk</h3>
-            <p>Edgee requires you to change your API endpoints and route all traffic through their gateway. If they go down, you go down. If you want to leave, you have to rewrite code.</p>
+          <h3>🚫 The Edgee Risk</h3>
+          <p>
+            Edgee requires you to change your API endpoints and route all traffic through their
+            gateway. If they go down, you go down. If you want to leave, you have to rewrite code.
+          </p>
         </div>
         <div class="feature-card">
-            <h3>✅ The TokenShield Way</h3>
-            <p>TokenShield is a library. It runs inside your application. <code>npm install</code> to start. Delete 3 lines of code to leave. You own the infrastructure. You own the data.</p>
+          <h3>✅ The TokenShield Way</h3>
+          <p>
+            TokenShield is a library. It runs inside your application. <code>npm install</code> to
+            start. Delete 3 lines of code to leave. You own the infrastructure. You own the data.
+          </p>
         </div>
-    </div>
+      </div>
 
-    <div class="comparison-section">
-        <h2 style="text-align: center;">TokenShield vs. Edgee</h2>
+      <div class="comparison-section">
+        <h2 style="text-align: center">TokenShield vs. Edgee</h2>
         <table>
-            <thead>
-                <tr>
-                    <th>Feature</th>
-                    <th>TokenShield</th>
-                    <th>Edgee</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td><strong>Integration</strong></td>
-                    <td><span class="check">npm install (3 mins)</span></td>
-                    <td>DNS / API Proxy change</td>
-                </tr>
-                <tr>
-                    <td><strong>Vendor Lock-In</strong></td>
-                    <td><span class="check">Zero (Middleware)</span></td>
-                    <td>High (Gateway Dependency)</td>
-                </tr>
-                <tr>
-                    <td><strong>Latency</strong></td>
-                    <td><span class="check">&lt; 5ms (In-Memory)</span></td>
-                    <td>50-200ms (Network Hop)</td>
-                </tr>
-                <tr>
-                    <td><strong>Pricing</strong></td>
-                    <td><span class="check">Free Core (MIT)</span></td>
-                    <td>Usage Markup / Platform Fee</td>
-                </tr>
-                <tr>
-                    <td><strong>Data Privacy</strong></td>
-                    <td><span class="check">Data stays in your VPC</span></td>
-                    <td>Data flows through vendor</td>
-                </tr>
-                <tr>
-                    <td><strong>Per-User Budgets</strong></td>
-                    <td><span class="check">Yes (Granular)</span></td>
-                    <td>No (Team Level Only)</td>
-                </tr>
-                <tr>
-                    <td><strong>Observability</strong></td>
-                    <td>Raw Logs / Self-Hosted</td>
-                    <td><span class="check">Managed SaaS Dashboard</span></td>
-                </tr>
-            </tbody>
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>TokenShield</th>
+              <th>Edgee</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Integration</strong></td>
+              <td><span class="check">npm install (3 mins)</span></td>
+              <td>DNS / API Proxy change</td>
+            </tr>
+            <tr>
+              <td><strong>Vendor Lock-In</strong></td>
+              <td><span class="check">Zero (Middleware)</span></td>
+              <td>High (Gateway Dependency)</td>
+            </tr>
+            <tr>
+              <td><strong>Latency</strong></td>
+              <td><span class="check">&lt; 5ms (In-Memory)</span></td>
+              <td>50-200ms (Network Hop)</td>
+            </tr>
+            <tr>
+              <td><strong>Pricing</strong></td>
+              <td><span class="check">Free Core (MIT)</span></td>
+              <td>Usage Markup / Platform Fee</td>
+            </tr>
+            <tr>
+              <td><strong>Data Privacy</strong></td>
+              <td><span class="check">Data stays in your VPC</span></td>
+              <td>Data flows through vendor</td>
+            </tr>
+            <tr>
+              <td><strong>Per-User Budgets</strong></td>
+              <td><span class="check">Yes (Granular)</span></td>
+              <td>No (Team Level Only)</td>
+            </tr>
+            <tr>
+              <td><strong>Observability</strong></td>
+              <td>Raw Logs / Self-Hosted</td>
+              <td><span class="check">Managed SaaS Dashboard</span></td>
+            </tr>
+          </tbody>
         </table>
-    </div>
+      </div>
 
-    <div class="roi-calculator">
+      <div class="roi-calculator">
         <h2>Your Estimated Savings</h2>
         <p>Based on typical semantic caching ratios for B2B SaaS apps.</p>
         <div class="roi-stat">$4,200/mo</div>
         <p>Saved on a $10k/mo OpenAI bill.</p>
-        <br>
-        <p style="opacity: 0.8;">Zero infrastructure cost. Zero proxy fees.</p>
-    </div>
+        <br />
+        <p style="opacity: 0.8">Zero infrastructure cost. Zero proxy fees.</p>
+      </div>
 
-    <div style="text-align: center; margin-top: 4rem;">
+      <div style="text-align: center; margin-top: 4rem">
         <h2>Ready to regain control?</h2>
-        <br>
+        <br />
         <a href="#" class="btn">Get Started with TokenShield</a>
-        <br><br>
-        <a href="/docs/tokenshield-vs-edgee.md" style="color: var(--primary);">Read the full technical comparison &rarr;</a>
+        <br /><br />
+        <a href="/docs/tokenshield-vs-edgee.md" style="color: var(--primary)"
+          >Read the full technical comparison &rarr;</a
+        >
+      </div>
     </div>
-
-</div>
-
-</body>
+  </body>
 </html>

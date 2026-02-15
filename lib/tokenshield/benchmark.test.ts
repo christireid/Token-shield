@@ -23,26 +23,40 @@ describe("bench", () => {
 
   it("runs the function the specified number of times", () => {
     let count = 0
-    bench("counter", () => { count++ }, 50)
+    bench(
+      "counter",
+      () => {
+        count++
+      },
+      50,
+    )
 
     // bench also runs warmup (min(10, floor(50/10)) = 5)
     expect(count).toBe(55) // 50 measured + 5 warmup
   })
 
   it("opsPerSec is positive for non-trivial functions", () => {
-    const result = bench("work", () => {
-      let x = 0
-      for (let i = 0; i < 100; i++) x += i
-    }, 100)
+    const result = bench(
+      "work",
+      () => {
+        let _x = 0
+        for (let i = 0; i < 100; i++) _x += i
+      },
+      100,
+    )
 
     expect(result.opsPerSec).toBeGreaterThan(0)
   })
 
   it("p99Ms is >= avgMs", () => {
-    const result = bench("consistent", () => {
-      let x = 0
-      for (let i = 0; i < 100; i++) x += i
-    }, 100)
+    const result = bench(
+      "consistent",
+      () => {
+        let _x = 0
+        for (let i = 0; i < 100; i++) _x += i
+      },
+      100,
+    )
 
     expect(result.p99Ms).toBeGreaterThanOrEqual(result.avgMs)
   })
@@ -56,8 +70,10 @@ describe("bench", () => {
   })
 
   it("uses default iterations when not specified", () => {
-    let count = 0
-    const result = bench("default-iters", () => { count++ })
+    let _count = 0
+    const result = bench("default-iters", () => {
+      _count++
+    })
 
     expect(result.ops).toBe(1000)
   })
@@ -76,7 +92,13 @@ describe("benchAsync", () => {
 
   it("runs async function the specified number of times", async () => {
     let count = 0
-    await benchAsync("async-counter", async () => { count++ }, 30)
+    await benchAsync(
+      "async-counter",
+      async () => {
+        count++
+      },
+      30,
+    )
 
     // warmup: min(10, floor(30/10)) = 3
     expect(count).toBe(33)
@@ -86,7 +108,7 @@ describe("benchAsync", () => {
     const result = await benchAsync(
       "async-delay",
       () => new Promise<void>((resolve) => setTimeout(resolve, 1)),
-      10
+      10,
     )
 
     expect(result.avgMs).toBeGreaterThanOrEqual(0.5)
@@ -95,8 +117,10 @@ describe("benchAsync", () => {
   it("p99Ms is >= avgMs for async functions", async () => {
     const result = await benchAsync(
       "async-consistent",
-      async () => { /* noop */ },
-      50
+      async () => {
+        /* noop */
+      },
+      50,
     )
 
     expect(result.p99Ms).toBeGreaterThanOrEqual(result.avgMs)

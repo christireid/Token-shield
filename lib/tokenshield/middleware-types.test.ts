@@ -6,7 +6,14 @@
  */
 
 import { describe, it, expect } from "vitest"
-import { extractLastUserText, safeCost, SHIELD_META, MSG_OVERHEAD_TOKENS, FALLBACK_INPUT_PER_MILLION, FALLBACK_OUTPUT_PER_MILLION } from "./middleware-types"
+import {
+  extractLastUserText,
+  safeCost,
+  SHIELD_META,
+  MSG_OVERHEAD_TOKENS,
+  FALLBACK_INPUT_PER_MILLION,
+  FALLBACK_OUTPUT_PER_MILLION,
+} from "./middleware-types"
 
 describe("extractLastUserText", () => {
   it("extracts text from the last user message", () => {
@@ -24,10 +31,13 @@ describe("extractLastUserText", () => {
   it("joins multiple text parts in the same message", () => {
     const params = {
       prompt: [
-        { role: "user", content: [
-          { type: "text", text: "Part 1. " },
-          { type: "text", text: "Part 2." },
-        ]},
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Part 1. " },
+            { type: "text", text: "Part 2." },
+          ],
+        },
       ],
     }
     expect(extractLastUserText(params)).toBe("Part 1. Part 2.")
@@ -36,10 +46,13 @@ describe("extractLastUserText", () => {
   it("filters out non-text parts (e.g. images)", () => {
     const params = {
       prompt: [
-        { role: "user", content: [
-          { type: "image", url: "https://example.com/img.png" },
-          { type: "text", text: "Describe this image" },
-        ]},
+        {
+          role: "user",
+          content: [
+            { type: "image", url: "https://example.com/img.png" },
+            { type: "text", text: "Describe this image" },
+          ],
+        },
       ],
     }
     expect(extractLastUserText(params)).toBe("Describe this image")
@@ -55,27 +68,21 @@ describe("extractLastUserText", () => {
 
   it("returns empty string when no user messages", () => {
     const params = {
-      prompt: [
-        { role: "system", content: [{ type: "text", text: "System message" }] },
-      ],
+      prompt: [{ role: "system", content: [{ type: "text", text: "System message" }] }],
     }
     expect(extractLastUserText(params)).toBe("")
   })
 
   it("handles user message with no content", () => {
     const params = {
-      prompt: [
-        { role: "user", content: [] },
-      ],
+      prompt: [{ role: "user", content: [] }],
     }
     expect(extractLastUserText(params)).toBe("")
   })
 
   it("handles text parts with undefined text field", () => {
     const params = {
-      prompt: [
-        { role: "user", content: [{ type: "text" }] },
-      ],
+      prompt: [{ role: "user", content: [{ type: "text" }] }],
     }
     expect(extractLastUserText(params)).toBe("")
   })

@@ -26,36 +26,25 @@ interface RequestBody {
 export async function POST(request: Request) {
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY not configured" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "ANTHROPIC_API_KEY not configured" }, { status: 500 })
   }
 
   let body: RequestBody
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json(
-      { error: "Invalid JSON body" },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
   const { messages, model, system, max_tokens, temperature } = body
 
   if (!messages || !model) {
-    return NextResponse.json(
-      { error: "messages and model are required" },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: "messages and model are required" }, { status: 400 })
   }
 
   // Anthropic requires system message to be separate from messages array
   // and messages must alternate user/assistant starting with user
-  const filteredMessages = messages.filter(
-    (m) => m.role === "user" || m.role === "assistant"
-  )
+  const filteredMessages = messages.filter((m) => m.role === "user" || m.role === "assistant")
 
   const startTime = Date.now()
 
@@ -88,7 +77,7 @@ export async function POST(request: Request) {
       const errorData = await response.text()
       return NextResponse.json(
         { error: `Anthropic API error: ${response.status}`, details: errorData },
-        { status: response.status }
+        { status: response.status },
       )
     }
 
@@ -108,8 +97,7 @@ export async function POST(request: Request) {
       usage: {
         input_tokens: data.usage?.input_tokens ?? 0,
         output_tokens: data.usage?.output_tokens ?? 0,
-        total_tokens:
-          (data.usage?.input_tokens ?? 0) + (data.usage?.output_tokens ?? 0),
+        total_tokens: (data.usage?.input_tokens ?? 0) + (data.usage?.output_tokens ?? 0),
       },
       latencyMs,
       id: data.id,
@@ -119,7 +107,7 @@ export async function POST(request: Request) {
       {
         error: `Network error: ${err instanceof Error ? err.message : "unknown"}`,
       },
-      { status: 502 }
+      { status: 502 },
     )
   }
 }

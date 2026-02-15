@@ -1,5 +1,6 @@
 import js from "@eslint/js"
 import tseslint from "typescript-eslint"
+import prettier from "eslint-config-prettier"
 
 export default tseslint.config(
   // Base JS recommended rules
@@ -7,6 +8,9 @@ export default tseslint.config(
 
   // TypeScript recommended rules
   ...tseslint.configs.recommended,
+
+  // Prettier — disables ESLint rules that conflict with Prettier formatting
+  prettier,
 
   // Project-wide overrides
   {
@@ -26,16 +30,23 @@ export default tseslint.config(
     },
   },
 
-  // Ignore non-SDK files and build artifacts
+  // Only lint the SDK source — ignore everything else
   {
     ignores: [
       "node_modules/**",
+      "dist/**",
       ".next/**",
       "out/**",
       "*.config.*",
-      "components/**",
       "app/**",
+      "components/**",
       "hooks/**",
+      "styles/**",
+      "public/**",
+      "examples/**",
+      "scripts/**",
+      "docs/**",
+      "marketing/**",
     ],
-  }
+  },
 )

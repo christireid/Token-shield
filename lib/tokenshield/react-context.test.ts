@@ -45,12 +45,12 @@ describe("createSavingsStore", () => {
   it("addEvent increments totals", () => {
     const store = createSavingsStore()
 
-    store.addEvent(makeEvent({ tokensSaved: 200, dollarsSaved: 0.10 }))
+    store.addEvent(makeEvent({ tokensSaved: 200, dollarsSaved: 0.1 }))
 
     const state = store.getState()
     expect(state.events).toHaveLength(1)
     expect(state.totalTokensSaved).toBe(200)
-    expect(state.totalDollarsSaved).toBe(0.10)
+    expect(state.totalDollarsSaved).toBe(0.1)
   })
 
   it("addEvent counts cache_hit events", () => {
@@ -116,7 +116,9 @@ describe("createSavingsStore", () => {
   it("subscribe notifies on addEvent", () => {
     const store = createSavingsStore()
     let callCount = 0
-    store.subscribe(() => { callCount++ })
+    store.subscribe(() => {
+      callCount++
+    })
 
     store.addEvent(makeEvent())
     expect(callCount).toBe(1)
@@ -128,7 +130,9 @@ describe("createSavingsStore", () => {
   it("subscribe notifies on incrementRequests", () => {
     const store = createSavingsStore()
     let callCount = 0
-    store.subscribe(() => { callCount++ })
+    store.subscribe(() => {
+      callCount++
+    })
 
     store.incrementRequests()
     expect(callCount).toBe(1)
@@ -137,7 +141,9 @@ describe("createSavingsStore", () => {
   it("subscribe notifies on reset", () => {
     const store = createSavingsStore()
     let callCount = 0
-    store.subscribe(() => { callCount++ })
+    store.subscribe(() => {
+      callCount++
+    })
 
     store.reset()
     expect(callCount).toBe(1)
@@ -146,7 +152,9 @@ describe("createSavingsStore", () => {
   it("unsubscribe stops notifications", () => {
     const store = createSavingsStore()
     let callCount = 0
-    const unsub = store.subscribe(() => { callCount++ })
+    const unsub = store.subscribe(() => {
+      callCount++
+    })
 
     store.addEvent(makeEvent())
     expect(callCount).toBe(1)
@@ -161,8 +169,12 @@ describe("createSavingsStore", () => {
     let count1 = 0
     let count2 = 0
 
-    const unsub1 = store.subscribe(() => { count1++ })
-    store.subscribe(() => { count2++ })
+    const unsub1 = store.subscribe(() => {
+      count1++
+    })
+    store.subscribe(() => {
+      count2++
+    })
 
     store.addEvent(makeEvent())
     expect(count1).toBe(1)
@@ -178,7 +190,7 @@ describe("createSavingsStore", () => {
     const store = createSavingsStore()
 
     store.addEvent(makeEvent({ tokensSaved: 100, dollarsSaved: 0.05 }))
-    store.addEvent(makeEvent({ tokensSaved: 200, dollarsSaved: 0.10 }))
+    store.addEvent(makeEvent({ tokensSaved: 200, dollarsSaved: 0.1 }))
     store.addEvent(makeEvent({ tokensSaved: 50, dollarsSaved: 0.02 }))
 
     const state = store.getState()

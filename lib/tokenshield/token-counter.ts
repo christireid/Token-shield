@@ -14,12 +14,7 @@
  * npm dependency: gpt-tokenizer (works in browser, no WASM needed)
  */
 
-import {
-  encode,
-  decode,
-  countTokens,
-  isWithinTokenLimit,
-} from "gpt-tokenizer"
+import { encode, decode, countTokens, isWithinTokenLimit } from "gpt-tokenizer"
 
 /**
  * Per-message overhead for chat completions.
@@ -37,6 +32,10 @@ export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool"
   content: string
   name?: string
+  /** Mark this message as stable prefix content. Pinned messages are placed in the
+   *  non-volatile prefix section by the prefix optimizer, enabling provider-level
+   *  prompt caching (e.g., Anthropic's cache_control). */
+  pinned?: boolean
 }
 
 export interface TokenCount {
@@ -113,10 +112,7 @@ export function countChatTokens(messages: ChatMessage[]): ChatTokenCount {
     return {
       role: msg.role,
       tokens: contentTokens,
-      content:
-        msg.content.length > 80
-          ? msg.content.slice(0, 80) + "..."
-          : msg.content,
+      content: msg.content.length > 80 ? msg.content.slice(0, 80) + "..." : msg.content,
     }
   })
 
@@ -150,7 +146,7 @@ export function countChatTokens(messages: ChatMessage[]): ChatTokenCount {
  */
 export function fitsInBudget(
   text: string,
-  maxTokens: number
+  maxTokens: number,
 ): { fits: boolean; tokenCount: number | false } {
   const result = isWithinTokenLimit(text, maxTokens)
   return {
@@ -215,7 +211,7 @@ export function decodeTokens(tokens: number[]): string {
  */
 export function truncateToTokenBudget(
   text: string,
-  maxTokens: number
+  maxTokens: number,
 ): { text: string; originalTokens: number; finalTokens: number; truncated: boolean } {
   const tokens = encode(text)
   if (tokens.length <= maxTokens) {
@@ -254,15 +250,35 @@ export function getTokenizerAccuracy(modelId: string): {
 } {
   const lower = modelId.toLowerCase()
   if (lower.includes("claude") || lower.includes("anthropic")) {
-    return { accuracy: "approximate", provider: "anthropic", marginOfError: 0.35, note: "Anthropic uses a proprietary BPE tokenizer. Counts may differ by 20-50%. For billing accuracy, use client.messages.countTokens() from the Anthropic SDK." }
+    return {
+      accuracy: "approximate",
+      provider: "anthropic",
+      marginOfError: 0.35,
+      note: "Anthropic uses a proprietary BPE tokenizer. Counts may differ by 20-50%. For billing accuracy, use client.messages.countTokens() from the Anthropic SDK.",
+    }
   }
   if (lower.includes("gemini") || lower.includes("google")) {
-    return { accuracy: "approximate", provider: "google", marginOfError: 0.15, note: "Google uses SentencePiece tokenization (256K vocab). Counts may differ by 10-15%. For billing accuracy, use models.countTokens() API (free, 3000 RPM)." }
+    return {
+      accuracy: "approximate",
+      provider: "google",
+      marginOfError: 0.15,
+      note: "Google uses SentencePiece tokenization (256K vocab). Counts may differ by 10-15%. For billing accuracy, use models.countTokens() API (free, 3000 RPM).",
+    }
   }
   if (lower.includes("llama") || lower.includes("mistral") || lower.includes("mixtral")) {
-    return { accuracy: "approximate", provider: "open-source", marginOfError: 0.15, note: "Open-source models use various tokenizers. Counts may differ by ~15%." }
+    return {
+      accuracy: "approximate",
+      provider: "open-source",
+      marginOfError: 0.15,
+      note: "Open-source models use various tokenizers. Counts may differ by ~15%.",
+    }
   }
-  return { accuracy: "exact", provider: "openai", marginOfError: 0, note: "gpt-tokenizer uses the same BPE encoding as OpenAI. Counts are exact." }
+  return {
+    accuracy: "exact",
+    provider: "openai",
+    marginOfError: 0,
+    note: "gpt-tokenizer uses the same BPE encoding as OpenAI. Counts are exact.",
+  }
 }
 
 /**
@@ -283,9 +299,9 @@ export function getTokenizerAccuracy(modelId: string): {
  * ranges from cross-tokenizer comparison studies.
  */
 const PROVIDER_TOKEN_CORRECTION: Record<string, number> = {
-  anthropic: 1.35,  // Anthropic's proprietary tokenizer: 20-50% divergence (midpoint ~35%)
-  google: 1.12,     // SentencePiece 256K vocab: 10-15% divergence (midpoint ~12%)
-  "open-source": 1.10,
+  anthropic: 1.35, // Anthropic's proprietary tokenizer: 20-50% divergence (midpoint ~35%)
+  google: 1.12, // SentencePiece 256K vocab: 10-15% divergence (midpoint ~12%)
+  "open-source": 1.1,
 }
 
 /**

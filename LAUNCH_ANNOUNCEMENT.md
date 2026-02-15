@@ -10,7 +10,7 @@ Hey HN,
 
 We built **TokenShield** because we were tired of "AI Gateways" (like Edgee, Helicone, Portkey) requiring us to route all our traffic through their servers. It introduces latency, a single point of failure, and vendor lock-in.
 
-TokenShield is different. It's a **Typescript Middleware** SDK that runs *inside* your application.
+TokenShield is different. It's a **Typescript Middleware** SDK that runs _inside_ your application.
 
 ### Why this approach?
 
@@ -20,11 +20,11 @@ TokenShield is different. It's a **Typescript Middleware** SDK that runs *inside
 
 ### Features (v0.2)
 
-*   **🛡️ Request Guard:** Rate limiting, deduplication, and "max cost per hour" circuit breakers.
-*   **💾 Neuro-Elastic Cache:** Semantic caching (exact + fuzzy) stored in Redis/IndexedDB.
-*   **💰 Cost Ledger:** Real-time accounting of every token spent vs. saved.
-*   **📉 Model Router:** Automatically downgrades simple prompts ("What is 2+2?") to cheaper models (e.g., GPT-4o-mini) based on complexity scoring.
-*   **👤 Per-User Budgets:** Enforce limits on *your* customers (e.g., "Tenant A gets $5/mo").
+- **🛡️ Request Guard:** Rate limiting, deduplication, and "max cost per hour" circuit breakers.
+- **💾 Neuro-Elastic Cache:** Semantic caching (exact + fuzzy) stored in Redis/IndexedDB.
+- **💰 Cost Ledger:** Real-time accounting of every token spent vs. saved.
+- **📉 Model Router:** Automatically downgrades simple prompts ("What is 2+2?") to cheaper models (e.g., GPT-4o-mini) based on complexity scoring.
+- **👤 Per-User Budgets:** Enforce limits on _your_ customers (e.g., "Tenant A gets $5/mo").
 
 ### Quick Start
 
@@ -34,10 +34,9 @@ npm install @tokenshield/ai-sdk
 
 ```typescript
 // Wrap your existing client
-const client = createOpenAIAdapter(
-  tokenShieldMiddleware({ modules: { cache: true } }), 
-  (p) => new OpenAI().chat.completions.create(p)
-);
+const client = createOpenAIAdapter(tokenShieldMiddleware({ modules: { cache: true } }), (p) =>
+  new OpenAI().chat.completions.create(p),
+)
 ```
 
 We are MIT licensed. We make money by offering a managed dashboard for teams (optional) and enterprise SLA. The core library is free forever.

@@ -21,6 +21,7 @@
 
 import { get, set, keys, createStore, type UseStore } from "./storage-adapter"
 import { estimateCost, MODEL_PRICING } from "./cost-estimator"
+import { FALLBACK_INPUT_PER_MILLION, FALLBACK_OUTPUT_PER_MILLION } from "./middleware-types"
 
 // ----------------------------
 // Types
@@ -90,16 +91,17 @@ export class CostLedger {
       // Setup persistence
       if (this.persistEnabled) {
         try {
-          this.idbStore = createStore(
-            options?.storeName ?? "tokenshield-ledger",
-            "entries"
-          )
+          this.idbStore = createStore(options?.storeName ?? "tokenshield-ledger", "entries")
         } catch {
           // SSR or IDB unavailable
         }
       }
 
-      // Setup cross-tab synchronization
+      // Cross-tab synchronization via BroadcastChannel. When one tab records
+      // a ledger entry, other tabs merge it into their in-memory state so
+      // dashboards stay up-to-date across browser tabs. Entries are deduplicated
+      // by timestamp+model in mergeEntry(). Tabs that go offline simply miss
+      // messages and resync from IDB on next page load.
       try {
         this.channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME)
         this.channel.onmessage = (event) => {
@@ -108,7 +110,7 @@ export class CostLedger {
           }
         }
       } catch {
-        // BroadcastChannel not supported
+        // BroadcastChannel not supported (SSR, Workers, or older browsers)
       }
     }
   }
@@ -132,14 +134,14 @@ export class CostLedger {
    */
   private mergeEntry(entry: LedgerEntry) {
     // Avoid duplicates
-    if (this.entries.some(e => e.id === entry.id)) return
+    if (this.entries.some((e) => e.id === entry.id)) return
 
     this.entries.push(entry)
     this.pruneEntries()
-    
+
     // Sort to ensure chronological order despite async arrival
     this.entries.sort((a, b) => a.timestamp - b.timestamp)
-    
+
     this.notify()
   }
 
@@ -170,7 +172,7 @@ export class CostLedger {
       entry.model,
       entry.inputTokens,
       entry.outputTokens,
-      entry.cachedTokens ?? 0
+      entry.cachedTokens ?? 0,
     )
 
     // Calculate counterfactual: what would this have cost without TokenShield?
@@ -180,15 +182,16 @@ export class CostLedger {
       originalModel,
       originalInput,
       entry.outputTokens,
-      0 // no caching without prefix optimization
+      0, // no caching without prefix optimization
     )
 
     const savings: ModuleSavings = {
-      guard: entry.savings.guard ?? 0,
-      cache: entry.savings.cache ?? 0,
-      context: entry.savings.context ?? 0,
-      router: entry.savings.router ?? 0,
-      prefix: entry.savings.prefix ?? 0,
+      guard: 0,
+      cache: 0,
+      context: 0,
+      router: 0,
+      prefix: 0,
+      ...entry.savings,
     }
 
     const ledgerEntry: LedgerEntry = {
@@ -243,7 +246,7 @@ export class CostLedger {
       entry.model,
       entry.estimatedInputTokens,
       entry.estimatedOutputTokens,
-      0
+      0,
     )
 
     return this.record({
@@ -270,7 +273,7 @@ export class CostLedger {
       entry.model,
       entry.savedInputTokens,
       entry.savedOutputTokens,
-      0
+      0,
     )
 
     return this.record({
@@ -377,43 +380,68 @@ export class CostLedger {
    * Export all entries as JSON (for finance teams / reporting).
    */
   exportJSON(): string {
-    return JSON.stringify({
-      exportedAt: new Date().toISOString(),
-      summary: this.getSummary(),
-      entries: this.entries,
-    }, null, 2)
+    return JSON.stringify(
+      {
+        exportedAt: new Date().toISOString(),
+        summary: this.getSummary(),
+        entries: this.entries,
+      },
+      null,
+      2,
+    )
   }
 
   /**
    * Export all entries as CSV (for spreadsheet / finance tooling).
    */
   exportCSV(): string {
-    const headers = ['id','timestamp','model','inputTokens','outputTokens','cachedTokens','actualCost','costWithoutShield','totalSaved','feature','cacheHit','guard','cache','context','router','prefix']
-    const rows = this.entries.map(e => [
-      e.id,
-      new Date(e.timestamp).toISOString(),
-      e.model,
-      e.inputTokens,
-      e.outputTokens,
-      e.cachedTokens,
-      e.actualCost.toFixed(6),
-      e.costWithoutShield.toFixed(6),
-      e.totalSaved.toFixed(6),
-      e.feature ?? '',
-      e.cacheHit,
-      e.savings.guard.toFixed(6),
-      e.savings.cache.toFixed(6),
-      e.savings.context.toFixed(6),
-      e.savings.router.toFixed(6),
-      e.savings.prefix.toFixed(6),
-    ].map(v => {
-      const s = String(v)
-      if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-        return `"${s.replace(/"/g, '""')}"`
-      }
-      return s
-    }).join(','))
-    return [headers.join(','), ...rows].join('\n')
+    const headers = [
+      "id",
+      "timestamp",
+      "model",
+      "inputTokens",
+      "outputTokens",
+      "cachedTokens",
+      "actualCost",
+      "costWithoutShield",
+      "totalSaved",
+      "feature",
+      "cacheHit",
+      "guard",
+      "cache",
+      "context",
+      "router",
+      "prefix",
+    ]
+    const rows = this.entries.map((e) =>
+      [
+        e.id,
+        new Date(e.timestamp).toISOString(),
+        e.model,
+        e.inputTokens,
+        e.outputTokens,
+        e.cachedTokens,
+        e.actualCost.toFixed(6),
+        e.costWithoutShield.toFixed(6),
+        e.totalSaved.toFixed(6),
+        e.feature ?? "",
+        e.cacheHit,
+        e.savings.guard.toFixed(6),
+        e.savings.cache.toFixed(6),
+        e.savings.context.toFixed(6),
+        e.savings.router.toFixed(6),
+        e.savings.prefix.toFixed(6),
+      ]
+        .map((v) => {
+          const s = String(v)
+          if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+            return `"${s.replace(/"/g, '""')}"`
+          }
+          return s
+        })
+        .join(","),
+    )
+    return [headers.join(","), ...rows].join("\n")
   }
 
   /**
@@ -437,6 +465,7 @@ export class CostLedger {
    */
   dispose(): void {
     if (this.channel) {
+      this.channel.onmessage = null
       this.channel.close()
       this.channel = null
     }
@@ -447,19 +476,11 @@ export class CostLedger {
    * Exact dollar cost from token counts and model pricing.
    * Accounts for OpenAI cached token discount.
    */
-  /**
-   * Fallback pricing for unknown models (matches middleware safeCost).
-   * Uses GPT-4o-mini rates as a conservative middle-ground estimate
-   * so that cost tracking and savings calculations remain functional.
-   */
-  private static FALLBACK_INPUT_PER_MILLION = 0.15
-  private static FALLBACK_OUTPUT_PER_MILLION = 0.60
-
   private calculateCost(
     modelId: string,
     inputTokens: number,
     outputTokens: number,
-    cachedTokens: number
+    cachedTokens: number,
   ): number {
     const pricing = MODEL_PRICING[modelId]
     if (!pricing) {
@@ -469,8 +490,10 @@ export class CostLedger {
       } catch {
         // Unknown model — use fallback pricing instead of 0 to keep
         // ledger entries, summaries, and exports accurate
-        return (inputTokens / 1_000_000) * CostLedger.FALLBACK_INPUT_PER_MILLION +
-               (outputTokens / 1_000_000) * CostLedger.FALLBACK_OUTPUT_PER_MILLION
+        return (
+          (inputTokens / 1_000_000) * FALLBACK_INPUT_PER_MILLION +
+          (outputTokens / 1_000_000) * FALLBACK_OUTPUT_PER_MILLION
+        )
       }
     }
 

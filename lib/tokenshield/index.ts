@@ -95,11 +95,7 @@ export {
 } from "./model-router"
 
 // 6. Request Guard
-export {
-  RequestGuard,
-  type GuardConfig,
-  type GuardResult,
-} from "./request-guard"
+export { RequestGuard, type GuardConfig, type GuardResult } from "./request-guard"
 
 // 7. Prefix Optimizer
 export {
@@ -113,12 +109,7 @@ export {
 } from "./prefix-optimizer"
 
 // 8. Cost Ledger (CostLedger class includes exportJSON() and exportCSV() methods)
-export {
-  CostLedger,
-  type LedgerEntry,
-  type LedgerSummary,
-  type ModuleSavings,
-} from "./cost-ledger"
+export { CostLedger, type LedgerEntry, type LedgerSummary, type ModuleSavings } from "./cost-ledger"
 
 // 9. Tool / Image / Output Token Counter
 export {
@@ -134,11 +125,7 @@ export {
 } from "./tool-token-counter"
 
 // 10. Streaming Token Tracker
-export {
-  StreamTokenTracker,
-  type StreamUsage,
-  type StreamTrackerConfig,
-} from "./stream-tracker"
+export { StreamTokenTracker, type StreamUsage, type StreamTrackerConfig } from "./stream-tracker"
 
 // 11. Cost Circuit Breaker
 export {
@@ -162,11 +149,7 @@ export {
 } from "./user-budget-manager"
 
 // 13. Anomaly Detector
-export {
-  AnomalyDetector,
-  type AnomalyConfig,
-  type AnomalyEvent,
-} from "./anomaly-detector"
+export { AnomalyDetector, type AnomalyConfig, type AnomalyEvent } from "./anomaly-detector"
 
 // AI SDK Middleware
 export {
@@ -210,10 +193,7 @@ export {
 } from "./react"
 
 // Dashboard Component
-export {
-  TokenShieldDashboard,
-  type TokenShieldDashboardProps,
-} from "./dashboard"
+export { TokenShieldDashboard, type TokenShieldDashboardProps } from "./dashboard"
 
 // Pricing Registry
 export {
@@ -230,6 +210,8 @@ export {
 export {
   shieldEvents,
   createEventBus,
+  subscribeToEvent,
+  type EventBus,
   type TokenShieldEvents,
 } from "./event-bus"
 
@@ -240,6 +222,7 @@ export {
   TokenShieldConfigError,
   TokenShieldBudgetError,
   TokenShieldCryptoError,
+  TokenShieldAPIError,
   ERROR_CODES,
   type ErrorCode,
 } from "./errors"
@@ -259,16 +242,10 @@ export {
 } from "./config-schemas"
 
 // Encrypted Storage
-export {
-  EncryptedStore,
-  createEncryptedStore,
-  type EncryptedStoreConfig,
-} from "./crypto-store"
+export { EncryptedStore, createEncryptedStore, type EncryptedStoreConfig } from "./crypto-store"
 
 // Storage Adapter (Edge Runtime compatible)
-export {
-  isPersistent,
-} from "./storage-adapter"
+export { isPersistent } from "./storage-adapter"
 
 // Composable Pipeline
 export {

@@ -7,21 +7,24 @@
  * and the high-level useShieldedCall hook.
  */
 
-import {
-  useMemo,
-  useState,
-  useCallback,
-} from "react"
+import { useMemo, useState, useCallback } from "react"
 import { countExactTokens } from "./token-counter"
 import { estimateCost, type ModelPricing } from "./cost-estimator"
 import { routeToModel, type RoutingDecision } from "./model-router"
 import { useTokenShield } from "./react-context"
 
+export interface TokenCountResult {
+  tokens: number
+  cost: number
+  characters: number
+  ratio: number
+}
+
 /**
  * Count tokens in real-time as the user types.
  * Returns exact BPE token count and estimated cost.
  */
-export function useTokenCount(text: string, modelId?: string) {
+export function useTokenCount(text: string, modelId?: string): TokenCountResult {
   const { defaultModelId } = useTokenShield()
   const model = modelId ?? defaultModelId
 
@@ -43,7 +46,10 @@ export function useTokenCount(text: string, modelId?: string) {
 /**
  * Analyze prompt complexity and get a routing recommendation.
  */
-export function useComplexityAnalysis(prompt: string, defaultModel?: string) {
+export function useComplexityAnalysis(
+  prompt: string,
+  defaultModel?: string,
+): RoutingDecision | null {
   const { defaultModelId } = useTokenShield()
   const model = defaultModel ?? defaultModelId
 
@@ -75,10 +81,13 @@ export function useTokenEstimate(text: string): { estimatedTokens: number } {
 /**
  * Route a prompt to the cheapest appropriate model.
  */
-export function useModelRouter(prompt: string, options?: {
-  allowedProviders?: ModelPricing["provider"][]
-  defaultModel?: string
-}) {
+export function useModelRouter(
+  prompt: string,
+  options?: {
+    allowedProviders?: ModelPricing["provider"][]
+    defaultModel?: string
+  },
+): { routing: RoutingDecision | null; confirmRouting: () => void } {
   const { defaultModelId, savingsStore } = useTokenShield()
   const model = options?.defaultModel ?? defaultModelId
   // Derive a stable key from the providers array so callers don't need to memoize it
@@ -86,7 +95,9 @@ export function useModelRouter(prompt: string, options?: {
 
   const routing = useMemo((): RoutingDecision | null => {
     if (!prompt || prompt.length === 0) return null
-    const providers = providersKey ? providersKey.split(",") as ModelPricing["provider"][] : undefined
+    const providers = providersKey
+      ? (providersKey.split(",") as ModelPricing["provider"][])
+      : undefined
     return routeToModel(prompt, model, {
       allowedProviders: providers,
     })
@@ -125,7 +136,17 @@ export interface ShieldedCallMetrics {
  * Checks the response cache first (bigram or holographic), calls the API on miss,
  * and teaches the cache on new responses. Exposes source/confidence/latency metrics.
  */
-export function useShieldedCall() {
+export function useShieldedCall(): {
+  call: (
+    prompt: string,
+    apiFn: (
+      prompt: string,
+    ) => Promise<{ response: string; inputTokens: number; outputTokens: number }>,
+    model?: string,
+  ) => Promise<string>
+  metrics: ShieldedCallMetrics
+  isReady: boolean
+} {
   const { cache, savingsStore, defaultModelId } = useTokenShield()
   const [metrics, setMetrics] = useState<ShieldedCallMetrics>({
     source: "none",
@@ -136,8 +157,10 @@ export function useShieldedCall() {
   const call = useCallback(
     async (
       prompt: string,
-      apiFn: (prompt: string) => Promise<{ response: string; inputTokens: number; outputTokens: number }>,
-      model?: string
+      apiFn: (
+        prompt: string,
+      ) => Promise<{ response: string; inputTokens: number; outputTokens: number }>,
+      model?: string,
     ): Promise<string> => {
       const modelId = model ?? defaultModelId
       const start = performance.now()
@@ -155,7 +178,7 @@ export function useShieldedCall() {
         const cost = estimateCost(
           modelId,
           cacheResult.entry.inputTokens,
-          cacheResult.entry.outputTokens
+          cacheResult.entry.outputTokens,
         )
         savingsStore.addEvent({
           timestamp: Date.now(),
@@ -184,7 +207,7 @@ export function useShieldedCall() {
 
       return result.response
     },
-    [cache, savingsStore, defaultModelId]
+    [cache, savingsStore, defaultModelId],
   )
 
   return { call, metrics, isReady: true }

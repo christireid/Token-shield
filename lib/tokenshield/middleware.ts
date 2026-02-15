@@ -40,7 +40,12 @@ import { AnomalyDetector } from "./anomaly-detector"
 import { TokenShieldConfigSchema } from "./config-schemas"
 import { TokenShieldConfigError } from "./errors"
 import * as v from "valibot"
-import { shieldEvents, createEventBus, type TokenShieldEvents } from "./event-bus"
+import {
+  shieldEvents,
+  createEventBus,
+  subscribeToAnyEvent,
+  type TokenShieldEvents,
+} from "./event-bus"
 import { TokenShieldLogger, createLogger, type LogEntry } from "./logger"
 import { ProviderAdapter, type AdapterConfig } from "./provider-adapter"
 
@@ -54,7 +59,11 @@ import { buildTransformParams } from "./middleware-transform"
 import { buildWrapGenerate, buildWrapStream } from "./middleware-wrap"
 
 // Re-export types from middleware-types so existing import paths continue to work
-export type { TokenShieldMiddlewareConfig, TokenShieldMiddleware, HealthCheckResult } from "./middleware-types"
+export type {
+  TokenShieldMiddlewareConfig,
+  TokenShieldMiddleware,
+  HealthCheckResult,
+} from "./middleware-types"
 
 /**
  * Create the TokenShield middleware.
@@ -62,7 +71,9 @@ export type { TokenShieldMiddlewareConfig, TokenShieldMiddleware, HealthCheckRes
  * Returns a LanguageModelV3Middleware-compatible object that can be
  * passed directly to wrapLanguageModel().
  */
-export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}): TokenShieldMiddleware {
+export function tokenShieldMiddleware(
+  config: TokenShieldMiddlewareConfig = {},
+): TokenShieldMiddleware {
   // Validate config against valibot schema (catches typos, wrong types, out-of-range values)
   try {
     const schemaInput: Record<string, unknown> = {}
@@ -78,8 +89,11 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
     v.parse(TokenShieldConfigSchema, schemaInput)
   } catch (err) {
     if (err instanceof v.ValiError) {
-      const path = err.issues?.[0]?.path?.map((p: { key: string | number }) => p.key).join(".") ?? "unknown"
-      throw new TokenShieldConfigError(`Invalid config at "${path}": ${err.message}`, path)
+      const path =
+        err.issues?.[0]?.path?.map((p: { key: string | number }) => p.key).join(".") ?? "unknown"
+      throw new TokenShieldConfigError(`Invalid config at "${path}": ${err.message}`, path, {
+        cause: err,
+      })
     }
     throw err
   }
@@ -124,10 +138,10 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
     ? new UserBudgetManager({
         ...config.userBudget.budgets,
         onBudgetExceeded: config.userBudget.onBudgetExceeded
-          ? (userId, event) => config.userBudget!.onBudgetExceeded!(userId, event)
+          ? (userId, event) => config.userBudget?.onBudgetExceeded?.(userId, event)
           : undefined,
         onBudgetWarning: config.userBudget.onBudgetWarning
-          ? (userId, event) => config.userBudget!.onBudgetWarning!(userId, event)
+          ? (userId, event) => config.userBudget?.onBudgetWarning?.(userId, event)
           : undefined,
       })
     : null
@@ -139,27 +153,35 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
   // for backward compatibility with listeners on the module-level bus.
   const instanceEvents = createEventBus()
   const EVENT_NAMES: (keyof TokenShieldEvents)[] = [
-    'request:blocked', 'request:allowed', 'cache:hit', 'cache:miss', 'cache:store',
-    'context:trimmed', 'router:downgraded', 'router:holdback', 'ledger:entry',
-    'breaker:warning', 'breaker:tripped', 'userBudget:warning', 'userBudget:exceeded',
-    'userBudget:spend', 'stream:chunk', 'stream:abort', 'stream:complete',
-    'anomaly:detected'
+    "request:blocked",
+    "request:allowed",
+    "cache:hit",
+    "cache:miss",
+    "cache:store",
+    "context:trimmed",
+    "router:downgraded",
+    "router:holdback",
+    "ledger:entry",
+    "breaker:warning",
+    "breaker:tripped",
+    "userBudget:warning",
+    "userBudget:exceeded",
+    "userBudget:spend",
+    "stream:chunk",
+    "stream:abort",
+    "stream:complete",
+    "anomaly:detected",
   ]
-  // Track forwarding handlers so dispose() can remove them
-  const forwardingHandlers: Array<{ name: keyof TokenShieldEvents; handler: (data: unknown) => void }> = []
+  const forwardingCleanups: Array<() => void> = []
   for (const name of EVENT_NAMES) {
-    const handler = (data: unknown) => {
-      try { (shieldEvents.emit as (type: string, data: unknown) => void)(name, data) } catch { /* non-fatal */ }
-    }
-    instanceEvents.on(name, handler as any)
-    forwardingHandlers.push({ name, handler })
-  }
-
-  // Hydrate persisted budget data from IndexedDB
-  if (userBudgetManager && config.userBudget?.budgets.persist) {
-    userBudgetManager.hydrate().catch(() => {
-      // Hydration failed silently — budget starts from $0
+    const cleanup = subscribeToAnyEvent(instanceEvents, name, (data) => {
+      try {
+        ;(shieldEvents.emit as (type: string, data: unknown) => void)(name, data)
+      } catch {
+        /* non-fatal */
+      }
     })
+    forwardingCleanups.push(cleanup)
   }
 
   // Initialize logger if configured
@@ -167,12 +189,28 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
     config.logger instanceof TokenShieldLogger
       ? config.logger
       : config.logger
-        ? createLogger(config.logger as { level?: 'debug' | 'info' | 'warn' | 'error'; handler?: (entry: LogEntry) => void; enableSpans?: boolean })
+        ? createLogger(
+            config.logger as {
+              level?: "debug" | "info" | "warn" | "error"
+              handler?: (entry: LogEntry) => void
+              enableSpans?: boolean
+            },
+          )
         : null
 
   // Auto-connect logger to the event bus for structured observability
+  let loggerCleanup: (() => void) | null = null
   if (log) {
-    log.connectEventBus(instanceEvents)
+    loggerCleanup = log.connectEventBus(instanceEvents)
+  }
+
+  // Hydrate persisted budget data from IndexedDB (after logger init so failures are logged)
+  if (userBudgetManager && config.userBudget?.budgets.persist) {
+    userBudgetManager.hydrate().catch((err) => {
+      log?.warn("budget", "Failed to hydrate budget data — starting from $0", {
+        error: err instanceof Error ? err.message : String(err),
+      })
+    })
   }
 
   // Initialize provider adapter if configured
@@ -237,10 +275,10 @@ export function tokenShieldMiddleware(config: TokenShieldMiddlewareConfig = {}):
       }
     },
     dispose() {
-      for (const { name, handler } of forwardingHandlers) {
-        instanceEvents.off(name, handler as any)
-      }
-      forwardingHandlers.length = 0
+      for (const cleanup of forwardingCleanups) cleanup()
+      forwardingCleanups.length = 0
+      loggerCleanup?.()
+      loggerCleanup = null
     },
   }
 }

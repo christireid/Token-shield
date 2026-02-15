@@ -18,24 +18,24 @@ A useful mental model: TokenShield is a **fuel gauge**, not an ignition lock. It
 
 ## 2. What TokenShield Protects Against
 
-| Threat | How TokenShield Helps |
-|---|---|
-| **Accidental overspend** | Per-user and global budget tracking with configurable warning and hard-stop thresholds. Prevents runaway loops and unintentional batch requests from silently burning through budget. |
-| **Wasteful requests** | Semantic and exact-match caching eliminates duplicate and redundant prompts. Prompt optimization reduces unnecessarily long context windows. |
-| **Expensive models for simple tasks** | Complexity-based model routing sends simple prompts to cheaper models automatically. Budget-tier routing downgrades models as spend increases. |
-| **Unmonitored team spending** | Per-user budget ledgers and the event bus (`userBudget:warning`, `userBudget:exceeded`, `userBudget:spend`) give visibility into who is spending what. |
-| **Cold-start latency** | Cached responses are served instantly from IndexedDB, reducing both latency and cost. |
+| Threat                                | How TokenShield Helps                                                                                                                                                                 |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Accidental overspend**              | Per-user and global budget tracking with configurable warning and hard-stop thresholds. Prevents runaway loops and unintentional batch requests from silently burning through budget. |
+| **Wasteful requests**                 | Semantic and exact-match caching eliminates duplicate and redundant prompts. Prompt optimization reduces unnecessarily long context windows.                                          |
+| **Expensive models for simple tasks** | Complexity-based model routing sends simple prompts to cheaper models automatically. Budget-tier routing downgrades models as spend increases.                                        |
+| **Unmonitored team spending**         | Per-user budget ledgers and the event bus (`userBudget:warning`, `userBudget:exceeded`, `userBudget:spend`) give visibility into who is spending what.                                |
+| **Cold-start latency**                | Cached responses are served instantly from IndexedDB, reducing both latency and cost.                                                                                                 |
 
 ---
 
 ## 3. What TokenShield Does NOT Protect Against
 
-| Threat | Why Not |
-|---|---|
-| **Malicious users bypassing client-side limits** | All SDK state lives in the browser. A user with DevTools access can modify budgets, clear ledgers, or call your API directly. |
-| **API key theft** | TokenShield never handles API keys. Keys should live on your backend and never be exposed to the client. If your architecture sends keys to the browser, that is a separate vulnerability outside TokenShield's scope. |
-| **Server-side cost enforcement** | TokenShield has no server component. Hard budget enforcement must happen in your backend before the request reaches the LLM provider. |
-| **DDoS or abuse of your LLM endpoints** | Rate limiting and abuse prevention require server-side infrastructure (API gateways, rate limiters, auth checks). TokenShield operates after the user has already been authenticated and authorized. |
+| Threat                                           | Why Not                                                                                                                                                                                                                |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Malicious users bypassing client-side limits** | All SDK state lives in the browser. A user with DevTools access can modify budgets, clear ledgers, or call your API directly.                                                                                          |
+| **API key theft**                                | TokenShield never handles API keys. Keys should live on your backend and never be exposed to the client. If your architecture sends keys to the browser, that is a separate vulnerability outside TokenShield's scope. |
+| **Server-side cost enforcement**                 | TokenShield has no server component. Hard budget enforcement must happen in your backend before the request reaches the LLM provider.                                                                                  |
+| **DDoS or abuse of your LLM endpoints**          | Rate limiting and abuse prevention require server-side infrastructure (API gateways, rate limiters, auth checks). TokenShield operates after the user has already been authenticated and authorized.                   |
 
 ---
 
@@ -43,11 +43,11 @@ A useful mental model: TokenShield is a **fuel gauge**, not an ignition lock. It
 
 TokenShield stores all persistent data in **IndexedDB** within the user's browser. Nothing is sent to external servers.
 
-| Data | Storage Location | Notes |
-|---|---|---|
-| Cost ledger entries | IndexedDB | Per-user spend records with timestamps, model, and token counts. |
-| Cached responses | IndexedDB | Prompt-response pairs used for cache hits. |
-| User budget state | IndexedDB | Current spend, limits, and rolling-window metadata. |
+| Data                | Storage Location | Notes                                                            |
+| ------------------- | ---------------- | ---------------------------------------------------------------- |
+| Cost ledger entries | IndexedDB        | Per-user spend records with timestamps, model, and token counts. |
+| Cached responses    | IndexedDB        | Prompt-response pairs used for cache hits.                       |
+| User budget state   | IndexedDB        | Current spend, limits, and rolling-window metadata.              |
 
 **Zero telemetry.** TokenShield does not phone home, collect analytics, or transmit any data to Anthropic, OpenAI, or any third party. There are no tracking pixels, no beacon endpoints, and no opt-out-required telemetry. The SDK is fully offline-capable.
 
@@ -93,35 +93,35 @@ The correct architecture places TokenShield on the client as an optimization and
 ```typescript
 // --- Client (React component using TokenShield) ---
 
-import { useTokenShield, useUserBudget } from '@tokenshield/react';
+import { useTokenShield, useUserBudget } from "@tokenshield/react"
 
 function ChatInput({ userId }: { userId: string }) {
-  const shield = useTokenShield();
-  const budget = useUserBudget(userId);
+  const shield = useTokenShield()
+  const budget = useUserBudget(userId)
 
   async function handleSend(prompt: string) {
     // 1. Client-side estimation and budget check (UX layer)
-    const estimate = shield.estimateCost(prompt, 'gpt-4o');
+    const estimate = shield.estimateCost(prompt, "gpt-4o")
 
     if (budget.remaining !== null && estimate.totalCost > budget.remaining) {
-      showWarning('This request may exceed your remaining budget.');
-      return; // Block on the client as a courtesy
+      showWarning("This request may exceed your remaining budget.")
+      return // Block on the client as a courtesy
     }
 
     // 2. Send to YOUR backend — never directly to the LLM provider
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt, model: estimate.model }),
-      credentials: 'include', // Send session cookie
-    });
+      credentials: "include", // Send session cookie
+    })
 
     if (response.status === 403) {
-      showError('Server rejected: budget exceeded.');
-      return;
+      showError("Server rejected: budget exceeded.")
+      return
     }
 
-    const data = await response.json();
+    const data = await response.json()
 
     // 4. Record actual usage for dashboard/reporting
     shield.recordUsage({
@@ -130,7 +130,7 @@ function ChatInput({ userId }: { userId: string }) {
       inputTokens: data.usage.prompt_tokens,
       outputTokens: data.usage.completion_tokens,
       cost: data.usage.total_cost,
-    });
+    })
   }
 }
 ```
@@ -138,32 +138,32 @@ function ChatInput({ userId }: { userId: string }) {
 ```typescript
 // --- Server (e.g., Next.js API route or Express handler) ---
 
-import { OpenAI } from 'openai';
+import { OpenAI } from "openai"
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY }); // Key lives here, never on the client
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) // Key lives here, never on the client
 
 export async function POST(req: Request) {
-  const session = await getSession(req); // Your auth
-  if (!session) return new Response('Unauthorized', { status: 401 });
+  const session = await getSession(req) // Your auth
+  if (!session) return new Response("Unauthorized", { status: 401 })
 
-  const { prompt, model } = await req.json();
+  const { prompt, model } = await req.json()
 
   // 3. Server-side budget enforcement (the real security boundary)
-  const budget = await db.getUserBudget(session.userId);
+  const budget = await db.getUserBudget(session.userId)
   if (budget.spent >= budget.limit) {
-    return new Response('Budget exceeded', { status: 403 });
+    return new Response("Budget exceeded", { status: 403 })
   }
 
   const completion = await openai.chat.completions.create({
     model,
-    messages: [{ role: 'user', content: prompt }],
-  });
+    messages: [{ role: "user", content: prompt }],
+  })
 
-  const usage = completion.usage;
-  const cost = calculateCost(model, usage.prompt_tokens, usage.completion_tokens);
+  const usage = completion.usage
+  const cost = calculateCost(model, usage.prompt_tokens, usage.completion_tokens)
 
   // Update server-side ledger (source of truth)
-  await db.recordSpend(session.userId, cost);
+  await db.recordSpend(session.userId, cost)
 
   return Response.json({
     message: completion.choices[0].message.content,
@@ -173,7 +173,7 @@ export async function POST(req: Request) {
       completion_tokens: usage.completion_tokens,
       total_cost: cost,
     },
-  });
+  })
 }
 ```
 
@@ -196,10 +196,10 @@ For bugs that are **not** security-sensitive (e.g., incorrect cost calculations,
 
 ## Summary
 
-| Layer | Role | Trust Level |
-|---|---|---|
-| **TokenShield (client)** | Cost estimation, caching, budget warnings, model routing, usage dashboards | Advisory / UX. Assume it can be bypassed. |
-| **Your backend proxy** | Auth, server-side budget enforcement, API key management, rate limiting | Enforcement. This is the security boundary. |
-| **LLM provider (OpenAI, Anthropic, etc.)** | Model inference, billing | External dependency. Protected by your backend proxy. |
+| Layer                                      | Role                                                                       | Trust Level                                           |
+| ------------------------------------------ | -------------------------------------------------------------------------- | ----------------------------------------------------- |
+| **TokenShield (client)**                   | Cost estimation, caching, budget warnings, model routing, usage dashboards | Advisory / UX. Assume it can be bypassed.             |
+| **Your backend proxy**                     | Auth, server-side budget enforcement, API key management, rate limiting    | Enforcement. This is the security boundary.           |
+| **LLM provider (OpenAI, Anthropic, etc.)** | Model inference, billing                                                   | External dependency. Protected by your backend proxy. |
 
 TokenShield reduces costs and gives your users visibility into their spending. Your backend enforces the rules. Design accordingly.

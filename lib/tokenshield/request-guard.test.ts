@@ -55,7 +55,13 @@ describe("RequestGuard", () => {
   it("accepts optional modelId for cost estimation", () => {
     // gpt-4o is more expensive than gpt-4o-mini
     const cheapResult = guard.check("Tell me a joke", 500, "gpt-4o-mini")
-    const guard2 = new RequestGuard({ debounceMs: 0, maxRequestsPerMinute: 60, maxCostPerHour: 10, modelId: "gpt-4o-mini", deduplicateInFlight: false })
+    const guard2 = new RequestGuard({
+      debounceMs: 0,
+      maxRequestsPerMinute: 60,
+      maxCostPerHour: 10,
+      modelId: "gpt-4o-mini",
+      deduplicateInFlight: false,
+    })
     const expensiveResult = guard2.check("Tell me a joke", 500, "gpt-4o")
     expect(expensiveResult.estimatedCost).toBeGreaterThan(cheapResult.estimatedCost)
   })
@@ -91,7 +97,9 @@ describe("RequestGuard", () => {
 
     it("non-abort errors reject the promise (not unhandled)", async () => {
       const error = new Error("API failure")
-      const fn = vi.fn(async () => { throw error })
+      const fn = vi.fn(async () => {
+        throw error
+      })
       const debouncedGuard = new RequestGuard({
         debounceMs: 10,
         maxRequestsPerMinute: 999,
@@ -141,7 +149,7 @@ describe("RequestGuard", () => {
     expect(stats.blockedRate).toBeCloseTo(2 / 3)
   })
 
-  it("getStats() does not mutate costLog (read-only)", () => {
+  it("getSnapshot() does not mutate costLog (read-only)", () => {
     const g = new RequestGuard({
       debounceMs: 0,
       maxRequestsPerMinute: 60,
@@ -153,10 +161,175 @@ describe("RequestGuard", () => {
     g.startRequest("first request")
     g.completeRequest("first request", 100, 50)
 
-    // Call getStats() multiple times — it should not change internal state
-    const stats1 = g.getStats()
-    const stats2 = g.getStats()
+    // Call getSnapshot() multiple times — it should not change internal state
+    const stats1 = g.getSnapshot()
+    const stats2 = g.getSnapshot()
     expect(stats1.currentHourlySpend).toBe(stats2.currentHourlySpend)
     expect(stats1.currentHourlySpend).toBeGreaterThan(0)
+  })
+
+  // -------------------------------------------------------
+  // Rate limiting
+  // -------------------------------------------------------
+
+  it("blocks when rate limit is exceeded", () => {
+    const g = new RequestGuard({
+      debounceMs: 0,
+      maxRequestsPerMinute: 3,
+      maxCostPerHour: 100,
+      modelId: "gpt-4o-mini",
+      deduplicateInFlight: false,
+    })
+    g.check("request 1")
+    g.check("request 2")
+    g.check("request 3")
+    const result = g.check("request 4")
+    expect(result.allowed).toBe(false)
+    expect(result.reason).toContain("Rate limited")
+  })
+
+  // -------------------------------------------------------
+  // Cost gate
+  // -------------------------------------------------------
+
+  it("blocks when cost gate would be exceeded", () => {
+    const g = new RequestGuard({
+      debounceMs: 0,
+      maxRequestsPerMinute: 999,
+      maxCostPerHour: 0.0001, // very low budget
+      modelId: "gpt-4o",
+      deduplicateInFlight: false,
+    })
+    g.check("hi")
+    g.startRequest("hi")
+    g.completeRequest("hi", 500, 500)
+
+    const result = g.check("A long enough prompt to generate some real cost estimate for testing")
+    expect(result.allowed).toBe(false)
+    expect(result.reason).toContain("Cost gate")
+  })
+
+  // -------------------------------------------------------
+  // maxInputTokens
+  // -------------------------------------------------------
+
+  it("blocks prompts exceeding maxInputTokens", () => {
+    const g = new RequestGuard({
+      debounceMs: 0,
+      maxRequestsPerMinute: 60,
+      maxCostPerHour: 100,
+      modelId: "gpt-4o-mini",
+      deduplicateInFlight: false,
+      maxInputTokens: 5,
+    })
+    const longPrompt = "word ".repeat(50)
+    const result = g.check(longPrompt)
+    expect(result.allowed).toBe(false)
+    expect(result.reason).toContain("Over budget")
+  })
+
+  it("allows prompts within maxInputTokens", () => {
+    const g = new RequestGuard({
+      debounceMs: 0,
+      maxRequestsPerMinute: 60,
+      maxCostPerHour: 100,
+      modelId: "gpt-4o-mini",
+      deduplicateInFlight: false,
+      maxInputTokens: 1000,
+    })
+    const result = g.check("Short prompt")
+    expect(result.allowed).toBe(true)
+  })
+
+  // -------------------------------------------------------
+  // deduplicateWindow (time-based dedup)
+  // -------------------------------------------------------
+
+  it("blocks duplicate prompts within deduplicateWindow", () => {
+    const g = new RequestGuard({
+      debounceMs: 0,
+      maxRequestsPerMinute: 999,
+      maxCostPerHour: 100,
+      modelId: "gpt-4o-mini",
+      deduplicateInFlight: false,
+      deduplicateWindow: 5000,
+    })
+    g.check("same prompt for dedup window test")
+    const result = g.check("same prompt for dedup window test")
+    expect(result.allowed).toBe(false)
+    expect(result.reason).toContain("Deduped")
+  })
+
+  // -------------------------------------------------------
+  // Stale in-flight eviction
+  // -------------------------------------------------------
+
+  it("evicts stale in-flight requests after 5 minutes", () => {
+    vi.useFakeTimers()
+    try {
+      const g = new RequestGuard({
+        debounceMs: 0,
+        maxRequestsPerMinute: 999,
+        maxCostPerHour: 100,
+        modelId: "gpt-4o-mini",
+        deduplicateInFlight: true,
+      })
+      for (let i = 0; i < 55; i++) {
+        g.check(`unique request number ${i} for eviction test`)
+        g.startRequest(`unique request number ${i} for eviction test`)
+      }
+
+      vi.advanceTimersByTime(360_000)
+
+      g.check("fresh request after stale eviction test")
+      g.startRequest("fresh request after stale eviction test")
+
+      const stats = g.stats()
+      expect(stats.inFlightCount).toBeLessThan(55)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // -------------------------------------------------------
+  // updateConfig
+  // -------------------------------------------------------
+
+  it("updateConfig changes guard behavior", () => {
+    const g = new RequestGuard({
+      debounceMs: 0,
+      maxRequestsPerMinute: 2,
+      maxCostPerHour: 100,
+      modelId: "gpt-4o-mini",
+      deduplicateInFlight: false,
+    })
+    g.check("request 1")
+    g.check("request 2")
+    const blocked = g.check("request 3")
+    expect(blocked.allowed).toBe(false)
+
+    g.updateConfig({ maxRequestsPerMinute: 100 })
+    const allowed = g.check("request 3 retry")
+    expect(allowed.allowed).toBe(true)
+  })
+
+  // -------------------------------------------------------
+  // startRequest: abort existing same-prompt request
+  // -------------------------------------------------------
+
+  it("startRequest aborts previous in-flight request with same prompt", () => {
+    const g = new RequestGuard({
+      debounceMs: 0,
+      maxRequestsPerMinute: 60,
+      maxCostPerHour: 100,
+      modelId: "gpt-4o-mini",
+      deduplicateInFlight: false,
+    })
+    const ctrl1 = g.startRequest("duplicate prompt for abort test")
+    expect(ctrl1.signal.aborted).toBe(false)
+
+    const ctrl2 = g.startRequest("duplicate prompt for abort test")
+    expect(ctrl1.signal.aborted).toBe(true)
+    expect(ctrl2.signal.aborted).toBe(false)
   })
 })

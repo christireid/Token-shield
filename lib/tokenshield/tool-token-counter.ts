@@ -161,7 +161,7 @@ const PER_TOOL_OVERHEAD = 4 // approximate: type keyword, =, =>, any
  */
 export function countToolTokens(
   tools: ToolDefinition[],
-  inputPricePerMillion = 0.15
+  inputPricePerMillion = 0.15,
 ): ToolTokenResult {
   if (tools.length === 0) {
     return {
@@ -216,9 +216,7 @@ export function countToolTokens(
  * // result.optimized — use these tool defs to save tokens
  * ```
  */
-export function optimizeToolDefinitions(
-  tools: ToolDefinition[]
-): {
+export function optimizeToolDefinitions(tools: ToolDefinition[]): {
   optimized: ToolDefinition[]
   originalTokens: number
   optimizedTokens: number
@@ -236,9 +234,7 @@ export function optimizeToolDefinitions(
       function: {
         name: fn.name,
         description: fn.description,
-        parameters: fn.parameters
-          ? JSON.parse(JSON.stringify(fn.parameters))
-          : undefined,
+        parameters: fn.parameters ? JSON.parse(JSON.stringify(fn.parameters)) : undefined,
       },
     }
 
@@ -246,15 +242,13 @@ export function optimizeToolDefinitions(
     if (fn.description && fn.description.length > 100) {
       newTool.function.description = fn.description.slice(0, 100).trim()
       suggestions.push(
-        `${fn.name}: description truncated from ${fn.description.length} to 100 chars`
+        `${fn.name}: description truncated from ${fn.description.length} to 100 chars`,
       )
     }
 
     // Strategy 2: Remove parameter descriptions that just repeat the param name
     if (newTool.function.parameters?.properties) {
-      for (const [name, param] of Object.entries(
-        newTool.function.parameters.properties
-      )) {
+      for (const [name, param] of Object.entries(newTool.function.parameters.properties)) {
         if (param.description) {
           const normalizedDesc = param.description.toLowerCase().replace(/[^a-z]/g, "")
           const normalizedName = name.toLowerCase().replace(/[^a-z]/g, "")
@@ -264,10 +258,9 @@ export function optimizeToolDefinitions(
             normalizedDesc === `${normalizedName}value` ||
             param.description.length < 10
           ) {
-            delete (newTool.function.parameters.properties[name] as ToolParameter)
-              .description
+            delete (newTool.function.parameters.properties[name] as ToolParameter).description
             suggestions.push(
-              `${fn.name}.${name}: removed redundant description "${param.description}"`
+              `${fn.name}.${name}: removed redundant description "${param.description}"`,
             )
           }
         }
@@ -335,7 +328,7 @@ export interface ImageTokenResult {
 export function countImageTokens(
   width: number,
   height: number,
-  detail: "low" | "high" | "auto" = "auto"
+  detail: "low" | "high" | "auto" = "auto",
 ): ImageTokenResult {
   const BASE_TOKENS = 85
   const TOKENS_PER_TILE = 170

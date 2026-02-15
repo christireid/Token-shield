@@ -57,14 +57,18 @@ export function GuardTest() {
       // PART A: Without guard - simulate 5 rapid clicks = 5 real API calls
       const unguardedCalls = await Promise.all(
         Array.from({ length: 5 }, () =>
-          callOpenAI([{ role: "user", content: TEST_PROMPT }], model, { max_tokens: 10 })
-        )
+          callOpenAI([{ role: "user", content: TEST_PROMPT }], model, { max_tokens: 10 }),
+        ),
       )
 
       let totalUnguardedCost = 0
       let totalUnguardedTokens = 0
       for (const res of unguardedCalls) {
-        const cost = calculateRealCost(model, res.usage.prompt_tokens ?? 0, res.usage.completion_tokens ?? 0)
+        const cost = calculateRealCost(
+          model,
+          res.usage.prompt_tokens ?? 0,
+          res.usage.completion_tokens ?? 0,
+        )
         totalUnguardedCost += cost.totalCost
         totalUnguardedTokens += res.usage.total_tokens
       }
@@ -95,11 +99,21 @@ export function GuardTest() {
         })
 
         if (check.allowed) {
-          const res = await callOpenAI([{ role: "user", content: TEST_PROMPT }], model, { max_tokens: 10 })
-          const cost = calculateRealCost(model, res.usage.prompt_tokens ?? 0, res.usage.completion_tokens ?? 0)
+          const res = await callOpenAI([{ role: "user", content: TEST_PROMPT }], model, {
+            max_tokens: 10,
+          })
+          const cost = calculateRealCost(
+            model,
+            res.usage.prompt_tokens ?? 0,
+            res.usage.completion_tokens ?? 0,
+          )
           guardedTotalCost += cost.totalCost
           guardedCallsMade++
-          guard.completeRequest(TEST_PROMPT, res.usage.prompt_tokens ?? 0, res.usage.completion_tokens ?? 0)
+          guard.completeRequest(
+            TEST_PROMPT,
+            res.usage.prompt_tokens ?? 0,
+            res.usage.completion_tokens ?? 0,
+          )
         } else {
           blockedCost += check.estimatedCost
         }
@@ -135,9 +149,12 @@ export function GuardTest() {
     ? {
         callsSaved: result.withoutGuard.apiCallsMade - result.withGuard.apiCallsMade,
         costSaved: result.withoutGuard.totalCost - result.withGuard.totalCost,
-        percentSaved: result.withoutGuard.totalCost > 0
-          ? ((result.withoutGuard.totalCost - result.withGuard.totalCost) / result.withoutGuard.totalCost * 100)
-          : 0,
+        percentSaved:
+          result.withoutGuard.totalCost > 0
+            ? ((result.withoutGuard.totalCost - result.withGuard.totalCost) /
+                result.withoutGuard.totalCost) *
+              100
+            : 0,
       }
     : null
 
@@ -146,7 +163,9 @@ export function GuardTest() {
       <div>
         <h3 className="text-lg font-semibold text-foreground">Request Guard Test</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Simulates 5 rapid clicks (50ms apart). Without the guard: 5 real API calls billed. With the guard (200ms debounce): only the first goes through, the rest are blocked. Shows exact cost difference from OpenAI{"'"}s usage data.
+          Simulates 5 rapid clicks (50ms apart). Without the guard: 5 real API calls billed. With
+          the guard (200ms debounce): only the first goes through, the rest are blocked. Shows exact
+          cost difference from OpenAI{"'"}s usage data.
         </p>
       </div>
 
@@ -155,33 +174,52 @@ export function GuardTest() {
       </Button>
 
       {error && (
-        <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+        <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
+        </div>
       )}
 
       {result && (
         <>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-              <div className="font-mono text-xs font-bold text-destructive">Without Guard (5 clicks = 5 API calls)</div>
+              <div className="font-mono text-xs font-bold text-destructive">
+                Without Guard (5 clicks = 5 API calls)
+              </div>
               <div className="space-y-1.5 text-sm">
                 <Row label="API calls made" value="5" />
-                <Row label="Total tokens billed" value={result.withoutGuard.totalTokens.toLocaleString()} />
-                <Row label="Total cost" value={`$${result.withoutGuard.totalCost.toFixed(6)}`} highlight />
+                <Row
+                  label="Total tokens billed"
+                  value={result.withoutGuard.totalTokens.toLocaleString()}
+                />
+                <Row
+                  label="Total cost"
+                  value={`$${result.withoutGuard.totalCost.toFixed(6)}`}
+                  highlight
+                />
               </div>
             </div>
 
             <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-              <div className="font-mono text-xs font-bold text-primary">With Guard (5 clicks, debounced)</div>
+              <div className="font-mono text-xs font-bold text-primary">
+                With Guard (5 clicks, debounced)
+              </div>
               <div className="space-y-1.5 text-sm">
                 <Row label="API calls made" value={result.withGuard.apiCallsMade.toString()} />
                 <Row label="Requests blocked" value={result.withGuard.blocked.toString()} />
-                <Row label="Total cost" value={`$${result.withGuard.totalCost.toFixed(6)}`} highlight />
+                <Row
+                  label="Total cost"
+                  value={`$${result.withGuard.totalCost.toFixed(6)}`}
+                  highlight
+                />
               </div>
             </div>
           </div>
 
           <div className="rounded-lg border border-border bg-card p-4 space-y-2">
-            <div className="font-mono text-xs font-bold text-muted-foreground">Click-by-click log</div>
+            <div className="font-mono text-xs font-bold text-muted-foreground">
+              Click-by-click log
+            </div>
             <div className="space-y-1">
               {result.withGuard.clickLog.map((click) => (
                 <div
@@ -190,9 +228,7 @@ export function GuardTest() {
                 >
                   <span>Click {click.index}:</span>
                   <span className="font-bold">{click.allowed ? "ALLOWED" : "BLOCKED"}</span>
-                  {click.reason && (
-                    <span className="text-muted-foreground">- {click.reason}</span>
-                  )}
+                  {click.reason && <span className="text-muted-foreground">- {click.reason}</span>}
                 </div>
               ))}
             </div>
@@ -204,19 +240,27 @@ export function GuardTest() {
               <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
                 <div>
                   <div className="text-muted-foreground">API calls saved</div>
-                  <div className="font-mono font-bold text-foreground">{savings.callsSaved} of 5</div>
+                  <div className="font-mono font-bold text-foreground">
+                    {savings.callsSaved} of 5
+                  </div>
                 </div>
                 <div>
                   <div className="text-muted-foreground">Cost saved</div>
-                  <div className="font-mono font-bold text-foreground">${savings.costSaved.toFixed(6)}</div>
+                  <div className="font-mono font-bold text-foreground">
+                    ${savings.costSaved.toFixed(6)}
+                  </div>
                 </div>
                 <div>
                   <div className="text-muted-foreground">% saved</div>
-                  <div className="font-mono font-bold text-foreground">{savings.percentSaved.toFixed(1)}%</div>
+                  <div className="font-mono font-bold text-foreground">
+                    {savings.percentSaved.toFixed(1)}%
+                  </div>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                In production with impatient users double-clicking, auto-submit on keystroke, or retry loops, this compounds fast. 80% block rate on a 10k requests/day app = 8000 free requests.
+                In production with impatient users double-clicking, auto-submit on keystroke, or
+                retry loops, this compounds fast. 80% block rate on a 10k requests/day app = 8000
+                free requests.
               </p>
             </div>
           )}
@@ -230,7 +274,11 @@ function Row({ label, value, highlight }: { label: string; value: string; highli
   return (
     <div className="flex items-baseline justify-between gap-2">
       <span className="text-muted-foreground">{label}</span>
-      <span className={`font-mono text-xs ${highlight ? "font-bold text-primary" : "text-foreground"}`}>{value}</span>
+      <span
+        className={`font-mono text-xs ${highlight ? "font-bold text-primary" : "text-foreground"}`}
+      >
+        {value}
+      </span>
     </div>
   )
 }
