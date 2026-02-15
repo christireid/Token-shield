@@ -70,7 +70,21 @@ export function EventFeed() {
   return (
     <Card className="border-border/40 bg-card/50">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-foreground">Live Event Feed</CardTitle>
+        <div className="flex items-center gap-2">
+          <CardTitle className="text-sm font-medium text-foreground">Live Event Feed</CardTitle>
+          {!paused && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              LIVE
+            </span>
+          )}
+          <Badge
+            variant="outline"
+            className="rounded-full border-border/30 bg-secondary/30 px-1.5 py-0 text-[10px] font-medium text-muted-foreground"
+          >
+            {displayEvents.length}
+          </Badge>
+        </div>
         <Button
           variant="ghost"
           size="sm"
@@ -84,44 +98,58 @@ export function EventFeed() {
       <CardContent className="p-0">
         <ScrollArea className="h-[350px] px-4 pb-4" ref={scrollRef}>
           <div className="flex flex-col gap-1">
-            {displayEvents.map((ev) => (
-              <div
-                key={ev.id}
-                className={cn(
-                  "flex items-start gap-3 rounded-md px-2 py-2 transition-colors hover:bg-secondary/30",
-                  ev.type === "breaker:warning" && "bg-[hsl(25,95%,53%)]/5",
-                )}
-              >
-                {/* Dot */}
-                <div className="flex h-5 items-center">
-                  <div className={cn("h-2 w-2 rounded-full", EVENT_COLORS[ev.type])} />
-                </div>
+            {displayEvents.map((ev, index) => {
+              const isLast = index === displayEvents.length - 1
+              return (
+                <div
+                  key={ev.id}
+                  className={cn(
+                    "relative flex items-start gap-3 rounded-md px-2 py-2 transition-colors hover:bg-secondary/30",
+                    ev.type === "breaker:warning" && "bg-[hsl(25,95%,53%)]/5",
+                  )}
+                >
+                  {/* Timeline connector line */}
+                  {!isLast && (
+                    <div className="absolute left-[11px] top-5 h-full w-px bg-border/20" />
+                  )}
 
-                {/* Content */}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      variant="outline"
+                  {/* Dot */}
+                  <div className="flex h-5 items-center">
+                    <div
                       className={cn(
-                        "shrink-0 rounded px-1.5 py-0 text-[10px] font-medium",
-                        EVENT_BADGE_COLORS[ev.type],
+                        "relative z-10 h-2 w-2 rounded-full ring-2 ring-background",
+                        EVENT_COLORS[ev.type],
                       )}
-                    >
-                      {formatType(ev.type)}
-                    </Badge>
-                    <span className="truncate text-xs text-muted-foreground">{ev.message}</span>
+                    />
                   </div>
-                </div>
 
-                {/* Timestamp */}
-                <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/60">
-                  {formatRelativeTime(ev.timestamp)}
-                </span>
-              </div>
-            ))}
+                  {/* Content */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "shrink-0 rounded px-1.5 py-0 text-[10px] font-medium",
+                          EVENT_BADGE_COLORS[ev.type],
+                        )}
+                      >
+                        {formatType(ev.type)}
+                      </Badge>
+                      <span className="truncate text-xs text-muted-foreground">{ev.message}</span>
+                    </div>
+                  </div>
+
+                  {/* Timestamp */}
+                  <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/60">
+                    {formatRelativeTime(ev.timestamp)}
+                  </span>
+                </div>
+              )
+            })}
             {displayEvents.length === 0 && (
-              <div className="flex h-32 items-center justify-center text-xs text-muted-foreground">
-                Waiting for events...
+              <div className="flex h-32 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border/30">
+                <div className="h-2 w-2 rounded-full bg-muted-foreground/20 animate-pulse" />
+                <span className="text-xs text-muted-foreground">Waiting for events...</span>
               </div>
             )}
           </div>

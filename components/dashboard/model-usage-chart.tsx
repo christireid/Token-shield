@@ -39,6 +39,7 @@ export function ModelUsageChart() {
   const { data } = useDashboard()
   const [sortKey, setSortKey] = React.useState<"cost" | "calls" | "tokens">("cost")
   const [sortDir, setSortDir] = React.useState<"asc" | "desc">("desc")
+  const [hoveredRow, setHoveredRow] = React.useState<string | null>(null)
 
   const entries = Object.entries(data.byModel).map(([id, d], idx) => ({
     id,
@@ -58,6 +59,12 @@ export function ModelUsageChart() {
   }))
 
   const totalCost = entries.reduce((a, e) => a + e.cost, 0)
+  const modelCount = entries.length
+
+  // Find the top model by cost
+  const topModel = entries.length > 0
+    ? entries.reduce((top, e) => (e.cost > top.cost ? e : top), entries[0])
+    : null
 
   const handleSort = (key: "cost" | "calls" | "tokens") => {
     if (sortKey === key) {
@@ -89,6 +96,16 @@ export function ModelUsageChart() {
               className="mx-auto aspect-square h-[180px] w-[180px]"
             >
               <PieChart>
+                <defs>
+                  {/* Glow filter for donut segments */}
+                  <filter id="donut-glow" x="-30%" y="-30%" width="160%" height="160%">
+                    <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+                    <feMerge>
+                      <feMergeNode in="coloredBlur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                </defs>
                 <Pie
                   data={pieData}
                   dataKey="value"
@@ -100,6 +117,7 @@ export function ModelUsageChart() {
                   strokeWidth={2}
                   stroke="hsl(220, 18%, 7%)"
                   isAnimationActive={false}
+                  filter="url(#donut-glow)"
                 >
                   {pieData.map((entry) => (
                     <Cell key={entry.name} fill={entry.fill} />
@@ -121,17 +139,50 @@ export function ModelUsageChart() {
                 />
               </PieChart>
             </ChartContainer>
-            {/* Center label */}
-            <div className="-mt-[118px] flex flex-col items-center justify-center pb-[40px]">
-              <span className="font-mono text-lg font-bold text-foreground">
+            {/* Enhanced Center label with gradient text and model count */}
+            <div className="-mt-[124px] flex flex-col items-center justify-center pb-[40px]">
+              <span
+                className="font-mono text-xl font-bold tracking-tight"
+                style={{
+                  background: "linear-gradient(135deg, hsl(152, 60%, 52%), hsl(190, 70%, 60%))",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  filter: "drop-shadow(0 0 8px rgba(52, 211, 153, 0.3))",
+                }}
+              >
                 ${totalCost.toFixed(2)}
               </span>
-              <span className="text-[10px] text-muted-foreground">Total Cost</span>
+              <span className="text-[10px] font-medium text-muted-foreground">Total Cost</span>
+              <span className="mt-0.5 text-[9px] text-muted-foreground/60">
+                across {modelCount} model{modelCount !== 1 ? "s" : ""}
+              </span>
             </div>
           </div>
 
-          {/* Table */}
+          {/* Table section */}
           <div className="min-w-0 flex-1 overflow-x-auto">
+            {/* Top Model Callout Badge */}
+            {topModel && (
+              <div className="mb-3 flex items-center gap-2 rounded-md border border-border/30 bg-gradient-to-r from-amber-500/10 via-transparent to-transparent px-3 py-1.5">
+                <div
+                  className="h-2 w-2 rounded-full"
+                  style={{
+                    backgroundColor: topModel.color,
+                    boxShadow: `0 0 6px ${topModel.color}80`,
+                  }}
+                />
+                <span className="text-[10px] text-muted-foreground">Top model:</span>
+                <span className="font-mono text-[11px] font-semibold text-foreground">
+                  {topModel.id}
+                </span>
+                <span className="font-mono text-[10px] text-amber-400/80">
+                  ${topModel.cost.toFixed(4)}
+                </span>
+                <span className="text-[9px] text-muted-foreground/60">
+                  ({totalCost > 0 ? ((topModel.cost / totalCost) * 100).toFixed(0) : 0}% of total)
+                </span>
+              </div>
+            )}
             <Table>
               <TableHeader>
                 <TableRow className="border-border/30 hover:bg-transparent">
@@ -167,12 +218,33 @@ export function ModelUsageChart() {
               </TableHeader>
               <TableBody>
                 {sorted.map((entry) => (
-                  <TableRow key={entry.id} className="border-border/20">
+                  <TableRow
+                    key={entry.id}
+                    className="border-border/20 cursor-default transition-all duration-200"
+                    style={{
+                      backgroundColor:
+                        hoveredRow === entry.id
+                          ? `color-mix(in srgb, ${entry.color} 8%, transparent)`
+                          : undefined,
+                      boxShadow:
+                        hoveredRow === entry.id
+                          ? `inset 2px 0 0 ${entry.color}, 0 0 12px ${entry.color}15`
+                          : undefined,
+                    }}
+                    onMouseEnter={() => setHoveredRow(entry.id)}
+                    onMouseLeave={() => setHoveredRow(null)}
+                  >
                     <TableCell className="py-2">
                       <div className="flex items-center gap-2">
                         <div
-                          className="h-2.5 w-2.5 rounded-full"
-                          style={{ backgroundColor: entry.color }}
+                          className="h-2.5 w-2.5 rounded-full transition-shadow duration-200"
+                          style={{
+                            backgroundColor: entry.color,
+                            boxShadow:
+                              hoveredRow === entry.id
+                                ? `0 0 8px 2px ${entry.color}60`
+                                : "none",
+                          }}
                         />
                         <span className="font-mono text-xs text-foreground">{entry.id}</span>
                       </div>

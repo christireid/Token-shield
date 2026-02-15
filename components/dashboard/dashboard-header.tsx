@@ -18,7 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { ArrowLeft, Download, Pause, Play, Shield } from "lucide-react"
+import { ArrowLeft, Bell, Download, Pause, Play, Shield, TrendingUp } from "lucide-react"
 import Link from "next/link"
 
 const TIME_RANGES: { value: TimeRange; label: string }[] = [
@@ -50,8 +50,24 @@ export function DashboardHeader() {
         ? "bg-[hsl(38,92%,50%)]"
         : "bg-blue-500"
 
-    return { count, bgColor }
+    const borderColor = hasCritical
+      ? "border-[hsl(0,72%,51%)]/30"
+      : hasWarning
+        ? "border-[hsl(38,92%,50%)]/30"
+        : "border-blue-500/30"
+
+    return { count, bgColor, borderColor }
   }, [data.alerts, data.anomalies])
+
+  const savingsRateColor = useMemo(() => {
+    if (data.savingsRate >= 30) return "text-emerald-500 border-emerald-500/30 bg-emerald-500/10"
+    if (data.savingsRate >= 15) return "text-amber-500 border-amber-500/30 bg-amber-500/10"
+    return "text-muted-foreground border-border/30 bg-secondary/30"
+  }, [data.savingsRate])
+
+  const activeAlertCount = useMemo(() => {
+    return data.alerts.filter((a) => !a.dismissed).length
+  }, [data.alerts])
 
   const handleExport = (format: "json" | "csv") => {
     const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-")
@@ -88,38 +104,58 @@ export function DashboardHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-50 flex flex-col gap-4 border-b border-border/50 bg-background/80 px-4 py-4 backdrop-blur-xl md:flex-row md:items-center md:justify-between md:px-6">
+    <header className="relative sticky top-0 z-50 flex flex-col gap-4 border-b border-border/50 bg-background/80 px-4 py-4 backdrop-blur-xl md:flex-row md:items-center md:justify-between md:px-6">
+      {/* Gradient accent line */}
+      <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-primary/60 via-[hsl(190,70%,50%)]/40 to-[hsl(270,60%,60%)]/30" />
+
       <div className="flex items-center gap-3">
         <Link
           href="/"
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-border/50 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          className="group flex h-9 w-9 items-center justify-center rounded-lg border border-border/50 text-muted-foreground transition-all hover:border-primary/30 hover:bg-secondary hover:text-foreground hover:shadow-[0_0_8px_-2px_hsl(var(--primary)/0.3)]"
           aria-label="Back to home"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
         </Link>
         <div className="flex items-center gap-2">
           <Shield className="h-5 w-5 text-primary" />
           <h1 className="text-lg font-semibold tracking-tight text-foreground">
-            TokenShield Dashboard
+            <span className="text-primary">Token</span>Shield Dashboard
           </h1>
           {notificationBadge && (
             <span
-              className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold leading-none text-white animate-pulse ${notificationBadge.bgColor}`}
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold leading-none text-white animate-pulse ${notificationBadge.bgColor} ${notificationBadge.borderColor}`}
               title={`${notificationBadge.count} active alert(s) / anomalies`}
             >
+              <Bell className="h-2.5 w-2.5" />
               {notificationBadge.count > 99 ? "99+" : notificationBadge.count}
             </span>
           )}
         </div>
         <div className="hidden h-5 w-px bg-border/50 md:block" />
-        <span className="hidden items-center gap-1.5 text-xs text-muted-foreground md:inline-flex">
-          {data.totalRequests.toLocaleString()} requests tracked
+
+        {/* Status bar stat pills */}
+        <div className="hidden items-center gap-2 md:inline-flex">
           <span
-            className={`inline-block h-1.5 w-1.5 rounded-full ${
-              isPaused ? "bg-muted-foreground/40" : "bg-emerald-500 animate-pulse"
-            }`}
-          />
-        </span>
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${savingsRateColor}`}
+          >
+            <TrendingUp className="h-2.5 w-2.5" />
+            {data.savingsRate.toFixed(1)}% saved
+          </span>
+          {activeAlertCount > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-[hsl(38,92%,50%)]/30 bg-[hsl(38,92%,50%)]/10 px-2 py-0.5 text-[10px] font-medium text-[hsl(38,92%,50%)]">
+              <Bell className="h-2.5 w-2.5" />
+              {activeAlertCount} alert{activeAlertCount !== 1 ? "s" : ""}
+            </span>
+          )}
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            {data.totalRequests.toLocaleString()} requests
+            <span
+              className={`inline-block h-1.5 w-1.5 rounded-full ${
+                isPaused ? "bg-muted-foreground/40" : "bg-emerald-500 animate-pulse"
+              }`}
+            />
+          </span>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

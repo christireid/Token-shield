@@ -1,24 +1,139 @@
 "use client"
 
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useDashboard, type KpiDelta } from "./dashboard-provider"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { DollarSign, Percent, Zap, ShieldOff, Timer, TrendingUp, TrendingDown } from "lucide-react"
 import { AreaChart, Area, ResponsiveContainer } from "recharts"
 
-interface KpiCardProps {
-  label: string
-  value: string
-  sparkline: number[]
-  color: string
-  accentClass: string
-  /** Tailwind gradient class for the card's subtle accent background */
-  gradientClass: string
-  icon: React.ReactNode
-  delta: KpiDelta
-  /** When true, an "up" direction is favorable (green). When false, "up" is unfavorable (red). */
-  upIsGood: boolean
+/* ─────────────────────────── useCountUp hook ─────────────────────────── */
+
+function easeOutExpo(t: number): number {
+  return t >= 1 ? 1 : 1 - Math.pow(2, -10 * t)
 }
+
+/**
+ * Animates a number from its previous value to the new target using
+ * requestAnimationFrame with an easeOutExpo curve.
+ */
+function useCountUp(target: number, duration = 800): number {
+  const [current, setCurrent] = useState(target)
+  const prevTarget = useRef(target)
+  const rafId = useRef<number | null>(null)
+
+  useEffect(() => {
+    const from = prevTarget.current
+    const to = target
+    prevTarget.current = target
+
+    // Nothing to animate
+    if (from === to) return
+
+    const startTime = performance.now()
+
+    const tick = (now: number) => {
+      const elapsed = now - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      const eased = easeOutExpo(progress)
+      const value = from + (to - from) * eased
+
+      setCurrent(value)
+
+      if (progress < 1) {
+        rafId.current = requestAnimationFrame(tick)
+      } else {
+        setCurrent(to)
+      }
+    }
+
+    rafId.current = requestAnimationFrame(tick)
+
+    return () => {
+      if (rafId.current !== null) {
+        cancelAnimationFrame(rafId.current)
+      }
+    }
+  }, [target, duration])
+
+  return current
+}
+
+/* ────────────────────────── AnimatedValue ─────────────────────────────── */
+
+/**
+ * Takes a value string like "$12.5k", "82.4%", "1,234", or "38ms",
+ * extracts the first numeric portion (including decimals), animates it,
+ * then reconstructs the string with the same prefix and suffix.
+ */
+function AnimatedValue({ value, className }: { value: string; className?: string }) {
+  // Match: optional leading non-digit chars, the number (with optional commas/decimals), trailing chars
+  const match = value.match(/^([^0-9]*?)([\d,]+\.?\d*)(.*?)$/)
+
+  if (!match) {
+    // No number found — just render as-is
+    return <span className={className}>{value}</span>
+  }
+
+  const prefix = match[1]
+  const rawNumber = match[2].replace(/,/g, "")
+  const suffix = match[3]
+  const numericTarget = parseFloat(rawNumber)
+
+  if (isNaN(numericTarget)) {
+    return <span className={className}>{value}</span>
+  }
+
+  return (
+    <AnimatedNumber
+      prefix={prefix}
+      target={numericTarget}
+      originalFormatted={match[2]}
+      suffix={suffix}
+      className={className}
+    />
+  )
+}
+
+function AnimatedNumber({
+  prefix,
+  target,
+  originalFormatted,
+  suffix,
+  className,
+}: {
+  prefix: string
+  target: number
+  originalFormatted: string
+  suffix: string
+  className?: string
+}) {
+  const animated = useCountUp(target)
+
+  // Determine decimal places from the original formatted string
+  const decimalIndex = originalFormatted.indexOf(".")
+  const decimals = decimalIndex >= 0 ? originalFormatted.length - decimalIndex - 1 : 0
+
+  // Check if the original used commas (e.g. "1,234")
+  const usesCommas = originalFormatted.includes(",")
+
+  let formatted: string
+  if (usesCommas) {
+    formatted = animated.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+  } else {
+    formatted = animated.toFixed(decimals)
+  }
+
+  return (
+    <span className={className}>
+      {prefix}
+      {formatted}
+      {suffix}
+    </span>
+  )
+}
+
+/* ────────────────────────── MiniSparkline ─────────────────────────────── */
 
 function MiniSparkline({ data, color }: { data: number[]; color: string }) {
   if (data.length < 2) return null
@@ -47,7 +162,25 @@ function MiniSparkline({ data, color }: { data: number[]; color: string }) {
   )
 }
 
-function KpiCard({ label, value, sparkline, color, accentClass, gradientClass, icon, delta, upIsGood }: KpiCardProps) {
+/* ──────────────────────────── KpiCard ─────────────────────────────────── */
+
+interface KpiCardProps {
+  label: string
+  value: string
+  sparkline: number[]
+  color: string
+  accentClass: string
+  /** Tailwind gradient class for the card's subtle accent background */
+  gradientClass: string
+  icon: React.ReactNode
+  delta: KpiDelta
+  /** When true, an "up" direction is favorable (green). When false, "up" is unfavorable (red). */
+  upIsGood: boolean
+  /** When true, renders the card with a more prominent "hero" treatment. */
+  isHero?: boolean
+}
+
+function KpiCard({ label, value, sparkline, color, accentClass, gradientClass, icon, delta, upIsGood, isHero }: KpiCardProps) {
   const isFavorable =
     delta.direction === "flat"
       ? null
@@ -63,14 +196,25 @@ function KpiCard({ label, value, sparkline, color, accentClass, gradientClass, i
         : "text-red-500"
 
   return (
-    <Card className={cn("group relative overflow-hidden border-border/40 p-4 transition-all duration-300 hover:translate-y-[-2px] hover:border-border/80 hover:shadow-md", gradientClass)}>
+    <Card
+      className={cn(
+        "group relative overflow-hidden border-border/40 p-4 transition-all duration-300 hover:translate-y-[-2px] hover:border-border/80 hover:shadow-[0_0_30px_var(--card-glow)]",
+        gradientClass,
+        isHero && "border-primary/20",
+      )}
+      style={{ "--card-glow": color + "20" } as React.CSSProperties}
+    >
       <div className={cn("absolute left-0 top-0 h-full w-0.5", accentClass)} />
       <div className="flex items-start justify-between">
         <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-muted-foreground">{label}</span>
-          <span className="font-mono text-2xl font-bold tabular-nums tracking-tight text-foreground">
-            {value}
-          </span>
+          <AnimatedValue
+            value={value}
+            className={cn(
+              "font-mono tabular-nums tracking-tight text-foreground",
+              isHero ? "text-3xl font-black" : "text-2xl font-bold",
+            )}
+          />
           {delta.direction !== "flat" && (
             <div className="flex items-center gap-1">
               <div
@@ -114,6 +258,8 @@ function KpiCard({ label, value, sparkline, color, accentClass, gradientClass, i
   )
 }
 
+/* ──────────────────────────── KpiCards ────────────────────────────────── */
+
 export function KpiCards() {
   const { data } = useDashboard()
 
@@ -134,6 +280,7 @@ export function KpiCards() {
       icon: <TrendingUp className="h-4 w-4" />,
       delta: data.kpiDeltas.totalSaved,
       upIsGood: true,
+      isHero: true,
     },
     {
       label: "Total Spent",

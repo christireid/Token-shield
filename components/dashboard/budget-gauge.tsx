@@ -36,12 +36,13 @@ function MiniBar({ label, value, max }: MiniBarProps) {
           ${remaining.toFixed(2)} left
         </span>
       </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+      <div className="h-2 w-full overflow-hidden rounded-full bg-gradient-to-r from-secondary to-secondary/60">
         <div
           className="h-full rounded-full transition-all duration-500"
           style={{
             width: `${percent}%`,
             backgroundColor: barColor,
+            boxShadow: `0 0 8px ${barColor}, 0 0 4px ${barColor}`,
           }}
         />
       </div>
@@ -78,86 +79,169 @@ export function BudgetGauge() {
     return `M ${s.x} ${s.y} A ${radius} ${radius} 0 ${largeArc} 1 ${e.x} ${e.y}`
   }
 
+  // Tick marks at 0%, 25%, 50%, 75%, 100%
+  const tickPercents = [0, 25, 50, 75, 100]
+  const tickLength = 8
+  const ticks = tickPercents.map((tp) => {
+    const angle = startAngle + (totalAngle * tp) / 100
+    const inner = polarToCartesian(angle)
+    const outerRadius = radius + tickLength
+    const rad = ((angle - 90) * Math.PI) / 180
+    const outer = { x: cx + outerRadius * Math.cos(rad), y: cy + outerRadius * Math.sin(rad) }
+    return { percent: tp, inner, outer, angle }
+  })
+
+  // Label positions (slightly further out than tick marks)
+  const labelRadius = radius + tickLength + 10
+  const labelStart = polarToCartesian(startAngle)
+  const labelEnd = polarToCartesian(endAngle)
+  const labelStartRad = ((startAngle - 90) * Math.PI) / 180
+  const labelEndRad = ((endAngle - 90) * Math.PI) / 180
+  const labelStartPos = { x: cx + labelRadius * Math.cos(labelStartRad), y: cy + labelRadius * Math.sin(labelStartRad) }
+  const labelEndPos = { x: cx + labelRadius * Math.cos(labelEndRad), y: cy + labelRadius * Math.sin(labelEndRad) }
+
   return (
-    <Card
-      className={cn(
-        "border-border/40 bg-card/50 transition-all",
-        budget.isOverBudget && "border-[hsl(0,72%,51%)]/40 shadow-[0_0_20px_hsl(0,72%,51%,0.1)]",
-      )}
-    >
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-sm font-medium text-foreground">
-              Budget Utilization
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Overall spending against configured limits
-            </CardDescription>
-          </div>
-          {budget.isOverBudget && (
-            <div className="flex h-6 items-center rounded-md border border-[hsl(0,72%,51%)]/30 bg-[hsl(0,72%,51%)]/10 px-2">
-              <span className="text-[10px] font-medium text-[hsl(0,72%,65%)]">OVER BUDGET</span>
+    <>
+      <style>{`
+        @keyframes budget-pulse {
+          0%, 100% { box-shadow: 0 0 20px hsl(0 72% 51% / 0.1); }
+          50% { box-shadow: 0 0 30px hsl(0 72% 51% / 0.2); }
+        }
+      `}</style>
+      <Card
+        className={cn(
+          "border-border/40 bg-card/50 transition-all",
+          budget.isOverBudget && "border-[hsl(0,72%,51%)]/40 shadow-[0_0_20px_hsl(0,72%,51%,0.1)]",
+          budget.isOverBudget && "animate-[budget-pulse_2s_ease-in-out_infinite]",
+        )}
+      >
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-sm font-medium text-foreground">
+                Budget Utilization
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Overall spending against configured limits
+              </CardDescription>
             </div>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="flex flex-col items-center gap-4">
-          {/* Arc gauge */}
-          <div className="relative">
-            <svg
-              width="180"
-              height="130"
-              viewBox="0 0 180 130"
-              role="img"
-              aria-label={`Budget gauge at ${percent.toFixed(0)}%`}
-            >
-              {/* Background arc */}
-              <path
-                d={describeArc(startAngle, endAngle)}
-                fill="none"
-                stroke="hsl(220, 14%, 12%)"
-                strokeWidth={strokeWidth}
-                strokeLinecap="round"
+            {budget.isOverBudget && (
+              <div className="flex h-6 items-center rounded-md border border-[hsl(0,72%,51%)]/30 bg-[hsl(0,72%,51%)]/10 px-2">
+                <span className="text-[10px] font-medium text-[hsl(0,72%,65%)]">OVER BUDGET</span>
+              </div>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col items-center gap-4">
+            {/* Arc gauge */}
+            <div className="relative">
+              <div
+                className="absolute inset-0 rounded-full opacity-30"
+                style={{
+                  background: `radial-gradient(circle at 50% 60%, ${gaugeColor}22 0%, transparent 60%)`,
+                }}
               />
-              {/* Filled arc */}
-              {percent > 0 && (
+              <svg
+                width="180"
+                height="130"
+                viewBox="0 0 180 130"
+                role="img"
+                aria-label={`Budget gauge at ${percent.toFixed(0)}%`}
+              >
+                {/* SVG glow filter */}
+                <defs>
+                  <filter id="gauge-glow" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+                    <feMerge>
+                      <feMergeNode in="blur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                </defs>
+
+                {/* Tick marks */}
+                {ticks.map((tick) => (
+                  <line
+                    key={tick.percent}
+                    x1={tick.inner.x}
+                    y1={tick.inner.y}
+                    x2={tick.outer.x}
+                    y2={tick.outer.y}
+                    stroke="hsl(220, 14%, 18%)"
+                    strokeWidth="1"
+                  />
+                ))}
+
+                {/* Labels at 0% and 100% */}
+                <text
+                  x={labelStartPos.x}
+                  y={labelStartPos.y}
+                  fontSize="8"
+                  fill="hsl(215, 20%, 50%)"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                >
+                  0%
+                </text>
+                <text
+                  x={labelEndPos.x}
+                  y={labelEndPos.y}
+                  fontSize="8"
+                  fill="hsl(215, 20%, 50%)"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                >
+                  100%
+                </text>
+
+                {/* Background arc */}
                 <path
-                  d={describeArc(startAngle, fillAngle)}
+                  d={describeArc(startAngle, endAngle)}
                   fill="none"
-                  stroke={gaugeColor}
+                  stroke="hsl(220, 14%, 12%)"
                   strokeWidth={strokeWidth}
                   strokeLinecap="round"
-                  className="transition-all duration-700"
                 />
-              )}
-            </svg>
-            {/* Center text */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center pt-2">
-              <span
-                className={cn(
-                  "font-mono text-2xl font-bold tabular-nums",
-                  getGaugeTextClass(percent),
+                {/* Filled arc with glow */}
+                {percent > 0 && (
+                  <path
+                    d={describeArc(startAngle, fillAngle)}
+                    fill="none"
+                    stroke={gaugeColor}
+                    strokeWidth={strokeWidth}
+                    strokeLinecap="round"
+                    filter="url(#gauge-glow)"
+                    className="transition-all duration-700"
+                  />
                 )}
-              >
-                {percent.toFixed(0)}%
-              </span>
-              <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                ${budget.currentSpend.toFixed(2)} / ${budget.limit.toFixed(2)}
-              </span>
+              </svg>
+              {/* Center text */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center pt-2">
+                <span
+                  className={cn(
+                    "font-mono text-2xl font-bold tabular-nums",
+                    getGaugeTextClass(percent),
+                  )}
+                >
+                  {percent.toFixed(0)}%
+                </span>
+                <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                  ${budget.currentSpend.toFixed(2)} / ${budget.limit.toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {/* Mini progress bars */}
+            <div className="flex w-full flex-col gap-3">
+              <MiniBar label="Session" value={budget.remaining.session} max={50} />
+              <MiniBar label="Hourly" value={budget.remaining.hour} max={10} />
+              <MiniBar label="Daily" value={budget.remaining.day} max={50} />
+              <MiniBar label="Monthly" value={budget.remaining.month} max={500} />
             </div>
           </div>
-
-          {/* Mini progress bars */}
-          <div className="flex w-full flex-col gap-3">
-            <MiniBar label="Session" value={budget.remaining.session} max={50} />
-            <MiniBar label="Hourly" value={budget.remaining.hour} max={10} />
-            <MiniBar label="Daily" value={budget.remaining.day} max={50} />
-            <MiniBar label="Monthly" value={budget.remaining.month} max={500} />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </>
   )
 }

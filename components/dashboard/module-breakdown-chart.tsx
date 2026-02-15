@@ -48,12 +48,37 @@ export function ModuleBreakdownChart() {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {/* Total Savings Callout */}
+        <div className="mb-4 flex items-center justify-between rounded-lg border border-border/30 bg-gradient-to-r from-emerald-500/10 via-transparent to-cyan-500/10 px-4 py-2.5">
+          <span className="text-xs font-medium text-muted-foreground">Total Module Savings</span>
+          <span className="font-mono text-lg font-bold tracking-tight text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]">
+            ${total.toFixed(4)}
+          </span>
+        </div>
+
         <ChartContainer config={chartConfig} className="aspect-auto h-[280px] w-full md:h-[320px]">
           <BarChart
             data={chartData}
             layout="vertical"
             margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
           >
+            <defs>
+              {/* Gradient fills for each module */}
+              {Object.entries(MODULE_COLORS).map(([key, color]) => (
+                <linearGradient key={key} id={`gradient-${key}`} x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor={color} stopOpacity={1} />
+                  <stop offset="100%" stopColor={color} stopOpacity={0.6} />
+                </linearGradient>
+              ))}
+              {/* Soft glow filter for bars */}
+              <filter id="bar-glow" x="-20%" y="-50%" width="140%" height="200%">
+                <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+                <feMerge>
+                  <feMergeNode in="coloredBlur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 14%, 12%)" horizontal={false} />
             <XAxis
               type="number"
@@ -87,28 +112,53 @@ export function ModuleBreakdownChart() {
                 />
               }
             />
-            <Bar dataKey="savings" radius={[0, 4, 4, 0]} maxBarSize={28}>
+            <Bar
+              dataKey="savings"
+              radius={[0, 4, 4, 0]}
+              maxBarSize={28}
+              filter="url(#bar-glow)"
+            >
               {chartData.map((entry) => (
-                <Cell key={entry.key} fill={MODULE_COLORS[entry.key] || "hsl(215, 15%, 45%)"} />
+                <Cell
+                  key={entry.key}
+                  fill={`url(#gradient-${entry.key})`}
+                />
               ))}
             </Bar>
           </BarChart>
         </ChartContainer>
 
-        {/* Legend pills */}
+        {/* Enhanced Legend Pills with inline percentage bars */}
         <div className="mt-4 flex flex-wrap gap-2">
           {chartData.map((entry) => (
             <div
               key={entry.key}
-              className="flex items-center gap-1.5 rounded-md border border-border/30 bg-secondary/30 px-2 py-1"
+              className="flex items-center gap-2 rounded-md border border-border/30 bg-secondary/30 px-2.5 py-1.5 transition-colors hover:bg-secondary/50"
             >
               <div
-                className="h-2 w-2 rounded-full"
-                style={{ backgroundColor: MODULE_COLORS[entry.key] }}
+                className="h-2.5 w-2.5 rounded-full shadow-[0_0_6px_1px]"
+                style={{
+                  backgroundColor: MODULE_COLORS[entry.key],
+                  boxShadow: `0 0 6px 1px ${MODULE_COLORS[entry.key]}40`,
+                }}
               />
               <span className="text-[10px] text-muted-foreground">{entry.module}</span>
               <span className="font-mono text-[10px] font-medium text-foreground">
                 ${entry.savings.toFixed(3)}
+              </span>
+              {/* Mini percentage bar */}
+              <div className="relative h-1.5 w-10 overflow-hidden rounded-full bg-border/40">
+                <div
+                  className="absolute inset-y-0 left-0 rounded-full"
+                  style={{
+                    width: `${Math.min(parseFloat(entry.percent), 100)}%`,
+                    background: `linear-gradient(90deg, ${MODULE_COLORS[entry.key]}, ${MODULE_COLORS[entry.key]}99)`,
+                    boxShadow: `0 0 4px ${MODULE_COLORS[entry.key]}60`,
+                  }}
+                />
+              </div>
+              <span className="font-mono text-[9px] text-muted-foreground/70">
+                {entry.percent}%
               </span>
             </div>
           ))}

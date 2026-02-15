@@ -14,14 +14,41 @@ import { EventFeed } from "./event-feed"
 import { BudgetGauge } from "./budget-gauge"
 import { UserBudgetTable } from "./user-budget-table"
 
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <div className="flex items-center gap-4 pt-2">
+      <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/50">
+        {title}
+      </span>
+      <div className="h-px bg-border/20 flex-1" />
+    </div>
+  )
+}
+
 export function DashboardShell() {
   return (
     <DashboardProvider>
-      <div className="flex min-h-screen flex-col bg-background">
+      <style>{`
+        .dashboard-dot-grid {
+          background-image: radial-gradient(circle, hsl(215 20% 25% / 0.3) 1px, transparent 1px);
+          background-size: 24px 24px;
+        }
+      `}</style>
+
+      <div className="dashboard-dot-grid flex min-h-screen flex-col bg-background">
         <DashboardHeader />
 
-        <main className="flex-1 px-4 py-6 md:px-6">
-          <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
+        <main className="relative flex-1 px-4 py-6 md:px-6">
+          {/* Radial gradient glow at the top for depth */}
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 h-[600px]"
+            style={{
+              background:
+                "radial-gradient(ellipse 80% 50% at 50% 0%, hsl(152 60% 52% / 0.03), transparent)",
+            }}
+          />
+
+          <div className="relative mx-auto flex max-w-[1400px] flex-col gap-6">
             {/* Alert banner - only renders when there are active alerts */}
             <AlertBanner />
 
@@ -30,10 +57,16 @@ export function DashboardShell() {
               <KpiCards />
             </section>
 
+            {/* --- Performance --- */}
+            <SectionHeader title="Performance" />
+
             {/* Savings timeline - full width */}
             <section aria-label="Savings over time">
               <SavingsTimelineChart />
             </section>
+
+            {/* --- Cost Analytics --- */}
+            <SectionHeader title="Cost Analytics" />
 
             {/* Two-column: Module breakdown + Model usage */}
             <div className="grid gap-6 lg:grid-cols-2">
@@ -45,6 +78,9 @@ export function DashboardShell() {
               </section>
             </div>
 
+            {/* --- Infrastructure --- */}
+            <SectionHeader title="Infrastructure" />
+
             {/* Two-column: Pipeline metrics + Provider health */}
             <div className="grid gap-6 lg:grid-cols-2">
               <section aria-label="Pipeline performance">
@@ -54,6 +90,9 @@ export function DashboardShell() {
                 <ProviderHealth />
               </section>
             </div>
+
+            {/* --- Activity & Security --- */}
+            <SectionHeader title="Activity & Security" />
 
             {/* Three-column: Event feed + Anomaly detection + Budget gauge */}
             <div className="grid gap-6 lg:grid-cols-[1fr_1fr_380px]">
@@ -67,6 +106,9 @@ export function DashboardShell() {
                 <BudgetGauge />
               </section>
             </div>
+
+            {/* --- User Management --- */}
+            <SectionHeader title="User Management" />
 
             {/* User budget management - full width */}
             <section aria-label="User budget management">
