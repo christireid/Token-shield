@@ -196,20 +196,24 @@ export function estimateCost(
     )
   }
 
-  const inputCost = (inputTokens / 1_000_000) * model.inputPerMillion
-  const outputCost = (outputTokens / 1_000_000) * model.outputPerMillion
+  // Clamp negative token counts to zero to prevent negative costs
+  const safeInput = Math.max(0, inputTokens)
+  const safeOutput = Math.max(0, outputTokens)
+
+  const inputCost = (safeInput / 1_000_000) * model.inputPerMillion
+  const outputCost = (safeOutput / 1_000_000) * model.outputPerMillion
 
   const result: CostEstimate = {
     model,
-    inputTokens,
-    outputTokens,
+    inputTokens: safeInput,
+    outputTokens: safeOutput,
     inputCost,
     outputCost,
     totalCost: inputCost + outputCost,
   }
 
   if (model.cachedInputPerMillion !== undefined) {
-    result.cachedInputCost = (inputTokens / 1_000_000) * model.cachedInputPerMillion
+    result.cachedInputCost = (safeInput / 1_000_000) * model.cachedInputPerMillion
     result.totalWithCache = result.cachedInputCost + outputCost
   }
 

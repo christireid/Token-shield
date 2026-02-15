@@ -326,6 +326,12 @@ export class NeuroElasticEngine {
    * This implements IDF-like inhibition without explicit term frequencies.
    */
   private rebuildNoiseVector(): void {
+    // Need at least 2 memories to meaningfully identify noise bits
+    if (this.memory.length < 2) {
+      this.noiseVector = new Uint32Array(DIMENSIONS)
+      return
+    }
+
     const counts = new Uint32Array(DIMENSIONS * 32) // bit-level counts
     const threshold = Math.floor(this.memory.length * 0.5)
 

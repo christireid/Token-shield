@@ -17,6 +17,13 @@ import {
 } from "./middleware-types"
 
 /**
+ * Conservative fallback input price ($/M tokens) used when the model isn't
+ * in MODEL_PRICING. Used for savings estimation, so a mid-tier price avoids
+ * understating the value of context trimming.
+ */
+const SAVINGS_FALLBACK_INPUT_PER_MILLION = 2.5
+
+/**
  * Shared post-request recording logic used by both wrapGenerate and wrapStream.
  * Computes savings, records in ledger, emits events, completes guard tracking,
  * records in breaker/budget, and checks for anomalies.
@@ -37,7 +44,8 @@ async function recordPostRequestUsage(
 
   // Compute per-request savings
   const contextSavedDollars = meta?.contextSaved
-    ? (meta.contextSaved / 1_000_000) * (MODEL_PRICING[modelId]?.inputPerMillion ?? 2.5)
+    ? (meta.contextSaved / 1_000_000) *
+      (MODEL_PRICING[modelId]?.inputPerMillion ?? SAVINGS_FALLBACK_INPUT_PER_MILLION)
     : 0
   const routerSavedDollars = meta?.routerSaved ?? 0
   const prefixSavedDollars = meta?.prefixSaved ?? 0

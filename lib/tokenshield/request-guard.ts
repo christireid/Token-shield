@@ -89,6 +89,8 @@ const IN_FLIGHT_EVICTION_THRESHOLD = 50
 const STALE_REQUEST_AGE_MS = 5 * 60 * 1000
 /** Hard cap on cost log entries to prevent unbounded growth in high-throughput */
 const MAX_COST_LOG_ENTRIES = 500
+/** Hard cap on recent prompts map to prevent unbounded growth in long-running processes */
+const MAX_RECENT_PROMPTS = 1000
 /** One minute in milliseconds */
 const ONE_MINUTE_MS = 60_000
 /** One hour in milliseconds */
@@ -206,6 +208,11 @@ export class RequestGuard {
       const cutoff = now - dedupWindow
       for (const [p, ts] of this.recentPrompts) {
         if (ts < cutoff) this.recentPrompts.delete(p)
+      }
+      // Hard cap: clear if still over limit (e.g. very long dedup windows)
+      if (this.recentPrompts.size > MAX_RECENT_PROMPTS) {
+        this.recentPrompts.clear()
+        this.recentPrompts.set(normalized, now)
       }
     }
 

@@ -464,6 +464,7 @@ export class CostLedger {
    */
   dispose(): void {
     if (this.channel) {
+      this.channel.onmessage = null
       this.channel.close()
       this.channel = null
     }
