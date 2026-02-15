@@ -22,6 +22,9 @@ import {
   type ShieldMeta,
 } from "./middleware-types"
 
+/** Default expected output tokens when no explicit reserve is configured */
+const DEFAULT_RESERVE_OUTPUT_TOKENS = 500
+
 /**
  * Build the transformParams function for the middleware pipeline.
  * Captures the initialized module instances via the context object.
@@ -143,7 +146,7 @@ export function buildTransformParams(ctx: MiddlewareContext) {
       // -- 0. BREAKER CHECK --
       if (breaker && lastUserText) {
         const estimatedInput = countTokens(lastUserText)
-        const expectedOut = config.context?.reserveForOutput ?? 500
+        const expectedOut = config.context?.reserveForOutput ?? DEFAULT_RESERVE_OUTPUT_TOKENS
         const modelId = String(params.modelId ?? "")
         const breakCheck = breaker.check(modelId, estimatedInput, expectedOut)
         if (!breakCheck.allowed) {
@@ -185,7 +188,7 @@ export function buildTransformParams(ctx: MiddlewareContext) {
         meta.userId = userId
         const modelId = String(params.modelId ?? "")
         const estimatedInput = lastUserText ? countTokens(lastUserText) : 0
-        const expectedOut = config.context?.reserveForOutput ?? 500
+        const expectedOut = config.context?.reserveForOutput ?? DEFAULT_RESERVE_OUTPUT_TOKENS
         const budgetCheck = userBudgetManager.check(userId, modelId, estimatedInput, expectedOut)
         if (!budgetCheck.allowed) {
           config.onBlocked?.(budgetCheck.reason ?? "User budget exceeded")
@@ -245,7 +248,7 @@ export function buildTransformParams(ctx: MiddlewareContext) {
             const estCost = safeCost(
               guardModelId,
               countTokens(lastUserText),
-              config.context?.reserveForOutput ?? 500,
+              config.context?.reserveForOutput ?? DEFAULT_RESERVE_OUTPUT_TOKENS,
             )
             try {
               instanceEvents.emit("request:blocked", {
@@ -428,7 +431,8 @@ export function buildTransformParams(ctx: MiddlewareContext) {
           else {
             // If no custom tiers, use built-in smart routing
             const decision = routeToModel(lastUserText, String(params.modelId), {
-              expectedOutputTokens: config.context?.reserveForOutput ?? 500,
+              expectedOutputTokens:
+                config.context?.reserveForOutput ?? DEFAULT_RESERVE_OUTPUT_TOKENS,
             })
             // Only switch if we found a cheaper model that is suitable
             if (decision.selectedModel.id !== params.modelId) {
@@ -443,12 +447,12 @@ export function buildTransformParams(ctx: MiddlewareContext) {
               const origCost = estimateCost(
                 originalModelId,
                 meta.originalInputTokens ?? 0,
-                config.context?.reserveForOutput ?? 500,
+                config.context?.reserveForOutput ?? DEFAULT_RESERVE_OUTPUT_TOKENS,
               )
               const newCost = estimateCost(
                 selectedModelId,
                 meta.originalInputTokens ?? 0,
-                config.context?.reserveForOutput ?? 500,
+                config.context?.reserveForOutput ?? DEFAULT_RESERVE_OUTPUT_TOKENS,
               )
               complexitySaved = Math.max(0, origCost.totalCost - newCost.totalCost)
               meta.routerSaved = (meta.routerSaved ?? 0) + complexitySaved
@@ -481,7 +485,7 @@ export function buildTransformParams(ctx: MiddlewareContext) {
           const optimized = optimizePrefix(workingMessages, modelId, pricing.inputPerMillion, {
             provider: config.prefix?.provider ?? "auto",
             contextWindow: pricing.contextWindow,
-            reservedOutputTokens: config.context?.reserveForOutput ?? 500,
+            reservedOutputTokens: config.context?.reserveForOutput ?? DEFAULT_RESERVE_OUTPUT_TOKENS,
           })
           if (optimized.contextWindowExceeded) {
             try {

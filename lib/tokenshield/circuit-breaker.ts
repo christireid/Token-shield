@@ -147,6 +147,9 @@ const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
 /** Maximum spend records kept in memory (prevents unbounded growth in high-throughput scenarios) */
 const MAX_BREAKER_RECORDS = 50_000
 
+/** Percentage displayed when a limit is zero (avoids division by zero) */
+const UNLIMITED_PERCENTAGE = 999
+
 export class CostCircuitBreaker {
   private config: BreakerConfig
   private records: SpendRecord[] = []
@@ -223,7 +226,7 @@ export class CostCircuitBreaker {
 
     for (const c of checks) {
       const projectedSpend = c.current + estimatedCost
-      const pctUsed = c.limit > 0 ? (projectedSpend / c.limit) * 100 : 999
+      const pctUsed = c.limit > 0 ? (projectedSpend / c.limit) * 100 : UNLIMITED_PERCENTAGE
 
       // Fire warning at 80%
       const warningKey = `${c.type}-warning`
@@ -327,7 +330,8 @@ export class CostCircuitBreaker {
         limitType: "session",
         currentSpend: sessionSpend,
         limit: limits.perSession,
-        percentUsed: limits.perSession > 0 ? (sessionSpend / limits.perSession) * 100 : 999,
+        percentUsed:
+          limits.perSession > 0 ? (sessionSpend / limits.perSession) * 100 : UNLIMITED_PERCENTAGE,
         action: this.config.action,
         timestamp: now,
       })
@@ -337,7 +341,7 @@ export class CostCircuitBreaker {
         limitType: "hour",
         currentSpend: hourSpend,
         limit: limits.perHour,
-        percentUsed: limits.perHour > 0 ? (hourSpend / limits.perHour) * 100 : 999,
+        percentUsed: limits.perHour > 0 ? (hourSpend / limits.perHour) * 100 : UNLIMITED_PERCENTAGE,
         action: this.config.action,
         timestamp: now,
       })
@@ -347,7 +351,7 @@ export class CostCircuitBreaker {
         limitType: "day",
         currentSpend: daySpend,
         limit: limits.perDay,
-        percentUsed: limits.perDay > 0 ? (daySpend / limits.perDay) * 100 : 999,
+        percentUsed: limits.perDay > 0 ? (daySpend / limits.perDay) * 100 : UNLIMITED_PERCENTAGE,
         action: this.config.action,
         timestamp: now,
       })
@@ -357,7 +361,8 @@ export class CostCircuitBreaker {
         limitType: "month",
         currentSpend: monthSpend,
         limit: limits.perMonth,
-        percentUsed: limits.perMonth > 0 ? (monthSpend / limits.perMonth) * 100 : 999,
+        percentUsed:
+          limits.perMonth > 0 ? (monthSpend / limits.perMonth) * 100 : UNLIMITED_PERCENTAGE,
         action: this.config.action,
         timestamp: now,
       })

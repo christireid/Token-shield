@@ -157,6 +157,23 @@ export class ResponseCache {
     return this.idbStore
   }
 
+  /** Check if a cache entry has expired based on TTL */
+  private isExpired(entry: CacheEntry): boolean {
+    return Date.now() - entry.createdAt >= this.config.ttlMs
+  }
+
+  /**
+   * Copy-on-read: create a new entry with incremented access count.
+   * Avoids shared mutable state across concurrent lookups.
+   */
+  private touchEntry(entry: CacheEntry): CacheEntry {
+    return {
+      ...entry,
+      accessCount: entry.accessCount + 1,
+      lastAccessed: Date.now(),
+    }
+  }
+
   /**
    * Read-only cache probe. Returns hit/miss info without mutating
    * access counts or timestamps. Used by dry-run mode to avoid
@@ -171,7 +188,7 @@ export class ResponseCache {
 
     // Exact match from memory only (no IDB, no mutations)
     const memHit = this.memoryCache.get(key)
-    if (memHit && Date.now() - memHit.createdAt < this.config.ttlMs) {
+    if (memHit && !this.isExpired(memHit)) {
       // Verify normalized prompt matches to guard against djb2 hash collisions
       if (memHit.normalizedKey === normalized) {
         return { hit: true, entry: memHit, matchType: "exact", similarity: 1 }
@@ -184,7 +201,7 @@ export class ResponseCache {
       let bestSimilarity = 0
       for (const entry of this.memoryCache.values()) {
         if (model && entry.model !== model) continue
-        if (Date.now() - entry.createdAt >= this.config.ttlMs) continue
+        if (this.isExpired(entry)) continue
         const sim = textSimilarity(prompt, entry.prompt)
         if (sim > bestSimilarity && sim >= this.config.similarityThreshold) {
           bestSimilarity = sim
@@ -218,22 +235,15 @@ export class ResponseCache {
     // 1. Exact match from memory (key is already model-scoped)
     const memHit = this.memoryCache.get(key)
     if (memHit) {
-      if (Date.now() - memHit.createdAt < this.config.ttlMs) {
+      if (!this.isExpired(memHit)) {
         // Verify normalized prompt matches to guard against djb2 hash collisions
         if (memHit.normalizedKey === normalized) {
-          // Copy-on-read: create a new object to avoid shared mutable state
-          // across concurrent lookups that could cause inconsistent IDB writes
-          const updated: CacheEntry = {
-            ...memHit,
-            accessCount: memHit.accessCount + 1,
-            lastAccessed: Date.now(),
-          }
+          const updated = this.touchEntry(memHit)
           this.memoryCache.set(key, updated)
           this.totalHits++
           return { hit: true, entry: updated, matchType: "exact", similarity: 1 }
         }
       } else {
-        // Expired
         this.memoryCache.delete(key)
       }
     }
@@ -244,15 +254,10 @@ export class ResponseCache {
       try {
         const idbHit = await get<CacheEntry>(key, lookupStore)
         if (idbHit) {
-          if (Date.now() - idbHit.createdAt < this.config.ttlMs) {
+          if (!this.isExpired(idbHit)) {
             // Verify normalized prompt matches to guard against hash collisions
             if (idbHit.normalizedKey === normalized) {
-              // Copy-on-read: create a fresh object before mutating and storing
-              const updated: CacheEntry = {
-                ...idbHit,
-                accessCount: idbHit.accessCount + 1,
-                lastAccessed: Date.now(),
-              }
+              const updated = this.touchEntry(idbHit)
               this.memoryCache.set(key, updated)
               await set(key, updated, lookupStore)
               this.totalHits++
@@ -280,13 +285,8 @@ export class ResponseCache {
           // Find the corresponding cache entry by prompt, with TTL check
           for (const [entryKey, entry] of this.memoryCache.entries()) {
             if (entry.prompt === holoResult.prompt && (!model || entry.model === model)) {
-              // TTL check — skip expired entries
-              if (Date.now() - entry.createdAt >= this.config.ttlMs) continue
-              const updated: CacheEntry = {
-                ...entry,
-                accessCount: entry.accessCount + 1,
-                lastAccessed: Date.now(),
-              }
+              if (this.isExpired(entry)) continue
+              const updated = this.touchEntry(entry)
               this.memoryCache.set(entryKey, updated)
               this.totalHits++
               return {
@@ -306,7 +306,7 @@ export class ResponseCache {
 
       for (const entry of this.memoryCache.values()) {
         if (model && entry.model !== model) continue
-        if (Date.now() - entry.createdAt >= this.config.ttlMs) continue
+        if (this.isExpired(entry)) continue
 
         const sim = textSimilarity(prompt, entry.prompt)
         if (sim > bestSimilarity && sim >= this.config.similarityThreshold) {
@@ -316,11 +316,7 @@ export class ResponseCache {
       }
 
       if (bestMatch) {
-        const updated: CacheEntry = {
-          ...bestMatch,
-          accessCount: bestMatch.accessCount + 1,
-          lastAccessed: Date.now(),
-        }
+        const updated = this.touchEntry(bestMatch)
         this.memoryCache.set(updated.key, updated)
         this.totalHits++
         return {

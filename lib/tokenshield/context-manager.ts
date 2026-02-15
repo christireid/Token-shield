@@ -14,6 +14,9 @@
 
 import { countTokens } from "gpt-tokenizer"
 
+/** OpenAI chat completion priming overhead (see tiktoken cookbook) */
+const CHAT_OVERHEAD_TOKENS = 3
+
 export interface Message {
   role: "system" | "user" | "assistant" | "tool"
   content: string
@@ -91,8 +94,7 @@ export function fitToBudget(messages: Message[], budget: ContextBudget): Context
     pinnedTokens += messageTokens(msg)
   }
 
-  // 3 tokens for chat overhead (priming)
-  const chatOverhead = 3
+  const chatOverhead = CHAT_OVERHEAD_TOKENS
   let remainingBudget = inputBudget - pinnedTokens - chatOverhead
 
   // Fill from newest to oldest
@@ -153,7 +155,7 @@ export function slidingWindow(messages: Message[], maxMessages: number): Context
   const evicted = safeMax > 0 ? nonSystem.slice(0, -safeMax) : nonSystem
   const finalMessages = [...system, ...kept]
 
-  let totalTokens = 3 // chat overhead
+  let totalTokens = CHAT_OVERHEAD_TOKENS
   for (const msg of finalMessages) {
     totalTokens += messageTokens(msg)
   }
@@ -205,7 +207,7 @@ export function priorityFit(messages: Message[], budget: ContextBudget): Context
     return (b.timestamp ?? 0) - (a.timestamp ?? 0)
   })
 
-  let pinnedTokens = 3
+  let pinnedTokens = CHAT_OVERHEAD_TOKENS
   for (const msg of system) {
     pinnedTokens += messageTokens(msg)
   }

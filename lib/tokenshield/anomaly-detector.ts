@@ -25,6 +25,9 @@ export interface AnomalyEvent {
   timestamp: number
 }
 
+/** Minimum data points required before anomaly detection activates */
+const MIN_HISTORY_FOR_DETECTION = 5
+
 export class AnomalyDetector {
   private costHistory: number[] = []
   private tokenHistory: number[] = []
@@ -50,7 +53,10 @@ export class AnomalyDetector {
 
     if (cost >= this.minCostThreshold) {
       const costStats = this.calculateStats(this.costHistory)
-      if (this.costHistory.length >= Math.min(5, this.windowSize) && costStats.stdDev > 0) {
+      if (
+        this.costHistory.length >= Math.min(MIN_HISTORY_FOR_DETECTION, this.windowSize) &&
+        costStats.stdDev > 0
+      ) {
         const zScore = (cost - costStats.mean) / costStats.stdDev
 
         if (zScore > this.sensitivity && cost > this.ignoreBelowCost) {
@@ -71,7 +77,10 @@ export class AnomalyDetector {
     // Let's report cost spike primarily.
     if (!anomaly && tokens > 0) {
       const tokenStats = this.calculateStats(this.tokenHistory)
-      if (this.tokenHistory.length >= Math.min(5, this.windowSize) && tokenStats.stdDev > 0) {
+      if (
+        this.tokenHistory.length >= Math.min(MIN_HISTORY_FOR_DETECTION, this.windowSize) &&
+        tokenStats.stdDev > 0
+      ) {
         const zScore = (tokens - tokenStats.mean) / tokenStats.stdDev
         // Tokens usually correlate with cost, but maybe model changed
         if (zScore > this.sensitivity) {
