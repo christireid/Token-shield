@@ -116,6 +116,31 @@ const SUBTASK_PATTERNS = /^\s*[-*\d]+[.)]\s/gm
 const CONTEXT_PATTERNS =
   /\babove\b|\bprevious\b|\bearlier\b|\bmentioned\b|\brefer.*?to\b|\bgiven\b|\bbased on\b/i
 
+/**
+ * Weights and caps for each complexity signal in the composite score.
+ * Each entry: [maxPoints, multiplier].
+ * - maxPoints: the ceiling for this signal's contribution
+ * - multiplier: per-unit weight (e.g. per keyword, per token fraction)
+ */
+const COMPLEXITY_WEIGHTS = {
+  tokenCount: { max: 25, divisor: 500 },
+  reasoningKeywords: { max: 20, perUnit: 5 },
+  constraintKeywords: { max: 10, perUnit: 2.5 },
+  codeSignals: { max: 15, perUnit: 1.5 },
+  lexicalDiversity: { multiplier: 10 },
+  structuredOutput: { points: 5 },
+  subTasks: { max: 10, perUnit: 3 },
+  contextDependency: { points: 5 },
+} as const
+
+/** Tier boundaries for the composite complexity score (0-100) */
+const TIER_THRESHOLDS = {
+  trivial: 15,
+  simple: 35,
+  moderate: 55,
+  complex: 75,
+} as const
+
 /** FIFO cache for analyzeComplexity — avoids re-running BPE + regex on identical prompts */
 const MAX_COMPLEXITY_CACHE = 100
 /** Skip caching prompts longer than this to prevent large memory consumption */
@@ -164,49 +189,58 @@ export function analyzeComplexity(prompt: string): ComplexityScore {
   }
 
   // Weighted composite score (0-100)
+  const w = COMPLEXITY_WEIGHTS
   let score = 0
 
-  // Token count contribution (0-25 points)
-  // <50 tokens = trivial, 50-200 = moderate, 200-500 = complex, 500+ = expert
-  score += Math.min(25, (signals.tokenCount / 500) * 25)
+  // Token count contribution
+  score += Math.min(
+    w.tokenCount.max,
+    (signals.tokenCount / w.tokenCount.divisor) * w.tokenCount.max,
+  )
 
-  // Reasoning keywords (0-20 points)
-  score += Math.min(20, signals.reasoningKeywords * 5)
+  // Reasoning keywords
+  score += Math.min(
+    w.reasoningKeywords.max,
+    signals.reasoningKeywords * w.reasoningKeywords.perUnit,
+  )
 
-  // Constraint keywords (0-10 points)
-  score += Math.min(10, signals.constraintKeywords * 2.5)
+  // Constraint keywords
+  score += Math.min(
+    w.constraintKeywords.max,
+    signals.constraintKeywords * w.constraintKeywords.perUnit,
+  )
 
-  // Code signals (0-15 points)
-  score += Math.min(15, signals.codeSignals * 1.5)
+  // Code signals
+  score += Math.min(w.codeSignals.max, signals.codeSignals * w.codeSignals.perUnit)
 
-  // Lexical diversity (0-10 points)
-  // Higher diversity = more complex vocabulary
-  score += signals.lexicalDiversity * 10
+  // Lexical diversity — higher diversity = more complex vocabulary
+  score += signals.lexicalDiversity * w.lexicalDiversity.multiplier
 
-  // Structured output requirement (5 points)
-  if (signals.hasStructuredOutput) score += 5
+  // Structured output requirement
+  if (signals.hasStructuredOutput) score += w.structuredOutput.points
 
-  // Sub-tasks (0-10 points)
-  score += Math.min(10, signals.subTaskCount * 3)
+  // Sub-tasks
+  score += Math.min(w.subTasks.max, signals.subTaskCount * w.subTasks.perUnit)
 
-  // Context dependency (5 points)
-  if (signals.hasContextDependency) score += 5
+  // Context dependency
+  if (signals.hasContextDependency) score += w.contextDependency.points
 
   score = Math.min(100, Math.round(score))
 
+  const t = TIER_THRESHOLDS
   let tier: ComplexityScore["tier"]
   let recommendedTier: ModelPricing["tier"]
 
-  if (score <= 15) {
+  if (score <= t.trivial) {
     tier = "trivial"
     recommendedTier = "budget"
-  } else if (score <= 35) {
+  } else if (score <= t.simple) {
     tier = "simple"
     recommendedTier = "budget"
-  } else if (score <= 55) {
+  } else if (score <= t.moderate) {
     tier = "moderate"
     recommendedTier = "standard"
-  } else if (score <= 75) {
+  } else if (score <= t.complex) {
     tier = "complex"
     recommendedTier = "premium"
   } else {

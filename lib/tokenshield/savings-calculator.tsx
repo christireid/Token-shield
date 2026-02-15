@@ -18,6 +18,44 @@
 import React, { useState, useMemo } from "react"
 
 // -------------------------------------------------------
+// Estimation constants
+// -------------------------------------------------------
+
+/** Average cost reduction when routing simple requests to cheaper models */
+const ROUTER_COST_REDUCTION = 0.6
+
+/** Provider-specific prompt cache discount rates */
+const PREFIX_DISCOUNT_RATES: Record<string, number> = {
+  anthropic: 0.9,
+  google: 0.75,
+  default: 0.5,
+}
+
+/** Fraction of input tokens assumed to be in the stable system prompt prefix */
+const STABLE_PREFIX_RATIO = 0.4
+/** Estimated prompt cache hit rate */
+const PREFIX_CACHE_HIT_RATE = 0.8
+/** Input tokens share factor (not all tokens are input) */
+const INPUT_TOKEN_SHARE = 0.5
+
+/** Conversation length at which context trimming starts providing savings */
+const CONTEXT_TRIM_THRESHOLD = 8
+/** Savings factor per additional message beyond the threshold */
+const CONTEXT_FACTOR_PER_MSG = 0.015
+/** Maximum context trimming savings factor */
+const MAX_CONTEXT_FACTOR = 0.15
+
+/** Fraction of requests assumed to be accidental duplicates/spam */
+const GUARD_DUPLICATE_RATE = 0.03
+
+/** Pricing tier thresholds (monthly spend in USD) and costs */
+const PRICING_TIERS = {
+  enterprise: { minSpend: 50_000, cost: 499 },
+  team: { minSpend: 5_000, cost: 99 },
+  pro: { minSpend: 0, cost: 29 },
+} as const
+
+// -------------------------------------------------------
 // Savings estimation engine (framework-agnostic)
 // -------------------------------------------------------
 
@@ -82,30 +120,37 @@ export function estimateSavings(input: SavingsEstimateInput): SavingsEstimate {
   const cachePercent = duplicateRate * 100
 
   // Model Router: savings from routing simple requests to cheaper models
-  // Average cost reduction when downgrading: ~60% per request
-  const routerSavings = monthlySpend * simpleRequestRate * 0.6
-  const routerPercent = simpleRequestRate * 0.6 * 100
+  const routerSavings = monthlySpend * simpleRequestRate * ROUTER_COST_REDUCTION
+  const routerPercent = simpleRequestRate * ROUTER_COST_REDUCTION * 100
 
   // Prefix Optimizer: savings from provider prompt cache hits
-  // Provider discounts: OpenAI 50%, Anthropic 90%, Google 75%
-  const prefixDiscountRate = provider === "anthropic" ? 0.9 : provider === "google" ? 0.75 : 0.5
-  // Assume ~40% of input tokens are in the stable prefix, ~80% cache hit rate
+  const prefixDiscountRate = PREFIX_DISCOUNT_RATES[provider] ?? PREFIX_DISCOUNT_RATES.default
   const prefixSavings = hasSteadySystemPrompt
-    ? monthlySpend * 0.4 * prefixDiscountRate * 0.8 * 0.5
+    ? monthlySpend *
+      STABLE_PREFIX_RATIO *
+      prefixDiscountRate *
+      PREFIX_CACHE_HIT_RATE *
+      INPUT_TOKEN_SHARE
     : 0
-  const prefixPercent = hasSteadySystemPrompt ? 0.4 * prefixDiscountRate * 0.8 * 0.5 * 100 : 0
+  const prefixPercent = hasSteadySystemPrompt
+    ? STABLE_PREFIX_RATIO * prefixDiscountRate * PREFIX_CACHE_HIT_RATE * INPUT_TOKEN_SHARE * 100
+    : 0
 
   // Context Manager: savings from trimming long conversations
   // Only applies when conversations exceed typical context budgets
   const contextFactor =
-    avgConversationLength > 8 ? Math.min(0.15, (avgConversationLength - 8) * 0.015) : 0
+    avgConversationLength > CONTEXT_TRIM_THRESHOLD
+      ? Math.min(
+          MAX_CONTEXT_FACTOR,
+          (avgConversationLength - CONTEXT_TRIM_THRESHOLD) * CONTEXT_FACTOR_PER_MSG,
+        )
+      : 0
   const contextSavings = monthlySpend * contextFactor
   const contextPercent = contextFactor * 100
 
   // Request Guard: savings from preventing accidental duplicates
-  // Conservative: 3% of requests are accidental spam/duplicates
-  const guardSavings = monthlySpend * 0.03
-  const guardPercent = 3
+  const guardSavings = monthlySpend * GUARD_DUPLICATE_RATE
+  const guardPercent = GUARD_DUPLICATE_RATE * 100
 
   const totalSavings = cacheSavings + routerSavings + prefixSavings + contextSavings + guardSavings
   const savingsPercent = monthlySpend > 0 ? (totalSavings / monthlySpend) * 100 : 0
@@ -113,15 +158,15 @@ export function estimateSavings(input: SavingsEstimateInput): SavingsEstimate {
   // Recommended tier and cost
   let recommendedTier: "pro" | "team" | "enterprise"
   let tokenShieldCost: number
-  if (monthlySpend >= 50000) {
+  if (monthlySpend >= PRICING_TIERS.enterprise.minSpend) {
     recommendedTier = "enterprise"
-    tokenShieldCost = 499 // placeholder
-  } else if (monthlySpend >= 5000) {
+    tokenShieldCost = PRICING_TIERS.enterprise.cost
+  } else if (monthlySpend >= PRICING_TIERS.team.minSpend) {
     recommendedTier = "team"
-    tokenShieldCost = 99
+    tokenShieldCost = PRICING_TIERS.team.cost
   } else {
     recommendedTier = "pro"
-    tokenShieldCost = 29
+    tokenShieldCost = PRICING_TIERS.pro.cost
   }
 
   const netSavings = totalSavings - tokenShieldCost

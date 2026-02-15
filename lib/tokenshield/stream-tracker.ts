@@ -91,6 +91,10 @@ export class StreamTokenTracker {
       updateInterval: 5,
       ...config,
     }
+    // Guard against 0 or negative interval (would cause modulo to never match)
+    if (this.config.updateInterval != null && this.config.updateInterval < 1) {
+      this.config.updateInterval = 1
+    }
     this.startTime = Date.now()
     this.lastChunkTime = this.startTime
   }
