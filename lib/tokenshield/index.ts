@@ -19,6 +19,11 @@
  * 11. circuit-breaker    - Session/hourly/daily spending limits with hard-stop protection
  * 12. user-budget-manager - Per-user daily/monthly token budget assignment (Team tier)
  * 13. anomaly-detector   - Statistical outlier detection for cost and token spikes
+ * 14. prompt-compressor  - Client-side prompt compression (20-40% token reduction, zero API calls)
+ * 15. adaptive-output    - Learns actual output lengths to set tight max_tokens per request
+ * 16. delta-encoder      - Eliminates cross-turn redundancy in conversations
+ * 17. semantic-minhash   - O(1) LSH-based fuzzy cache lookup (replaces O(n) linear scan)
+ * 18. template-pool      - Pre-tokenizes static prompt template parts for instant token counts
  *
  * Plus:
  * - AI SDK Middleware    - Drop-in middleware for Vercel AI SDK + framework adapters
@@ -27,6 +32,7 @@
  * - Composable Pipeline  - Pick-and-choose middleware stages with hooks
  * - Structured Logger    - Observability with OTel-style spans
  * - Provider Adapter     - Multi-provider routing with retries and health tracking
+ * - Token Optimizer      - Unified facade combining all complementary savings features
  * - Performance Benchmarks - Hot-path benchmarking suite
  *
  * npm deps: gpt-tokenizer (BPE encoding), idb-keyval (IndexedDB persistence)
@@ -363,3 +369,51 @@ export {
   formatResults,
   type BenchmarkResult,
 } from "./benchmark"
+
+// 14. Prompt Compressor
+export {
+  compressPrompt,
+  compressMessages,
+  type CompressorConfig,
+  type CompressionResult,
+} from "./prompt-compressor"
+
+// 15. Adaptive Output Optimizer
+export {
+  AdaptiveOutputOptimizer,
+  type AdaptiveOptimizerConfig,
+  type AdaptivePrediction,
+  type OutputStats,
+} from "./adaptive-output-optimizer"
+
+// 16. Conversation Delta Encoder
+export {
+  encodeDelta,
+  analyzeRedundancy,
+  type DeltaEncoderConfig,
+  type DeltaResult,
+} from "./conversation-delta-encoder"
+
+// 17. Semantic MinHash Cache Index
+export {
+  SemanticMinHashIndex,
+  type MinHashConfig,
+  type MinHashEntry,
+  type MinHashLookupResult,
+} from "./semantic-minhash"
+
+// 18. Prompt Template Intern Pool
+export {
+  PromptTemplatePool,
+  type TemplateConfig,
+  type CompiledTemplate,
+  type TemplateRenderResult,
+} from "./prompt-template-pool"
+
+// Unified Token Optimizer (combines all complementary features)
+export {
+  TokenOptimizer,
+  createTokenOptimizer,
+  type TokenOptimizerConfig,
+  type OptimizeResult,
+} from "./token-optimizer"
