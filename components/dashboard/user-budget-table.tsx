@@ -46,7 +46,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { MoreHorizontal, Plus, RotateCcw, Trash2, ArrowUpDown, Pencil } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -126,12 +125,18 @@ function EditableLimit({ value, onSave }: { value: number; onSave: (v: number) =
   }, [editing, value])
 
   const [invalid, setInvalid] = React.useState(false)
+  const invalidTimerRef = React.useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  React.useEffect(() => {
+    return () => clearTimeout(invalidTimerRef.current)
+  }, [])
 
   const commit = () => {
     const parsed = parseFloat(draft)
     if (isNaN(parsed) || parsed < 0 || parsed > 1_000_000) {
       setInvalid(true)
-      setTimeout(() => setInvalid(false), 1000)
+      clearTimeout(invalidTimerRef.current)
+      invalidTimerRef.current = setTimeout(() => setInvalid(false), 1000)
       return
     }
     onSave(parsed)
@@ -359,6 +364,8 @@ export function UserBudgetTable() {
   const { data, updateUserBudget, removeUser, resetUserSpend } = useDashboard()
   const [sortKey, setSortKey] = React.useState<SortKey>("percentUsed")
   const [sortDir, setSortDir] = React.useState<"asc" | "desc">("desc")
+  const [confirmRemoveUserId, setConfirmRemoveUserId] = React.useState<string | null>(null)
+  const confirmRemoveUser = data.users.find((u) => u.userId === confirmRemoveUserId)
 
   const handleSort = React.useCallback(
     (key: SortKey) => {
@@ -506,32 +513,13 @@ export function UserBudgetTable() {
                         <RotateCcw className="mr-2 h-3.5 w-3.5" />
                         Reset Spend
                       </DropdownMenuItem>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <DropdownMenuItem
-                            onSelect={(e) => e.preventDefault()}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="mr-2 h-3.5 w-3.5" />
-                            Remove User
-                          </DropdownMenuItem>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Remove User</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Are you sure you want to remove {user.displayName}? This action cannot
-                              be undone.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => removeUser(user.userId)}>
-                              Remove
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                      <DropdownMenuItem
+                        onSelect={() => setConfirmRemoveUserId(user.userId)}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="mr-2 h-3.5 w-3.5" />
+                        Remove User
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
@@ -547,6 +535,35 @@ export function UserBudgetTable() {
           </TableBody>
         </Table>
       </CardContent>
+
+      {/* Lifted outside DropdownMenu to avoid focus management conflicts */}
+      <AlertDialog
+        open={!!confirmRemoveUserId}
+        onOpenChange={(open) => {
+          if (!open) setConfirmRemoveUserId(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove User</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove {confirmRemoveUser?.displayName ?? "this user"}? This
+              action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (confirmRemoveUserId) removeUser(confirmRemoveUserId)
+                setConfirmRemoveUserId(null)
+              }}
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   )
 }

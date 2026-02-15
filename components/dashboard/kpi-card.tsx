@@ -79,15 +79,14 @@ function AnimatedNumber({
 const MiniSparkline = React.memo(function MiniSparkline({
   data,
   color,
-  id,
 }: {
   data: number[]
   color: string
-  id: string
 }) {
+  const uniqueId = React.useId()
   if (data.length < 2) return null
   const chartData = data.map((v, i) => ({ i, v }))
-  const gradientId = `spark-${id}`
+  const gradientId = `${uniqueId}-spark`
   return (
     <div className="h-10 w-20">
       <ResponsiveContainer width="100%" height="100%">
@@ -206,7 +205,7 @@ export const KpiCard = React.memo(function KpiCard({
           >
             {icon}
           </div>
-          <MiniSparkline data={sparkline} color={color} id={label.replace(/\s+/g, "-")} />
+          <MiniSparkline data={sparkline} color={color} />
         </div>
       </div>
     </Card>

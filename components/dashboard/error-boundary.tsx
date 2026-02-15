@@ -11,15 +11,18 @@ interface Props {
 
 interface State {
   hasError: boolean
+  retryCount: number
 }
+
+const MAX_AUTO_RETRIES = 3
 
 export class DashboardErrorBoundary extends React.Component<Props, State> {
   constructor(props: Props) {
     super(props)
-    this.state = { hasError: false }
+    this.state = { hasError: false, retryCount: 0 }
   }
 
-  static getDerivedStateFromError(): State {
+  static getDerivedStateFromError(): Partial<State> {
     return { hasError: true }
   }
 
@@ -33,12 +36,14 @@ export class DashboardErrorBoundary extends React.Component<Props, State> {
 
   componentDidUpdate(prevProps: Props) {
     if (this.state.hasError && prevProps.children !== this.props.children) {
-      this.setState({ hasError: false })
+      if (this.state.retryCount < MAX_AUTO_RETRIES) {
+        this.setState((prev) => ({ hasError: false, retryCount: prev.retryCount + 1 }))
+      }
     }
   }
 
   private handleRetry = () => {
-    this.setState({ hasError: false })
+    this.setState({ hasError: false, retryCount: 0 })
   }
 
   render() {

@@ -254,3 +254,21 @@ describe("color constants", () => {
     }
   })
 })
+
+describe("edge cases", () => {
+  it("formatRelativeTime handles timestamp equal to Date.now()", () => {
+    const now = Date.now()
+    vi.setSystemTime(now)
+    expect(formatRelativeTime(now)).toBe("just now")
+  })
+
+  it("formatEventType handles empty string", () => {
+    expect(formatEventType("")).toBe("")
+  })
+
+  it("getModelColor handles empty string id", () => {
+    const color = getModelColor("", 0)
+    expect(typeof color).toBe("string")
+    expect(color.length).toBeGreaterThan(0)
+  })
+})

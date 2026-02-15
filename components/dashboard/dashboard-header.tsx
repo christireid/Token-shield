@@ -108,8 +108,10 @@ export function DashboardHeader() {
     const a = document.createElement("a")
     a.href = url
     a.download = `tokenshield-export-${timestamp}.${extension}`
+    document.body.appendChild(a)
     a.click()
-    URL.revokeObjectURL(url)
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
   }, [])
 
   const togglePause = useCallback(() => {

@@ -87,7 +87,8 @@ export function EventFeed() {
 
   React.useEffect(() => {
     if (!paused && scrollRef.current) {
-      scrollRef.current.scrollTop = 0
+      const viewport = scrollRef.current.querySelector("[data-radix-scroll-area-viewport]")
+      if (viewport) viewport.scrollTop = 0
     }
   }, [data.events.length, paused])
 

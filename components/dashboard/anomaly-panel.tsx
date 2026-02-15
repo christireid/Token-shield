@@ -162,7 +162,7 @@ const AnomalyRow = React.memo(function AnomalyRow({
             size="sm"
             onClick={() => onAcknowledge(anomaly.id)}
             className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-            aria-label="Acknowledge anomaly"
+            aria-label={`Acknowledge ${anomaly.type.replace(/_/g, " ")} anomaly`}
           >
             <AlertTriangle className="h-3.5 w-3.5" />
           </Button>

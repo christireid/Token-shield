@@ -23,6 +23,9 @@ function getGaugeTextClass(percent: number): string {
 const GAUGE_RADIUS = 70
 const GAUGE_CX = 90
 const GAUGE_CY = 90
+const START_ANGLE = 135
+const END_ANGLE = 405
+const TOTAL_ANGLE = END_ANGLE - START_ANGLE
 
 function polarToCartesian(angle: number) {
   const rad = ((angle - 90) * Math.PI) / 180
@@ -89,17 +92,14 @@ export function BudgetGauge() {
 
   // SVG arc gauge
   const strokeWidth = 10
-  const startAngle = 135
-  const endAngle = 405
-  const totalAngle = endAngle - startAngle
-  const fillAngle = startAngle + (totalAngle * percent) / 100
+  const fillAngle = START_ANGLE + (TOTAL_ANGLE * percent) / 100
 
   // Tick marks at 0%, 25%, 50%, 75%, 100% — all inputs are constants
   const { ticks, labelStartPos, labelEndPos } = useMemo(() => {
     const tickPercents = [0, 25, 50, 75, 100]
     const tickLength = 8
     const ticks = tickPercents.map((tp) => {
-      const angle = startAngle + (totalAngle * tp) / 100
+      const angle = START_ANGLE + (TOTAL_ANGLE * tp) / 100
       const inner = polarToCartesian(angle)
       const outerRadius = GAUGE_RADIUS + tickLength
       const rad = ((angle - 90) * Math.PI) / 180
@@ -112,8 +112,8 @@ export function BudgetGauge() {
 
     // Label positions (slightly further out than tick marks)
     const labelRadius = GAUGE_RADIUS + tickLength + 10
-    const labelStartRad = ((startAngle - 90) * Math.PI) / 180
-    const labelEndRad = ((endAngle - 90) * Math.PI) / 180
+    const labelStartRad = ((START_ANGLE - 90) * Math.PI) / 180
+    const labelEndRad = ((END_ANGLE - 90) * Math.PI) / 180
     const labelStartPos = {
       x: GAUGE_CX + labelRadius * Math.cos(labelStartRad),
       y: GAUGE_CY + labelRadius * Math.sin(labelStartRad),
@@ -226,7 +226,7 @@ export function BudgetGauge() {
 
                 {/* Background arc */}
                 <path
-                  d={describeArc(startAngle, endAngle)}
+                  d={describeArc(START_ANGLE, END_ANGLE)}
                   fill="none"
                   stroke="hsl(220, 14%, 12%)"
                   strokeWidth={strokeWidth}
@@ -235,7 +235,7 @@ export function BudgetGauge() {
                 {/* Filled arc with glow */}
                 {percent > 0 && (
                   <path
-                    d={describeArc(startAngle, fillAngle)}
+                    d={describeArc(START_ANGLE, fillAngle)}
                     fill="none"
                     stroke={gaugeColor}
                     strokeWidth={strokeWidth}

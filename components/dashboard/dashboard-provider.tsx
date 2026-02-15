@@ -96,6 +96,7 @@ export interface DashboardData {
   totalSaved: number
   savingsRate: number
   cacheHitRate: number
+  cacheHitCount: number
   totalRequests: number
   requestsBlocked: number
   avgLatencyMs: number
@@ -418,6 +419,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     totalSaved: 0,
     savingsRate: 0,
     cacheHitRate: 0,
+    cacheHitCount: 0,
     totalRequests: 0,
     requestsBlocked: 0,
     avgLatencyMs: 0,
@@ -552,6 +554,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         totalSaved: cumSaved,
         savingsRate,
         cacheHitRate,
+        cacheHitCount: cacheHits,
         totalRequests: totalReqs,
         requestsBlocked: blocked,
         avgLatencyMs: avgLatency,
@@ -671,8 +674,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           },
         ].slice(-200)
 
-        const cacheHits = (prev.cacheHitRate * prev.totalRequests) / 100 + (isCacheHit ? 1 : 0)
-        const newCacheRate = (cacheHits / totalReqs) * 100
+        const newCacheHitCount = prev.cacheHitCount + (isCacheHit ? 1 : 0)
+        const newCacheRate = (newCacheHitCount / totalReqs) * 100
         const newSavingsRate = (newCumSaved / (newCumSpent + newCumSaved)) * 100
         const newLatency = prev.avgLatencyMs * 0.95 + rand(100, 400) * 0.05
 
@@ -790,6 +793,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           totalSaved: newCumSaved,
           savingsRate: newSavingsRate,
           cacheHitRate: newCacheRate,
+          cacheHitCount: newCacheHitCount,
           totalRequests: totalReqs,
           requestsBlocked: newBlocked,
           avgLatencyMs: newLatency,
@@ -939,9 +943,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     [
       data,
       mode,
-      setMode,
       timeRange,
-      setTimeRange,
       updateUserBudget,
       addUser,
       removeUser,
@@ -949,7 +951,6 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       dismissAlert,
       acknowledgeAnomaly,
       isPaused,
-      setIsPaused,
     ],
   )
 

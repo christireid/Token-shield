@@ -29,8 +29,16 @@ const SectionHeader = React.memo(function SectionHeader({ title }: { title: stri
   )
 })
 
-const HIDDEN_STYLE: React.CSSProperties = { opacity: 0, transform: "translateY(12px)" }
-const VISIBLE_STYLE: React.CSSProperties = { opacity: 1, transform: "translateY(0)" }
+const HIDDEN_STYLE: React.CSSProperties = {
+  opacity: 0,
+  transform: "translateY(12px)",
+  willChange: "transform, opacity",
+}
+const VISIBLE_STYLE: React.CSSProperties = {
+  opacity: 1,
+  transform: "translateY(0)",
+  willChange: "auto",
+}
 
 function RevealSection({
   order,
@@ -65,6 +73,14 @@ export function DashboardShell() {
         .dashboard-dot-grid {
           background-image: radial-gradient(circle, hsl(215 20% 25% / 0.3) 1px, transparent 1px);
           background-size: 24px 24px;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .dashboard-dot-grid *,
+          .dashboard-dot-grid *::before,
+          .dashboard-dot-grid *::after {
+            transition-duration: 0.01ms !important;
+            animation-duration: 0.01ms !important;
+          }
         }
       `}</style>
 

@@ -179,7 +179,7 @@ export function ModelUsageChart() {
                   innerRadius={55}
                   outerRadius={80}
                   strokeWidth={2}
-                  stroke="hsl(220, 18%, 7%)"
+                  stroke="hsl(var(--card))"
                   isAnimationActive={false}
                   filter={`url(#${donutGlowId})`}
                 >

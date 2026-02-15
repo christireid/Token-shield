@@ -30,6 +30,8 @@ const LEGEND_NOSHIELD_STYLE: React.CSSProperties = {
   borderColor: "hsl(215, 15%, 35%)",
 }
 
+const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" })
+
 export function SavingsTimelineChart() {
   const { data } = useDashboard()
   const filterId = React.useId()
@@ -41,7 +43,7 @@ export function SavingsTimelineChart() {
   const chartData = useMemo(
     () =>
       data.timeSeries.map((p) => ({
-        time: new Date(p.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: timeFormatter.format(p.timestamp),
         cumulativeSaved: Number(p.cumulativeSaved.toFixed(4)),
         cumulativeSpent: Number(p.cumulativeSpent.toFixed(4)),
         wouldHaveSpent: Number((p.cumulativeSpent + p.cumulativeSaved).toFixed(4)),
