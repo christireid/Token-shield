@@ -31,6 +31,12 @@ export class DashboardErrorBoundary extends React.Component<Props, State> {
     )
   }
 
+  componentDidUpdate(prevProps: Props) {
+    if (this.state.hasError && prevProps.children !== this.props.children) {
+      this.setState({ hasError: false })
+    }
+  }
+
   private handleRetry = () => {
     this.setState({ hasError: false })
   }

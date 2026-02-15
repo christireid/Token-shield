@@ -143,6 +143,12 @@ export interface DashboardData {
       day: number | null
       month: number | null
     }
+    limits: {
+      session: number
+      hour: number
+      day: number
+      month: number
+    }
   }
 
   users: UserBudget[]
@@ -434,6 +440,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       limit: 50,
       percentUsed: 0,
       remaining: { session: 50, hour: 10, day: 50, month: 500 },
+      limits: { session: 50, hour: 10, day: 50, month: 500 },
     },
     users: INITIAL_USERS.map((u) => ({ ...u })),
     anomalies: [],
@@ -579,6 +586,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
             day: Math.max(0, 50 - cumSpent),
             month: Math.max(0, 500 - cumSpent),
           },
+          limits: { session: 50, hour: 10, day: 50, month: 500 },
         },
         users: updatedUsers,
         anomalies: generateInitialAnomalies(eventIdRef),
@@ -816,6 +824,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
               day: Math.max(0, 50 - newCumSpent),
               month: Math.max(0, 500 - newCumSpent),
             },
+            limits: { session: 50, hour: 10, day: 50, month: 500 },
           },
           users: newUsers,
           anomalies: newAnomalies,

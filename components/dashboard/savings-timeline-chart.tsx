@@ -32,6 +32,11 @@ const LEGEND_NOSHIELD_STYLE: React.CSSProperties = {
 
 export function SavingsTimelineChart() {
   const { data } = useDashboard()
+  const filterId = React.useId()
+  const gradSavedId = `${filterId}-gradSaved`
+  const gradSpentId = `${filterId}-gradSpent`
+  const gradSavingsGapId = `${filterId}-gradSavingsGap`
+  const glowSavedId = `${filterId}-glowSaved`
 
   const chartData = useMemo(
     () =>
@@ -96,23 +101,23 @@ export function SavingsTimelineChart() {
           <AreaChart data={chartData} margin={CHART_MARGINS}>
             <defs>
               {/* Vivid green gradient for the savings area */}
-              <linearGradient id="gradSaved" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id={gradSavedId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="hsl(152, 60%, 52%)" stopOpacity={0.45} />
                 <stop offset="50%" stopColor="hsl(152, 60%, 52%)" stopOpacity={0.15} />
                 <stop offset="100%" stopColor="hsl(152, 60%, 52%)" stopOpacity={0.02} />
               </linearGradient>
               {/* Neutral gradient for actual spend */}
-              <linearGradient id="gradSpent" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id={gradSpentId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="hsl(215, 15%, 45%)" stopOpacity={0.2} />
                 <stop offset="100%" stopColor="hsl(215, 15%, 45%)" stopOpacity={0.02} />
               </linearGradient>
               {/* Savings gap gradient (green, between wouldHaveSpent and cumulativeSpent) */}
-              <linearGradient id="gradSavingsGap" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id={gradSavingsGapId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="hsl(152, 70%, 55%)" stopOpacity={0.18} />
                 <stop offset="100%" stopColor="hsl(152, 70%, 55%)" stopOpacity={0.03} />
               </linearGradient>
               {/* Glow filter for the savings line */}
-              <filter id="glowSaved" x="-20%" y="-20%" width="140%" height="140%">
+              <filter id={glowSavedId} x="-20%" y="-20%" width="140%" height="140%">
                 <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
                 <feFlood floodColor="hsl(152, 60%, 52%)" floodOpacity="0.5" result="color" />
                 <feComposite in="color" in2="blur" operator="in" result="glow" />
@@ -164,7 +169,7 @@ export function SavingsTimelineChart() {
               type="monotone"
               dataKey="wouldHaveSpent"
               stroke="none"
-              fill="url(#gradSavingsGap)"
+              fill={`url(#${gradSavingsGapId})`}
               fillOpacity={1}
               isAnimationActive={false}
             />
@@ -184,7 +189,7 @@ export function SavingsTimelineChart() {
               dataKey="cumulativeSpent"
               stroke="hsl(215, 15%, 45%)"
               strokeWidth={1.5}
-              fill="url(#gradSpent)"
+              fill={`url(#${gradSpentId})`}
               isAnimationActive={false}
             />
             {/* Savings area with glow */}
@@ -193,8 +198,8 @@ export function SavingsTimelineChart() {
               dataKey="cumulativeSaved"
               stroke="hsl(152, 60%, 52%)"
               strokeWidth={2.5}
-              fill="url(#gradSaved)"
-              filter="url(#glowSaved)"
+              fill={`url(#${gradSavedId})`}
+              filter={`url(#${glowSavedId})`}
               isAnimationActive={false}
             />
           </AreaChart>

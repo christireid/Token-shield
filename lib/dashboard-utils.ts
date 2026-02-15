@@ -161,13 +161,13 @@ export const EVENT_BADGE_COLORS: Record<EventType, string> = {
 /*  Severity / anomaly colors                                          */
 /* ------------------------------------------------------------------ */
 
-export const SEVERITY_DOT_COLOR: Record<string, string> = {
+export const SEVERITY_DOT_COLOR: Record<"high" | "medium" | "low", string> = {
   high: "bg-[hsl(0,72%,51%)]",
   medium: "bg-[hsl(38,92%,50%)]",
   low: "bg-[hsl(152,60%,52%)]",
 }
 
-export const SEVERITY_DOT_ANIMATION: Record<string, string> = {
+export const SEVERITY_DOT_ANIMATION: Record<"high" | "medium" | "low", string> = {
   high: "animate-pulse",
   medium: "animate-pulse [animation-duration:2.5s]",
   low: "",
@@ -195,7 +195,7 @@ export const ANOMALY_TYPE_LABELS: Record<string, string> = {
 /* ------------------------------------------------------------------ */
 
 export const ALERT_SEVERITY_CONFIG: Record<
-  string,
+  "info" | "warning" | "critical",
   {
     containerClass: string
     iconClass: string
@@ -227,19 +227,19 @@ export const ALERT_SEVERITY_CONFIG: Record<
 /*  Provider health colors                                             */
 /* ------------------------------------------------------------------ */
 
-export const STATUS_DOT_CLASS: Record<string, string> = {
+export const STATUS_DOT_CLASS: Record<"healthy" | "degraded" | "down", string> = {
   healthy: "bg-[hsl(152,60%,52%)] ring-2 ring-[hsl(152,60%,52%)]/20",
   degraded: "bg-[hsl(38,92%,50%)] ring-2 ring-[hsl(38,92%,50%)]/20",
   down: "bg-[hsl(0,72%,51%)] ring-2 ring-[hsl(0,72%,51%)]/20",
 }
 
-export const STATUS_BADGE_CLASS: Record<string, string> = {
+export const STATUS_BADGE_CLASS: Record<"healthy" | "degraded" | "down", string> = {
   healthy: "border-primary/30 bg-primary/10 text-primary",
   degraded: "border-[hsl(38,92%,50%)]/30 bg-[hsl(38,92%,50%)]/10 text-[hsl(38,92%,65%)]",
   down: "border-[hsl(0,72%,51%)]/30 bg-[hsl(0,72%,51%)]/10 text-[hsl(0,72%,65%)]",
 }
 
-export const STATUS_LABEL: Record<string, string> = {
+export const STATUS_LABEL: Record<"healthy" | "degraded" | "down", string> = {
   healthy: "Healthy",
   degraded: "Degraded",
   down: "Down",

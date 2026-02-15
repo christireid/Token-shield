@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo } from "react"
+import { useCallback, useMemo, useRef } from "react"
 import { useDashboard, type TimeRange } from "./dashboard-provider"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -74,42 +74,43 @@ export function DashboardHeader() {
     return "text-muted-foreground border-border/30 bg-secondary/30"
   }, [data.savingsRate])
 
-  const handleExport = useCallback(
-    (format: "json" | "csv") => {
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-")
-      let content: string
-      let mimeType: string
-      let extension: string
+  const dataRef = useRef(data)
+  dataRef.current = data
 
-      if (format === "json") {
-        content = JSON.stringify(data, null, 2)
-        mimeType = "application/json"
-        extension = "json"
-      } else {
-        const rows = data.timeSeries.map((p) =>
-          [
-            new Date(p.timestamp).toISOString(),
-            p.spent.toFixed(6),
-            p.saved.toFixed(6),
-            p.cumulativeSpent.toFixed(6),
-            p.cumulativeSaved.toFixed(6),
-          ].join(","),
-        )
-        content = ["timestamp,spent,saved,cumulative_spent,cumulative_saved", ...rows].join("\n")
-        mimeType = "text/csv"
-        extension = "csv"
-      }
+  const handleExport = useCallback((format: "json" | "csv") => {
+    if (typeof document === "undefined") return
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-")
+    let content: string
+    let mimeType: string
+    let extension: string
 
-      const blob = new Blob([content], { type: mimeType })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `tokenshield-export-${timestamp}.${extension}`
-      a.click()
-      URL.revokeObjectURL(url)
-    },
-    [data],
-  )
+    if (format === "json") {
+      content = JSON.stringify(dataRef.current, null, 2)
+      mimeType = "application/json"
+      extension = "json"
+    } else {
+      const rows = dataRef.current.timeSeries.map((p) =>
+        [
+          new Date(p.timestamp).toISOString(),
+          p.spent.toFixed(6),
+          p.saved.toFixed(6),
+          p.cumulativeSpent.toFixed(6),
+          p.cumulativeSaved.toFixed(6),
+        ].join(","),
+      )
+      content = ["timestamp,spent,saved,cumulative_spent,cumulative_saved", ...rows].join("\n")
+      mimeType = "text/csv"
+      extension = "csv"
+    }
+
+    const blob = new Blob([content], { type: mimeType })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `tokenshield-export-${timestamp}.${extension}`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [])
 
   const togglePause = useCallback(() => {
     setIsPaused((prev: boolean) => !prev)

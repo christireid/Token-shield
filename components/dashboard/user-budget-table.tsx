@@ -125,11 +125,16 @@ function EditableLimit({ value, onSave }: { value: number; onSave: (v: number) =
     }
   }, [editing, value])
 
+  const [invalid, setInvalid] = React.useState(false)
+
   const commit = () => {
     const parsed = parseFloat(draft)
-    if (!isNaN(parsed) && parsed >= 0 && parsed <= 1_000_000) {
-      onSave(parsed)
+    if (isNaN(parsed) || parsed < 0 || parsed > 1_000_000) {
+      setInvalid(true)
+      setTimeout(() => setInvalid(false), 1000)
+      return
     }
+    onSave(parsed)
     setEditing(false)
   }
 
@@ -145,7 +150,10 @@ function EditableLimit({ value, onSave }: { value: number; onSave: (v: number) =
           if (e.key === "Enter") commit()
           if (e.key === "Escape") setEditing(false)
         }}
-        className="h-6 w-16 border-border/50 bg-secondary/50 px-1 font-mono text-xs"
+        className={cn(
+          "h-6 w-16 border-border/50 bg-secondary/50 px-1 font-mono text-xs",
+          invalid && "border-destructive",
+        )}
         min={0}
       />
     )

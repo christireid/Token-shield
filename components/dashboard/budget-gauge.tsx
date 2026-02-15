@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, useMemo } from "react"
+import { memo, useId, useMemo } from "react"
 import { useDashboard } from "./dashboard-provider"
 import { useReducedMotion } from "@/hooks/use-reduced-motion"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -81,6 +81,8 @@ export function BudgetGauge() {
   const { data } = useDashboard()
   const { budget } = data
   const reducedMotion = useReducedMotion()
+  const filterId = useId()
+  const gaugeGlowId = `${filterId}-gauge-glow`
 
   const percent = Math.min(100, budget.percentUsed)
   const gaugeColor = getGaugeColor(percent)
@@ -178,7 +180,7 @@ export function BudgetGauge() {
               >
                 {/* SVG glow filter */}
                 <defs>
-                  <filter id="gauge-glow" x="-50%" y="-50%" width="200%" height="200%">
+                  <filter id={gaugeGlowId} x="-50%" y="-50%" width="200%" height="200%">
                     <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
                     <feMerge>
                       <feMergeNode in="blur" />
@@ -238,7 +240,7 @@ export function BudgetGauge() {
                     stroke={gaugeColor}
                     strokeWidth={strokeWidth}
                     strokeLinecap="round"
-                    filter="url(#gauge-glow)"
+                    filter={`url(#${gaugeGlowId})`}
                     className="transition-all duration-700"
                   />
                 )}
@@ -261,10 +263,14 @@ export function BudgetGauge() {
 
             {/* Mini progress bars */}
             <div className="flex w-full flex-col gap-3">
-              <MiniBar label="Session" value={budget.remaining.session} max={50} />
-              <MiniBar label="Hourly" value={budget.remaining.hour} max={10} />
-              <MiniBar label="Daily" value={budget.remaining.day} max={50} />
-              <MiniBar label="Monthly" value={budget.remaining.month} max={500} />
+              <MiniBar
+                label="Session"
+                value={budget.remaining.session}
+                max={budget.limits.session}
+              />
+              <MiniBar label="Hourly" value={budget.remaining.hour} max={budget.limits.hour} />
+              <MiniBar label="Daily" value={budget.remaining.day} max={budget.limits.day} />
+              <MiniBar label="Monthly" value={budget.remaining.month} max={budget.limits.month} />
             </div>
           </div>
         </CardContent>

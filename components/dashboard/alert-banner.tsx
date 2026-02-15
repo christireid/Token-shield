@@ -56,7 +56,6 @@ const AlertRow = React.memo(function AlertRow({
   return (
     <div
       role={isCritical ? "alert" : undefined}
-      aria-live={isCritical ? "assertive" : "polite"}
       className={cn(
         "flex items-center gap-3 rounded-md border px-3 py-2",
         config.containerClass,
@@ -114,6 +113,7 @@ export function AlertBanner() {
   return (
     <section
       aria-label="Active alerts"
+      aria-live="polite"
       className={cn(
         "flex flex-col gap-1.5",
         !reducedMotion && "animate-in fade-in-0 slide-in-from-top-2 duration-300",

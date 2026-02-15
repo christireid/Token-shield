@@ -229,7 +229,7 @@ describe("color constants", () => {
   })
 
   it("alert severity config covers all severities", () => {
-    for (const s of ["info", "warning", "critical"]) {
+    for (const s of ["info", "warning", "critical"] as const) {
       expect(ALERT_SEVERITY_CONFIG).toHaveProperty(s)
       expect(ALERT_SEVERITY_CONFIG[s]).toHaveProperty("containerClass")
       expect(ALERT_SEVERITY_CONFIG[s]).toHaveProperty("iconClass")

@@ -26,30 +26,29 @@ const CENTER_LABEL_STYLE: React.CSSProperties = {
 
 const ModelTableRow = React.memo(function ModelTableRow({
   entry,
-  hoveredRow,
-  onMouseEnter,
-  onMouseLeave,
+  isHovered,
+  onHover,
 }: {
   entry: { id: string; color: string; calls: number; cost: number; tokens: number }
-  hoveredRow: string | null
-  onMouseEnter: () => void
-  onMouseLeave: () => void
+  isHovered: boolean
+  onHover: (id: string | null) => void
 }) {
+  const handleMouseEnter = React.useCallback(() => onHover(entry.id), [onHover, entry.id])
+  const handleMouseLeave = React.useCallback(() => onHover(null), [onHover])
+
   return (
     <TableRow
       className="border-border/20 cursor-default transition-all duration-200"
       style={{
-        backgroundColor:
-          hoveredRow === entry.id
-            ? `color-mix(in srgb, ${entry.color} 8%, transparent)`
-            : undefined,
-        boxShadow:
-          hoveredRow === entry.id
-            ? `inset 2px 0 0 ${entry.color}, 0 0 12px ${entry.color}15`
-            : undefined,
+        backgroundColor: isHovered
+          ? `color-mix(in srgb, ${entry.color} 8%, transparent)`
+          : undefined,
+        boxShadow: isHovered
+          ? `inset 2px 0 0 ${entry.color}, 0 0 12px ${entry.color}15`
+          : undefined,
       }}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       <TableCell className="py-2">
         <div className="flex items-center gap-2">
@@ -57,7 +56,7 @@ const ModelTableRow = React.memo(function ModelTableRow({
             className="h-2.5 w-2.5 rounded-full transition-shadow duration-200"
             style={{
               backgroundColor: entry.color,
-              boxShadow: hoveredRow === entry.id ? `0 0 8px 2px ${entry.color}60` : "none",
+              boxShadow: isHovered ? `0 0 8px 2px ${entry.color}60` : "none",
             }}
           />
           <span className="font-mono text-xs text-foreground">{entry.id}</span>
@@ -78,6 +77,8 @@ const ModelTableRow = React.memo(function ModelTableRow({
 
 export function ModelUsageChart() {
   const { data } = useDashboard()
+  const filterId = React.useId()
+  const donutGlowId = `${filterId}-donut-glow`
   const [sortKey, setSortKey] = React.useState<"cost" | "calls" | "tokens">("cost")
   const [sortDir, setSortDir] = React.useState<"asc" | "desc">("desc")
   const [hoveredRow, setHoveredRow] = React.useState<string | null>(null)
@@ -134,6 +135,8 @@ export function ModelUsageChart() {
     [sortKey],
   )
 
+  const handleHover = React.useCallback((id: string | null) => setHoveredRow(id), [])
+
   const chartConfig = useMemo(
     () => Object.fromEntries(entries.map((e) => [e.id, { label: e.id, color: e.color }])),
     [entries],
@@ -159,7 +162,7 @@ export function ModelUsageChart() {
               <PieChart>
                 <defs>
                   {/* Glow filter for donut segments */}
-                  <filter id="donut-glow" x="-30%" y="-30%" width="160%" height="160%">
+                  <filter id={donutGlowId} x="-30%" y="-30%" width="160%" height="160%">
                     <feGaussianBlur stdDeviation="3" result="coloredBlur" />
                     <feMerge>
                       <feMergeNode in="coloredBlur" />
@@ -178,7 +181,7 @@ export function ModelUsageChart() {
                   strokeWidth={2}
                   stroke="hsl(220, 18%, 7%)"
                   isAnimationActive={false}
-                  filter="url(#donut-glow)"
+                  filter={`url(#${donutGlowId})`}
                 >
                   {pieData.map((entry) => (
                     <Cell key={entry.name} fill={entry.fill} />
@@ -322,9 +325,8 @@ export function ModelUsageChart() {
                   <ModelTableRow
                     key={entry.id}
                     entry={entry}
-                    hoveredRow={hoveredRow}
-                    onMouseEnter={() => setHoveredRow(entry.id)}
-                    onMouseLeave={() => setHoveredRow(null)}
+                    isHovered={hoveredRow === entry.id}
+                    onHover={handleHover}
                   />
                 ))}
               </TableBody>

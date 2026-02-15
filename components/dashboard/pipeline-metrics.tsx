@@ -106,6 +106,17 @@ const StageRow = React.memo(function StageRow({
 }) {
   const color = STAGE_COLORS[metric.stage] ?? "hsl(215, 15%, 45%)"
 
+  const rowStyle = React.useMemo(() => ({ ["--stage-color" as string]: color }), [color])
+  const handleBorderEnter = React.useCallback(
+    (e: React.SyntheticEvent<HTMLDivElement>) => {
+      e.currentTarget.style.borderLeftColor = color
+    },
+    [color],
+  )
+  const handleBorderLeave = React.useCallback((e: React.SyntheticEvent<HTMLDivElement>) => {
+    e.currentTarget.style.borderLeftColor = "transparent"
+  }, [])
+
   return (
     <div
       className={cn(
@@ -113,12 +124,12 @@ const StageRow = React.memo(function StageRow({
         "hover:bg-secondary/30",
         index % 2 === 1 && "bg-secondary/10",
       )}
-      style={{ ["--stage-color" as string]: color }}
+      style={rowStyle}
       tabIndex={0}
-      onMouseEnter={(e) => (e.currentTarget.style.borderLeftColor = color)}
-      onMouseLeave={(e) => (e.currentTarget.style.borderLeftColor = "transparent")}
-      onFocus={(e) => (e.currentTarget.style.borderLeftColor = color)}
-      onBlur={(e) => (e.currentTarget.style.borderLeftColor = "transparent")}
+      onMouseEnter={handleBorderEnter}
+      onMouseLeave={handleBorderLeave}
+      onFocus={handleBorderEnter}
+      onBlur={handleBorderLeave}
     >
       {/* Stage name with color dot */}
       <div className="flex items-center gap-2 min-w-0">

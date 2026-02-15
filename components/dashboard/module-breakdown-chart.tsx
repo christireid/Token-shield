@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useId, useMemo } from "react"
 import { useDashboard } from "./dashboard-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
@@ -14,6 +14,8 @@ const chartConfig = Object.fromEntries(
 
 export function ModuleBreakdownChart() {
   const { data } = useDashboard()
+  const filterId = useId()
+  const barGlowId = `${filterId}-bar-glow`
 
   const { total, chartData } = useMemo(() => {
     const t = Object.values(data.byModule).reduce((a, b) => a + b, 0)
@@ -54,13 +56,20 @@ export function ModuleBreakdownChart() {
             <defs>
               {/* Gradient fills for each module */}
               {Object.entries(MODULE_COLORS).map(([key, color]) => (
-                <linearGradient key={key} id={`gradient-${key}`} x1="0" y1="0" x2="1" y2="0">
+                <linearGradient
+                  key={key}
+                  id={`${filterId}-gradient-${key}`}
+                  x1="0"
+                  y1="0"
+                  x2="1"
+                  y2="0"
+                >
                   <stop offset="0%" stopColor={color} stopOpacity={1} />
                   <stop offset="100%" stopColor={color} stopOpacity={0.6} />
                 </linearGradient>
               ))}
               {/* Soft glow filter for bars */}
-              <filter id="bar-glow" x="-20%" y="-50%" width="140%" height="200%">
+              <filter id={barGlowId} x="-20%" y="-50%" width="140%" height="200%">
                 <feGaussianBlur stdDeviation="3" result="coloredBlur" />
                 <feMerge>
                   <feMergeNode in="coloredBlur" />
@@ -101,9 +110,14 @@ export function ModuleBreakdownChart() {
                 />
               }
             />
-            <Bar dataKey="savings" radius={[0, 4, 4, 0]} maxBarSize={28} filter="url(#bar-glow)">
+            <Bar
+              dataKey="savings"
+              radius={[0, 4, 4, 0]}
+              maxBarSize={28}
+              filter={`url(#${barGlowId})`}
+            >
               {chartData.map((entry) => (
-                <Cell key={entry.key} fill={`url(#gradient-${entry.key})`} />
+                <Cell key={entry.key} fill={`url(#${filterId}-gradient-${entry.key})`} />
               ))}
             </Bar>
           </BarChart>
