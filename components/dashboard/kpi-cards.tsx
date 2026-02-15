@@ -12,6 +12,8 @@ interface KpiCardProps {
   sparkline: number[]
   color: string
   accentClass: string
+  /** Tailwind gradient class for the card's subtle accent background */
+  gradientClass: string
   icon: React.ReactNode
   delta: KpiDelta
   /** When true, an "up" direction is favorable (green). When false, "up" is unfavorable (red). */
@@ -22,13 +24,13 @@ function MiniSparkline({ data, color }: { data: number[]; color: string }) {
   if (data.length < 2) return null
   const chartData = data.map((v, i) => ({ i, v }))
   return (
-    <div className="h-8 w-16">
+    <div className="h-10 w-20">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={chartData} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id={`spark-${color.replace("#", "")}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity={0.4} />
-              <stop offset="100%" stopColor={color} stopOpacity={0} />
+              <stop offset="0%" stopColor={color} stopOpacity={0.6} />
+              <stop offset="100%" stopColor={color} stopOpacity={0.05} />
             </linearGradient>
           </defs>
           <Area
@@ -45,7 +47,7 @@ function MiniSparkline({ data, color }: { data: number[]; color: string }) {
   )
 }
 
-function KpiCard({ label, value, sparkline, color, accentClass, icon, delta, upIsGood }: KpiCardProps) {
+function KpiCard({ label, value, sparkline, color, accentClass, gradientClass, icon, delta, upIsGood }: KpiCardProps) {
   const isFavorable =
     delta.direction === "flat"
       ? null
@@ -61,7 +63,7 @@ function KpiCard({ label, value, sparkline, color, accentClass, icon, delta, upI
         : "text-red-500"
 
   return (
-    <Card className="group relative overflow-hidden border-border/40 bg-card/50 p-4 transition-colors hover:border-border/80">
+    <Card className={cn("group relative overflow-hidden border-border/40 p-4 transition-all duration-300 hover:translate-y-[-2px] hover:border-border/80 hover:shadow-md", gradientClass)}>
       <div className={cn("absolute left-0 top-0 h-full w-0.5", accentClass)} />
       <div className="flex items-start justify-between">
         <div className="flex flex-col gap-1">
@@ -71,7 +73,17 @@ function KpiCard({ label, value, sparkline, color, accentClass, icon, delta, upI
           </span>
           {delta.direction !== "flat" && (
             <div className="flex items-center gap-1">
-              <div className={cn("flex items-center gap-0.5 text-xs font-medium", trendColor)}>
+              <div
+                className={cn(
+                  "flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-medium",
+                  trendColor,
+                  isFavorable === null
+                    ? ""
+                    : isFavorable
+                      ? "bg-emerald-500/10"
+                      : "bg-red-500/10",
+                )}
+              >
                 {delta.direction === "up" ? (
                   <TrendingUp className="h-3 w-3" />
                 ) : (

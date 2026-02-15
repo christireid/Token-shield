@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { AlertTriangle, Check, Activity, ShieldAlert } from "lucide-react"
+import { AlertTriangle, Check, Activity, ShieldAlert, ShieldCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 /* ------------------------------------------------------------------ */
@@ -19,10 +19,10 @@ const SEVERITY_DOT_COLOR: Record<AnomalyRecord["severity"], string> = {
   low: "bg-[hsl(152,60%,52%)]",
 }
 
-const SEVERITY_BADGE_COLOR: Record<AnomalyRecord["severity"], string> = {
-  high: "border-[hsl(0,72%,51%)]/30 bg-[hsl(0,72%,51%)]/10 text-[hsl(0,72%,65%)]",
-  medium: "border-[hsl(38,92%,50%)]/30 bg-[hsl(38,92%,50%)]/10 text-[hsl(38,92%,65%)]",
-  low: "border-[hsl(152,60%,52%)]/30 bg-[hsl(152,60%,52%)]/10 text-[hsl(152,60%,65%)]",
+const SEVERITY_DOT_ANIMATION: Record<AnomalyRecord["severity"], string> = {
+  high: "animate-pulse",
+  medium: "animate-pulse [animation-duration:2.5s]",
+  low: "",
 }
 
 const TYPE_BADGE_COLOR: Record<AnomalyRecord["type"], string> = {
@@ -95,17 +95,17 @@ function SummaryStats({ anomalies }: { anomalies: AnomalyRecord[] }) {
       <div className="h-3 w-px bg-border/40" />
 
       <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 rounded-md bg-[hsl(0,72%,51%)]/5 px-1.5 py-0.5">
           <div className="h-2 w-2 rounded-full bg-[hsl(0,72%,51%)]" />
           <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{high}</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 rounded-md bg-[hsl(38,92%,50%)]/5 px-1.5 py-0.5">
           <div className="h-2 w-2 rounded-full bg-[hsl(38,92%,50%)]" />
           <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
             {medium}
           </span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 rounded-md bg-[hsl(152,60%,52%)]/5 px-1.5 py-0.5">
           <div className="h-2 w-2 rounded-full bg-[hsl(152,60%,52%)]" />
           <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{low}</span>
         </div>
@@ -131,12 +131,18 @@ function AnomalyRow({
         "flex items-start gap-3 rounded-md px-2 py-2 transition-colors hover:bg-secondary/30",
         !anomaly.acknowledged &&
           anomaly.severity === "high" &&
-          "bg-[hsl(0,72%,51%)]/5",
+          "bg-[hsl(0,72%,51%)]/5 border-l-2 border-l-[hsl(0,72%,51%)]",
       )}
     >
       {/* Severity dot */}
       <div className="flex h-5 items-center">
-        <div className={cn("h-2 w-2 rounded-full", SEVERITY_DOT_COLOR[anomaly.severity])} />
+        <div
+          className={cn(
+            "h-2 w-2 rounded-full",
+            SEVERITY_DOT_COLOR[anomaly.severity],
+            !anomaly.acknowledged && SEVERITY_DOT_ANIMATION[anomaly.severity],
+          )}
+        />
       </div>
 
       {/* Content */}
@@ -226,8 +232,11 @@ export function AnomalyPanel() {
               />
             ))}
             {displayAnomalies.length === 0 && (
-              <div className="flex h-32 items-center justify-center text-xs text-muted-foreground">
-                No anomalies detected
+              <div className="flex h-32 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border/40 bg-secondary/10">
+                <ShieldCheck className="h-6 w-6 text-[hsl(152,60%,52%)]/60" />
+                <span className="text-xs font-medium text-muted-foreground">
+                  All clear &mdash; no anomalies detected
+                </span>
               </div>
             )}
           </div>

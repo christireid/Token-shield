@@ -46,22 +46,27 @@ function PipelineBar({ metrics }: { metrics: PipelineStageMetric[] }) {
           {totalDuration.toFixed(1)}ms total
         </span>
       </div>
-      <div className="flex h-3 w-full overflow-hidden rounded-full bg-secondary/50">
-        {metrics.map((m) => {
-          const pct = (m.avgDurationMs / totalDuration) * 100
-          if (pct < 0.5) return null
-          return (
-            <div
-              key={m.stage}
-              className="h-full transition-all duration-500"
-              style={{
-                width: `${pct}%`,
-                backgroundColor: STAGE_COLORS[m.stage] ?? "hsl(215, 15%, 45%)",
-              }}
-              title={`${m.stage}: ${m.avgDurationMs.toFixed(1)}ms (${pct.toFixed(1)}%)`}
-            />
-          )
-        })}
+      <div className="flex h-4 w-full gap-px overflow-hidden rounded-full bg-secondary/50">
+        {metrics
+          .filter((m) => (m.avgDurationMs / totalDuration) * 100 >= 0.5)
+          .map((m, idx, arr) => {
+            const pct = (m.avgDurationMs / totalDuration) * 100
+            return (
+              <div
+                key={m.stage}
+                className={cn(
+                  "h-full transition-all duration-500",
+                  idx === 0 && "rounded-l-full",
+                  idx === arr.length - 1 && "rounded-r-full",
+                )}
+                style={{
+                  width: `${pct}%`,
+                  backgroundColor: STAGE_COLORS[m.stage] ?? "hsl(215, 15%, 45%)",
+                }}
+                title={`${m.stage}: ${m.avgDurationMs.toFixed(1)}ms (${pct.toFixed(1)}%)`}
+              />
+            )
+          })}
       </div>
 
       {/* Inline legend under the bar */}
@@ -92,16 +97,33 @@ function PipelineBar({ metrics }: { metrics: PipelineStageMetric[] }) {
 /*  Stage row                                                          */
 /* ------------------------------------------------------------------ */
 
-function StageRow({ metric }: { metric: PipelineStageMetric }) {
+function StageRow({ metric, isTopSaver, index }: { metric: PipelineStageMetric; isTopSaver: boolean; index: number }) {
   const color = STAGE_COLORS[metric.stage] ?? "hsl(215, 15%, 45%)"
 
   return (
-    <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] items-center gap-x-4 rounded-md px-2 py-1.5 transition-colors hover:bg-secondary/30">
+    <div
+      className={cn(
+        "group grid grid-cols-[1fr_auto_auto_auto_auto_auto] items-center gap-x-4 rounded-md border-l-2 border-l-transparent px-2 py-1.5 transition-all",
+        "hover:bg-secondary/30",
+        index % 2 === 1 && "bg-secondary/10",
+      )}
+      style={{ ["--stage-color" as string]: color }}
+      onMouseEnter={(e) => e.currentTarget.style.borderLeftColor = color}
+      onMouseLeave={(e) => e.currentTarget.style.borderLeftColor = "transparent"}
+    >
       {/* Stage name with color dot */}
       <div className="flex items-center gap-2 min-w-0">
         <div
-          className="h-2 w-2 shrink-0 rounded-full"
-          style={{ backgroundColor: color }}
+          className={cn(
+            "h-2 w-2 shrink-0 rounded-full",
+            isTopSaver && "animate-[pulse-glow_2s_ease-in-out_infinite]",
+          )}
+          style={{
+            backgroundColor: color,
+            ...(isTopSaver
+              ? { boxShadow: `0 0 6px 2px ${color}` }
+              : {}),
+          }}
         />
         <span className="truncate text-xs font-medium text-foreground">
           {metric.stage}
@@ -210,8 +232,13 @@ export function PipelineMetrics() {
 
           {/* Stage rows */}
           <div className="flex flex-col gap-0.5">
-            {metrics.map((m) => (
-              <StageRow key={m.stage} metric={m} />
+            {metrics.map((m, idx) => (
+              <StageRow
+                key={m.stage}
+                metric={m}
+                isTopSaver={m.stage === topSaverStage}
+                index={idx}
+              />
             ))}
           </div>
 

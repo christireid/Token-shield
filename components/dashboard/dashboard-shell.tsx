@@ -55,25 +55,23 @@ export function DashboardShell() {
               </section>
             </div>
 
-            {/* Two-column: Event feed + Budget gauge */}
-            <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
+            {/* Three-column: Event feed + Anomaly detection + Budget gauge */}
+            <div className="grid gap-6 lg:grid-cols-[1fr_1fr_380px]">
               <section aria-label="Live event feed">
                 <EventFeed />
+              </section>
+              <section aria-label="Anomaly detection">
+                <AnomalyPanel />
               </section>
               <section aria-label="Budget utilization">
                 <BudgetGauge />
               </section>
             </div>
 
-            {/* Two-column: Anomaly detection + User budget management */}
-            <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
-              <section aria-label="Anomaly detection">
-                <AnomalyPanel />
-              </section>
-              <section aria-label="User budget management">
-                <UserBudgetTable />
-              </section>
-            </div>
+            {/* User budget management - full width */}
+            <section aria-label="User budget management">
+              <UserBudgetTable />
+            </section>
           </div>
         </main>
       </div>

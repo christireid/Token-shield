@@ -18,7 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { ArrowLeft, Bell, Download, Pause, Play, Shield } from "lucide-react"
+import { ArrowLeft, Download, Pause, Play, Shield } from "lucide-react"
 import Link from "next/link"
 
 const TIME_RANGES: { value: TimeRange; label: string }[] = [

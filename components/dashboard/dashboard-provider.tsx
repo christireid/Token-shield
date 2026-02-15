@@ -342,14 +342,14 @@ function generateInitialProviderHealth(): ProviderHealthRecord[] {
   }))
 }
 
-function generateInitialAnomalies(eventIdRef: React.RefObject<number>): AnomalyRecord[] {
+function generateInitialAnomalies(eventIdRef: React.MutableRefObject<number>): AnomalyRecord[] {
   const now = Date.now()
   const anomalies: AnomalyRecord[] = []
   const types: AnomalyRecord["type"][] = ["cost_spike", "token_spike", "cost_rate_change"]
   for (let i = 0; i < 3; i++) {
-    eventIdRef.current!++
+    eventIdRef.current++
     anomalies.push({
-      id: eventIdRef.current!,
+      id: eventIdRef.current,
       timestamp: now - randInt(5, 45) * 60_000,
       type: types[i],
       severity: (["low", "medium", "high"] as const)[randInt(0, 3)],
@@ -368,12 +368,12 @@ function generateInitialAnomalies(eventIdRef: React.RefObject<number>): AnomalyR
   return anomalies
 }
 
-function generateInitialAlerts(eventIdRef: React.RefObject<number>): DashboardAlert[] {
+function generateInitialAlerts(eventIdRef: React.MutableRefObject<number>): DashboardAlert[] {
   const now = Date.now()
-  eventIdRef.current!++
+  eventIdRef.current++
   return [
     {
-      id: eventIdRef.current!,
+      id: eventIdRef.current,
       timestamp: now - 120_000,
       severity: "warning",
       title: "Budget threshold approaching",
