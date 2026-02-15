@@ -67,6 +67,14 @@ export interface TokenShieldMiddlewareConfig {
     maxCostPerHour?: number
     /** Window in ms during which identical prompts are deduplicated even after completion (default: 0 = off) */
     deduplicateWindow?: number
+    /** Minimum number of characters required in a prompt (default: 2) */
+    minInputLength?: number
+    /** Maximum input tokens allowed per prompt. Omit to disable (default: no limit) */
+    maxInputTokens?: number
+    /** Model ID for cost calculations (default: "gpt-4o-mini") */
+    modelId?: string
+    /** Whether to deduplicate identical in-flight prompts (default: true) */
+    deduplicateInFlight?: boolean
   }
 
   /** Response cache config */
@@ -362,11 +370,22 @@ export function extractLastUserText(params: Record<string, unknown>): string {
  * for unknown models instead of returning 0, which would silently bypass
  * budget enforcement and produce incorrect savings calculations.
  */
+/** Set of models we've already warned about to avoid log spam */
+const warnedFallbackModels = new Set<string>()
+
 export function safeCost(modelId: string, inputTokens: number, outputTokens: number): number {
   try {
     return estimateCost(modelId, inputTokens, outputTokens).totalCost
   } catch {
-    // Unknown model — use fallback pricing to keep budget checks functional
+    // Unknown model — use fallback pricing to keep budget checks functional.
+    // Warn once per model so operators notice the inaccuracy.
+    if (modelId && !warnedFallbackModels.has(modelId)) {
+      warnedFallbackModels.add(modelId)
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[TokenShield] Unknown model "${modelId}" — using fallback pricing ($${FALLBACK_INPUT_PER_MILLION}/M input, $${FALLBACK_OUTPUT_PER_MILLION}/M output). Cost estimates may be inaccurate.`,
+      )
+    }
     return (
       (inputTokens / 1_000_000) * FALLBACK_INPUT_PER_MILLION +
       (outputTokens / 1_000_000) * FALLBACK_OUTPUT_PER_MILLION

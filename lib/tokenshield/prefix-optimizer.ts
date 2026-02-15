@@ -145,7 +145,7 @@ function classifyMessages(messages: ChatMessage[]): {
     }
 
     // Messages explicitly marked as pinned go to stable prefix
-    if ((msg as ChatMessage & { pinned?: boolean }).pinned) {
+    if (msg.pinned) {
       stable.push(msg)
       continue
     }

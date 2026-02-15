@@ -26,6 +26,10 @@ export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool"
   content: string
   name?: string
+  /** Mark this message as stable prefix content. Pinned messages are placed in the
+   *  non-volatile prefix section by the prefix optimizer, enabling provider-level
+   *  prompt caching (e.g., Anthropic's cache_control). */
+  pinned?: boolean
 }
 
 export interface TokenCount {
@@ -274,12 +278,14 @@ export function getTokenizerAccuracy(modelId: string): {
 /**
  * Count tokens for a specific model using BPE encoding.
  *
- * Uses gpt-tokenizer (BPE) for all providers. This is 100% accurate for
- * OpenAI models and approximately 85-90% accurate for Anthropic/Google.
+ * **Note:** All providers currently use the same cl100k_base tokenizer.
+ * The `modelId` parameter is accepted for forward-compatibility with
+ * provider-specific tokenizers but does not currently affect the count.
  * For billing-accurate counts on non-OpenAI models, use the `usage`
- * object from the API response instead.
+ * object from the API response. See {@link getTokenizerAccuracy} for
+ * per-provider accuracy information.
  *
- * @param modelId - The model identifier (e.g., "gpt-4o", "claude-sonnet-4.5")
+ * @param _modelId - The model identifier (reserved for future per-model tokenizers)
  * @param text - The input text to tokenize
  * @returns The token count for the given text
  * @example
@@ -288,7 +294,7 @@ export function getTokenizerAccuracy(modelId: string): {
  * // tokens === 4
  * ```
  */
-export function countModelTokens(modelId: string, text: string): number {
+export function countModelTokens(_modelId: string, text: string): number {
   return countTokens(text)
 }
 

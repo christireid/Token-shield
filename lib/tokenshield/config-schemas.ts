@@ -5,12 +5,16 @@ import * as v from "valibot"
 // ---------------------------------------------------------------------------
 
 export const GuardConfigSchema = v.object({
-  debounceMs: v.optional(v.pipe(v.number(), v.minValue(0)), 300),
-  maxRequestsPerMinute: v.optional(v.pipe(v.number(), v.minValue(1)), 60),
-  maxCostPerHour: v.optional(v.pipe(v.number(), v.minValue(0)), 10),
-  deduplicateWindow: v.optional(v.pipe(v.number(), v.minValue(0)), 5000),
-  minInputLength: v.optional(v.pipe(v.number(), v.minValue(0)), 2),
-  maxInputTokens: v.optional(v.pipe(v.number(), v.minValue(1))),
+  debounceMs: v.optional(v.pipe(v.number(), v.finite(), v.minValue(0)), 300),
+  maxRequestsPerMinute: v.optional(v.pipe(v.number(), v.finite(), v.minValue(1)), 60),
+  maxCostPerHour: v.optional(v.pipe(v.number(), v.finite(), v.minValue(0)), 10),
+  deduplicateWindow: v.optional(v.pipe(v.number(), v.finite(), v.minValue(0)), 5000),
+  minInputLength: v.optional(v.pipe(v.number(), v.finite(), v.minValue(0)), 2),
+  maxInputTokens: v.optional(v.pipe(v.number(), v.finite(), v.minValue(1))),
+  /** Model ID for cost calculations (default: "gpt-4o-mini") */
+  modelId: v.optional(v.pipe(v.string(), v.minLength(1))),
+  /** Whether to deduplicate identical in-flight prompts (default: true) */
+  deduplicateInFlight: v.optional(v.boolean(), true),
 })
 
 export type GuardConfig = v.InferOutput<typeof GuardConfigSchema>
@@ -20,9 +24,12 @@ export type GuardConfig = v.InferOutput<typeof GuardConfigSchema>
 // ---------------------------------------------------------------------------
 
 export const CacheConfigSchema = v.object({
-  maxEntries: v.optional(v.pipe(v.number(), v.minValue(1)), 500),
-  ttlMs: v.optional(v.pipe(v.number(), v.minValue(0)), 3_600_000),
-  similarityThreshold: v.optional(v.pipe(v.number(), v.minValue(0), v.maxValue(1)), 0.85),
+  maxEntries: v.optional(v.pipe(v.number(), v.finite(), v.minValue(1)), 500),
+  ttlMs: v.optional(v.pipe(v.number(), v.finite(), v.minValue(0)), 86_400_000),
+  similarityThreshold: v.optional(
+    v.pipe(v.number(), v.finite(), v.minValue(0.01), v.maxValue(1)),
+    0.85,
+  ),
   scopeByModel: v.optional(v.boolean(), true),
 })
 
@@ -33,8 +40,8 @@ export type CacheConfig = v.InferOutput<typeof CacheConfigSchema>
 // ---------------------------------------------------------------------------
 
 export const ContextConfigSchema = v.object({
-  maxInputTokens: v.optional(v.pipe(v.number(), v.minValue(1))),
-  reserveForOutput: v.optional(v.pipe(v.number(), v.minValue(0)), 1000),
+  maxInputTokens: v.optional(v.pipe(v.number(), v.finite(), v.minValue(1))),
+  reserveForOutput: v.optional(v.pipe(v.number(), v.finite(), v.minValue(0)), 1000),
 })
 
 export type ContextConfig = v.InferOutput<typeof ContextConfigSchema>
@@ -84,10 +91,10 @@ export type LedgerConfig = v.InferOutput<typeof LedgerConfigSchema>
 
 export const BreakerConfigSchema = v.object({
   limits: v.object({
-    perSession: v.optional(v.pipe(v.number(), v.minValue(0))),
-    perHour: v.optional(v.pipe(v.number(), v.minValue(0))),
-    perDay: v.optional(v.pipe(v.number(), v.minValue(0))),
-    perMonth: v.optional(v.pipe(v.number(), v.minValue(0))),
+    perSession: v.optional(v.pipe(v.number(), v.finite(), v.minValue(0))),
+    perHour: v.optional(v.pipe(v.number(), v.finite(), v.minValue(0))),
+    perDay: v.optional(v.pipe(v.number(), v.finite(), v.minValue(0))),
+    perMonth: v.optional(v.pipe(v.number(), v.finite(), v.minValue(0))),
   }),
   action: v.optional(v.picklist(["warn", "throttle", "stop"]), "stop"),
   persist: v.optional(v.boolean(), false),
@@ -100,8 +107,8 @@ export type BreakerConfig = v.InferOutput<typeof BreakerConfigSchema>
 // ---------------------------------------------------------------------------
 
 export const UserBudgetLimitsSchema = v.object({
-  daily: v.pipe(v.number(), v.minValue(0)),
-  monthly: v.pipe(v.number(), v.minValue(0)),
+  daily: v.pipe(v.number(), v.finite(), v.minValue(0)),
+  monthly: v.pipe(v.number(), v.finite(), v.minValue(0)),
   tier: v.optional(v.picklist(["standard", "premium", "unlimited"])),
 })
 

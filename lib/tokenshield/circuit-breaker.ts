@@ -10,7 +10,7 @@
  * operates per-request), this is a session/time-window level kill switch.
  *
  * Features:
- * - Per-session, hourly, daily, and monthly cost limits
+ * - Per-session, hourly, daily, and 30-day rolling cost limits
  * - Configurable actions: warn, throttle, or hard-stop
  * - Optional persistence via localStorage (survives page refresh)
  * - Alert callbacks for integration with monitoring
@@ -26,11 +26,11 @@ import { estimateCost, MODEL_PRICING } from "./cost-estimator"
 export interface BreakerLimits {
   /** Maximum spend per session (resets on page refresh unless persisted) */
   perSession?: number
-  /** Maximum spend per hour */
+  /** Maximum spend per rolling 1-hour window */
   perHour?: number
-  /** Maximum spend per 24-hour period */
+  /** Maximum spend per rolling 24-hour window */
   perDay?: number
-  /** Maximum spend per calendar month */
+  /** Maximum spend per rolling 30-day window (not calendar month) */
   perMonth?: number
 }
 
@@ -201,10 +201,8 @@ export class CostCircuitBreaker {
     // Check each limit
     const limits = this.config.limits
 
-    // Auto-reset time-window warnings when spend drops below 80% threshold
-    // (session warnings never auto-reset — they clear on explicit reset() only)
+    // Auto-reset all warnings (including session) when spend drops below 80% threshold
     for (const def of LIMIT_DEFS) {
-      if (def.type === "session") continue
       const limitVal = limits[def.configKey]
       if (limitVal != null && status.spend[def.spendKey] < limitVal * WARNING_THRESHOLD) {
         this.warningFired.delete(`${def.type}-warning`)

@@ -167,7 +167,7 @@ describe("validateConfig", () => {
     const config = validateConfig({ cache: { maxEntries: 100 } })
 
     expect(config.cache!.maxEntries).toBe(100)
-    expect(config.cache!.ttlMs).toBe(3_600_000)
+    expect(config.cache!.ttlMs).toBe(86_400_000)
     expect(config.cache!.similarityThreshold).toBe(0.85)
     expect(config.cache!.scopeByModel).toBe(true)
   })
@@ -215,11 +215,15 @@ describe("validateConfig", () => {
     expect(config.context!.reserveForOutput).toBe(500)
   })
 
-  it("accepts cache.similarityThreshold at boundaries 0 and 1", () => {
-    const configZero = validateConfig({ cache: { similarityThreshold: 0 } })
-    expect(configZero.cache!.similarityThreshold).toBe(0)
+  it("accepts cache.similarityThreshold at boundaries 0.01 and 1", () => {
+    const configMin = validateConfig({ cache: { similarityThreshold: 0.01 } })
+    expect(configMin.cache!.similarityThreshold).toBe(0.01)
 
     const configOne = validateConfig({ cache: { similarityThreshold: 1 } })
     expect(configOne.cache!.similarityThreshold).toBe(1)
+  })
+
+  it("rejects cache.similarityThreshold of 0 (would match everything)", () => {
+    expect(() => validateConfig({ cache: { similarityThreshold: 0 } })).toThrow()
   })
 })

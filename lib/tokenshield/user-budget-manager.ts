@@ -373,9 +373,10 @@ export class UserBudgetManager {
       return cached.snapshot
     }
 
-    // Evict all cache entries when the cache grows too large
+    // LRU eviction: remove oldest entry when cache grows too large
     if (this._snapshotCache.size > MAX_CACHE_SIZE) {
-      this._snapshotCache.clear()
+      const oldestKey = this._snapshotCache.keys().next().value
+      if (oldestKey !== undefined) this._snapshotCache.delete(oldestKey)
     }
 
     const limits = resolveUserLimits(this.config, userId)

@@ -47,6 +47,14 @@ export interface GuardConfig {
    * identical prompts for five seconds.
    */
   deduplicateWindow?: number
+
+  /**
+   * Maximum number of characters allowed in a prompt.
+   * Prompts longer than this are rejected before tokenization to prevent
+   * the tokenizer from hanging on very large inputs.
+   * Default: 500_000 (~125k tokens). Set to 0 to disable.
+   */
+  maxInputChars?: number
 }
 
 export interface GuardResult {
@@ -79,6 +87,8 @@ const DEFAULT_CONFIG: GuardConfig = {
   maxInputTokens: Infinity,
   // No time‑window deduplication by default
   deduplicateWindow: 0,
+  // Cap at 500k chars (~125k tokens) to prevent tokenizer hangs
+  maxInputChars: 500_000,
 }
 
 /** Hard cap on tracked request timestamps to prevent unbounded growth during bursts */
@@ -127,9 +137,32 @@ export class RequestGuard {
    */
   check(prompt: string, expectedOutputTokens = 500, modelId?: string): GuardResult {
     const now = Date.now()
+
+    // -1. Max character length check (before tokenization to avoid hanging on huge inputs)
+    const maxChars = this.config.maxInputChars ?? DEFAULT_CONFIG.maxInputChars
+    if (maxChars && maxChars > 0 && prompt.length > maxChars) {
+      this.blockedCount++
+      this.totalBlocked++
+      return {
+        allowed: false,
+        reason: `Prompt too long: ${prompt.length.toLocaleString()} chars exceeds ${maxChars.toLocaleString()} char limit`,
+        blockedCount: this.blockedCount,
+        estimatedCost: 0,
+        currentHourlySpend: this.getCurrentHourlySpend(),
+      }
+    }
+
     const inputTokens = countTokens(prompt)
     const effectiveModel = modelId ?? this.config.modelId
-    const cost = estimateCost(effectiveModel, inputTokens, expectedOutputTokens)
+    let costTotal: number
+    try {
+      costTotal = estimateCost(effectiveModel, inputTokens, expectedOutputTokens).totalCost
+    } catch {
+      // Unknown model — use zero cost so guard checks still run
+      // (the cost gate will be skipped, but debounce/rate/dedup still apply)
+      costTotal = 0
+    }
+    const cost = { totalCost: costTotal }
 
     const normalized = prompt.trim().toLowerCase()
 
@@ -174,9 +207,12 @@ export class RequestGuard {
       )
     }
 
-    // 3. Cost gate check
+    // 3. Cost gate check (0 = no limit, consistent with UserBudgetManager)
     const currentSpend = this.getCurrentHourlySpend()
-    if (currentSpend + cost.totalCost > this.config.maxCostPerHour) {
+    if (
+      this.config.maxCostPerHour > 0 &&
+      currentSpend + cost.totalCost > this.config.maxCostPerHour
+    ) {
       return this.blocked(
         `Cost gate: would exceed hourly budget ($${(currentSpend + cost.totalCost).toFixed(4)} > $${this.config.maxCostPerHour.toFixed(2)})`,
         cost.totalCost,
@@ -273,8 +309,17 @@ export class RequestGuard {
     const normalized = prompt.trim().toLowerCase()
     this.inFlight.delete(normalized)
 
-    const cost = estimateCost(modelId ?? this.config.modelId, actualInputTokens, actualOutputTokens)
-    this.costLog.push({ timestamp: Date.now(), cost: cost.totalCost })
+    let completeCost = 0
+    try {
+      completeCost = estimateCost(
+        modelId ?? this.config.modelId,
+        actualInputTokens,
+        actualOutputTokens,
+      ).totalCost
+    } catch {
+      // Unknown model — skip cost logging
+    }
+    this.costLog.push({ timestamp: Date.now(), cost: completeCost })
     // Hard cap: keep only last 500 entries to prevent growth in high-throughput
     if (this.costLog.length > MAX_COST_LOG_ENTRIES) {
       this.costLog = this.costLog.slice(-MAX_COST_LOG_ENTRIES)

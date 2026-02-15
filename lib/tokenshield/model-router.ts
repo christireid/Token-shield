@@ -55,7 +55,8 @@ export interface RoutingDecision {
   selectedModel: ModelPricing
   fallbackModel: ModelPricing
   estimatedCost: ReturnType<typeof estimateCost>
-  cheapestAlternativeCost: ReturnType<typeof estimateCost>
+  /** Cost of the fallback (next-tier-up) model for comparison */
+  fallbackCost: ReturnType<typeof estimateCost>
   savingsVsDefault: number
 }
 
@@ -141,7 +142,7 @@ const TIER_THRESHOLDS = {
   complex: 75,
 } as const
 
-/** FIFO cache for analyzeComplexity — avoids re-running BPE + regex on identical prompts */
+/** LRU cache for analyzeComplexity — avoids re-running BPE + regex on identical prompts */
 const MAX_COMPLEXITY_CACHE = 100
 /** Skip caching prompts longer than this to prevent large memory consumption */
 const MAX_CACHEABLE_PROMPT_LENGTH = 10_000
@@ -168,7 +169,12 @@ const complexityCache = new Map<string, ComplexityScore>()
  */
 export function analyzeComplexity(prompt: string): ComplexityScore {
   const cached = complexityCache.get(prompt)
-  if (cached) return cached
+  if (cached) {
+    // LRU: move to end so this entry is the most-recently-used
+    complexityCache.delete(prompt)
+    complexityCache.set(prompt, cached)
+    return cached
+  }
   const words = prompt.split(/\s+/).filter((w) => w.length > 0)
   const wordCount = words.length
   const sentences = prompt.split(/[.!?]+/).filter((s) => s.trim().length > 0)
@@ -335,7 +341,7 @@ export function routeToModel(
       selectedModel: fallbackModel,
       fallbackModel: fallbackModel,
       estimatedCost: defaultCost,
-      cheapestAlternativeCost: defaultCost,
+      fallbackCost: defaultCost,
       savingsVsDefault: 0,
     }
   }
@@ -350,7 +356,7 @@ export function routeToModel(
     selectedModel: selected.model,
     fallbackModel: fallback.model,
     estimatedCost: selected.cost,
-    cheapestAlternativeCost: selected.cost,
+    fallbackCost: fallback.cost,
     savingsVsDefault: defaultCost.totalCost - selected.cost.totalCost,
   }
 }
