@@ -293,7 +293,7 @@ export class AnomalyDetector {
     if (this.ewmaAlpha <= 0 || ewma === null || ewmaVar === null) return null
 
     const ewmaStdDev = Math.sqrt(ewmaVar)
-    if (ewmaStdDev <= 0) return null
+    if (ewmaStdDev <= 0 || !isFinite(ewmaStdDev)) return null
 
     const threshold = this.sensitivity
     const zScore = (value - ewma) / ewmaStdDev
@@ -315,6 +315,8 @@ export class AnomalyDetector {
   }
 
   private updateEwma(value: number, currentEwma: number | null, currentVar: number | null): { ewma: number; ewmaVar: number } {
+    if (!isFinite(value)) return { ewma: currentEwma ?? 0, ewmaVar: currentVar ?? 0 }
+
     if (currentEwma === null || currentVar === null) {
       return { ewma: value, ewmaVar: 0 }
     }
@@ -323,6 +325,11 @@ export class AnomalyDetector {
     const newEwma = alpha * value + (1 - alpha) * currentEwma
     const diff = value - currentEwma
     const newVar = (1 - alpha) * (currentVar + alpha * diff * diff)
+
+    // Guard against NaN/Infinity propagation
+    if (!isFinite(newEwma) || !isFinite(newVar)) {
+      return { ewma: currentEwma, ewmaVar: currentVar }
+    }
 
     return { ewma: newEwma, ewmaVar: newVar }
   }

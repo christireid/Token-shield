@@ -396,6 +396,13 @@ let lastFetchTimestamp = 0
 /** Minimum interval between fetches (1 hour) */
 const MIN_FETCH_INTERVAL_MS = 60 * 60 * 1000
 
+/** Allowed hostnames for remote pricing fetch (SSRF prevention) */
+const ALLOWED_PRICING_HOSTS = new Set([
+  "api.tokenshield.dev",
+  "cdn.tokenshield.dev",
+  "tokenshield.dev",
+])
+
 /**
  * Fetch latest pricing data from a remote URL and merge into the registry.
  *
@@ -426,6 +433,8 @@ export async function fetchLatestPricing(
   options: {
     timeoutMs?: number
     force?: boolean
+    /** Additional allowed hostnames beyond the built-in allowlist */
+    allowedHosts?: string[]
   } = {}
 ): Promise<{
   updated: number
@@ -435,6 +444,28 @@ export async function fetchLatestPricing(
 }> {
   const timeoutMs = options.timeoutMs ?? 5000
   const force = options.force ?? false
+
+  // URL validation (SSRF prevention)
+  let parsedUrl: URL
+  try {
+    parsedUrl = new URL(url)
+  } catch {
+    return { updated: 0, added: 0, errors: [`Invalid URL: ${url}`], fromCache: false }
+  }
+
+  if (parsedUrl.protocol !== "https:") {
+    return { updated: 0, added: 0, errors: ["Only HTTPS URLs are allowed"], fromCache: false }
+  }
+
+  const allowedHosts = new Set([...ALLOWED_PRICING_HOSTS, ...(options.allowedHosts ?? [])])
+  if (!allowedHosts.has(parsedUrl.hostname)) {
+    return {
+      updated: 0,
+      added: 0,
+      errors: [`Host "${parsedUrl.hostname}" is not in the allowed list. Use options.allowedHosts to add it.`],
+      fromCache: false,
+    }
+  }
 
   // Rate limit: skip if we fetched recently (unless forced)
   if (!force && Date.now() - lastFetchTimestamp < MIN_FETCH_INTERVAL_MS) {
@@ -526,6 +557,17 @@ function validatePricingEntry(
     return { error: `Invalid contextWindow: ${e.contextWindow}` }
   }
 
+  // Range validation for optional numeric fields
+  const cachedInputDiscount = typeof e.cachedInputDiscount === "number" ? e.cachedInputDiscount : 0
+  if (cachedInputDiscount < 0 || cachedInputDiscount > 1) {
+    return { error: `cachedInputDiscount must be between 0 and 1, got: ${cachedInputDiscount}` }
+  }
+
+  const maxOutputTokens = typeof e.maxOutputTokens === "number" ? e.maxOutputTokens : 4096
+  if (maxOutputTokens <= 0) {
+    return { error: `maxOutputTokens must be positive, got: ${maxOutputTokens}` }
+  }
+
   return {
     entry: {
       id,
@@ -533,9 +575,9 @@ function validatePricingEntry(
       name: e.name as string,
       inputPerMillion: e.inputPerMillion as number,
       outputPerMillion: e.outputPerMillion as number,
-      cachedInputDiscount: typeof e.cachedInputDiscount === "number" ? e.cachedInputDiscount : 0,
+      cachedInputDiscount,
       contextWindow: e.contextWindow as number,
-      maxOutputTokens: typeof e.maxOutputTokens === "number" ? e.maxOutputTokens : 4096,
+      maxOutputTokens,
       supportsVision: typeof e.supportsVision === "boolean" ? e.supportsVision : false,
       supportsFunctions: typeof e.supportsFunctions === "boolean" ? e.supportsFunctions : false,
       deprecated: typeof e.deprecated === "boolean" ? e.deprecated : undefined,

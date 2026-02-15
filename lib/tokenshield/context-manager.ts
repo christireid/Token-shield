@@ -443,11 +443,13 @@ function extractKeyPoints(content: string): string[] {
  * Uses capitalization patterns and common technical term markers.
  */
 function extractEntities(text: string): string[] {
+  // Cap input to prevent slow regex on very large conversations
+  const capped = text.length > 10_000 ? text.slice(0, 10_000) : text
   const entities = new Set<string>()
 
   // Match capitalized multi-word names (e.g., "Machine Learning", "React Native")
   const capitalizedPattern = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g
-  const matches = text.match(capitalizedPattern) ?? []
+  const matches = capped.match(capitalizedPattern) ?? []
   for (const m of matches) {
     // Skip common sentence starters
     if (!["The", "This", "That", "These", "Those", "What", "How", "Why", "When", "Where"].some((w) => m.startsWith(w + " "))) {
@@ -458,7 +460,7 @@ function extractEntities(text: string): string[] {
   // Match technical terms in backticks
   const backtickPattern = /`([^`]+)`/g
   let match
-  while ((match = backtickPattern.exec(text)) !== null) {
+  while ((match = backtickPattern.exec(capped)) !== null) {
     if (match[1].length <= 40) entities.add(match[1])
   }
 
@@ -470,8 +472,10 @@ function extractEntities(text: string): string[] {
  * Extract decisions, conclusions, or action items from text.
  */
 function extractDecisions(text: string): string[] {
+  // Cap input to prevent slow processing on very large conversations
+  const capped = text.length > 10_000 ? text.slice(0, 10_000) : text
   const decisions: string[] = []
-  const sentences = text.split(/(?<=[.!?])\s+/)
+  const sentences = capped.split(/(?<=[.!?])\s+/)
 
   const decisionPatterns = [
     /\b(?:we (?:should|decided|agreed|chose|will)|the (?:solution|answer|best (?:approach|option|way))|i (?:recommend|suggest))\b/i,

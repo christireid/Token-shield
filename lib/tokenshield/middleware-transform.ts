@@ -97,7 +97,7 @@ export function buildTransformParams(ctx: MiddlewareContext) {
                     : `User ${userId} within budget (daily: $${status.spend.daily.toFixed(4)}, monthly: $${status.spend.monthly.toFixed(4)})`,
               })
             }
-          } catch { /* getUserId failed — skip */ }
+          } catch (e) { log?.warn('userBudget', 'getUserId() failed in dry-run', { error: e instanceof Error ? e.message : String(e) }) }
         }
 
         if (guard && lastUserText) {
@@ -298,8 +298,9 @@ export function buildTransformParams(ctx: MiddlewareContext) {
         }
 
         const budget = {
-          maxContextTokens: config.context.maxInputTokens + reserveForOutput - toolTokenOverhead,
+          maxContextTokens: config.context.maxInputTokens + reserveForOutput,
           reservedForOutput: reserveForOutput,
+          toolTokenOverhead,
         }
         const trimResult = fitToBudget(
           workingMessages.map((m) => ({ ...m } as Message)),

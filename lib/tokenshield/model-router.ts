@@ -19,6 +19,7 @@ import {
   type ModelPricing,
   estimateCost,
 } from "./cost-estimator"
+import { PRICING_REGISTRY } from "./pricing-registry"
 
 export interface ComplexitySignals {
   /** Raw token count of the prompt */
@@ -275,10 +276,10 @@ export function routeToModel(
     /** Expected output tokens (for cost comparison) */
     expectedOutputTokens?: number
     /**
-     * Enable cross-provider routing. When true (default), the router considers
-     * models from all providers. When false, only routes within the default
-     * model's provider. Set to false if your code depends on provider-specific
-     * response formats or features (e.g., Anthropic cache_control).
+     * Enable cross-provider routing. When false (default), only routes within
+     * the default model's provider. Set to true to consider models from all
+     * providers. Use false if your code depends on provider-specific response
+     * formats or features (e.g., Anthropic cache_control).
      */
     crossProvider?: boolean
     /**
@@ -298,7 +299,7 @@ export function routeToModel(
 ): RoutingDecision {
   const complexity = analyzeComplexity(prompt)
   const expectedOutput = options.expectedOutputTokens ?? 500
-  const enableCrossProvider = options.crossProvider ?? true
+  const enableCrossProvider = options.crossProvider ?? false
 
   const tierOrder: Record<ModelPricing["tier"], number> = {
     budget: 0,
@@ -381,15 +382,11 @@ export function routeToModel(
   }
 }
 
-/** Lazy import helper for pricing registry capabilities lookup */
+/** Look up model capabilities from the pricing registry */
 function PRICING_REGISTRY_LOOKUP(modelId: string): { supportsVision: boolean; supportsFunctions: boolean } | undefined {
-  try {
-    // Access the pricing registry for richer metadata (vision, functions)
-    const { PRICING_REGISTRY } = require("./pricing-registry")
-    return PRICING_REGISTRY[modelId]
-  } catch {
-    return undefined
-  }
+  const entry = PRICING_REGISTRY[modelId]
+  if (!entry) return undefined
+  return { supportsVision: entry.supportsVision, supportsFunctions: entry.supportsFunctions }
 }
 
 /**
