@@ -10,17 +10,38 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 - **Open-core license gating**: New `activateLicense()`, `isModulePermitted()`, and `getModuleTier()` functions for tiered feature access (Community/Pro/Team/Enterprise). All features unlocked in development; license keys required for production.
 - **Enterprise audit logging**: New `AuditLog` class with tamper-evident hash chaining, structured event recording, integrity verification, and JSON/CSV export for compliance reporting.
+- **HMAC-SHA256 license key signing**: License keys are now signed with HMAC-SHA256 (Web Crypto) or djb2 fallback. New `setLicenseSecret()` enables signature verification. Algorithm-prefixed signatures (`sha256:`, `djb2:`) ensure cross-environment compatibility between sync and async key generation.
+- **ECDSA P-256 asymmetric license signing**: New `generateLicenseKeyPair()`, `setLicensePublicKey()`, and `setLicensePrivateKey()` functions enable asymmetric key signing where only the server can generate valid keys. Zero shared secrets on the client.
+- **Audit log IndexedDB persistence**: New `persist` and `storageKey` options on AuditLogConfig. Entries are automatically persisted with debounced writes. New `hydrate()` method for startup recovery.
+- **Audit log middleware wiring**: Middleware event bus automatically forwards 7 event types to the audit log: `ledger:entry`, `cache:hit`, `request:blocked`, `breaker:tripped`, `userBudget:exceeded`, `anomaly:detected`, `router:downgraded`.
+- **License enforcement in middleware**: Middleware init checks `isModulePermitted()` for each enabled module and warns when license tier is insufficient.
+- **Auto-hydration**: Middleware automatically hydrates the audit log from IndexedDB on startup when `persist: true`.
+- **Prompt compressor middleware integration**: New `compressor` config option applies client-side prompt compression (stopword elision, verbose pattern contraction, redundancy elimination) to all user messages. 15-40% token savings. Enabled by default.
+- **Delta encoder middleware integration**: New `delta` config option eliminates cross-turn paragraph duplication, system prompt overlap, and quoted response redundancy. Enabled by default.
+- **Dashboard audit log panel**: New `auditLog` prop on `TokenShieldDashboard` renders a filterable, severity-colored audit event feed with JSON/CSV export buttons.
 - **Content-type-aware cache TTL**: ResponseCache now classifies prompts as factual (7d TTL), general (24h), or time-sensitive (5min) using pattern matching. Configurable via `ttlByContentType` option.
 - **Pricing validation script**: New `npm run validate-pricing` cross-references `models.json` against the `llm-info` npm package to detect stale or incorrect pricing data.
 - **Single source of truth pricing sync**: New `models.json` data file and `npm run sync-pricing` codegen script generates pricing data in 3 target files from a single JSON source. Runs as prebuild hook.
-- **CONTRIBUTING.md**: Developer contribution guidelines with architecture overview
-- **Savings-first README**: Rewrote README.md with ROI calculator, per-module savings estimates, and clearer competitive positioning
+- **CI bundle size validation**: CI workflow now validates package contents with `npm pack --dry-run` and enforces a 500KB ESM bundle ceiling.
+- **Unit tests**: 42 license tests (tier hierarchy, HMAC/ECDSA signing, key forgery detection, expiry, permission enforcement), 41 audit-log tests (recording, hash chain, filtering, export, pruned chain verification), 12 middleware audit integration tests, 5 E2E compliance lifecycle tests.
 
 ### Changed
 
+- **BREAKING: `activateLicense()` is now async**: Returns `Promise<LicenseInfo>` instead of `LicenseInfo`. Callers must `await` the result. This change was necessary to support Web Crypto API HMAC-SHA256 signature verification.
+  ```ts
+  // Before (v0.2.0)
+  const info = activateLicense(key)
+  // After (v0.3.0)
+  const info = await activateLicense(key)
+  ```
+- **BREAKING: `generateTestKey()` is now async**: Returns `Promise<string>`. Use `generateTestKeySync()` for synchronous key generation in tests.
+- **Pricing consolidation**: `cost-estimator.ts` now derives `MODEL_PRICING` from `PRICING_REGISTRY` (single source of truth), eliminating ~230 lines of duplicate pricing data.
+- **Audit log hash chain**: SHA-256 (Web Crypto) replaces djb2 for hash chain integrity. Fallback hashes are prefixed with `djb2_` to clearly identify non-cryptographic hashes.
+- **Audit log pruning**: `verifyIntegrity()` now correctly handles pruned chains, returning `{ valid: true, pruned: true, verifiedFrom: seq }` instead of a false integrity failure.
 - **Model pricing updates**: Added 15+ models (GPT-5 family, Claude 4.5/4.6, Gemini 3, o3-pro, o4-mini). Fixed GPT-4.1 family cached input discount (0.5 → 0.75), Gemini 2.5 Flash pricing, GPT-5.2 context window (128K → 400K).
 - **Token counter accuracy**: Updated Anthropic correction factor (1.10 → 1.35) and Google correction factor (1.15 → 1.12) based on empirical measurement against provider APIs.
 - **CacheConfig schema**: Added `ttlByContentType` field to Valibot validation schema.
+- **Version bump**: 0.2.0 → 0.3.0
 
 ## [0.2.0] - 2026-02-12
 

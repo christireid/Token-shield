@@ -9,6 +9,9 @@ import {
   generateTestKey,
   generateTestKeySync,
   setLicenseSecret,
+  setLicensePublicKey,
+  setLicensePrivateKey,
+  generateLicenseKeyPair,
   type LicenseTier,
 } from "../license"
 
@@ -141,6 +144,15 @@ describe("license", () => {
       expect(decoded.payload.holder).toBe("holder")
       expect(typeof decoded.signature).toBe("string")
       expect(decoded.signature.length).toBeGreaterThan(0)
+      // Sync keygen always uses djb2 prefix
+      expect(decoded.signature).toMatch(/^djb2:/)
+    })
+
+    it("async keygen signature has algorithm prefix", async () => {
+      const key = await generateTestKey("pro", "holder", 365, "secret")
+      const decoded = JSON.parse(atob(key))
+      // Should have either sha256: or djb2: prefix
+      expect(decoded.signature).toMatch(/^(sha256:|djb2:)/)
     })
 
     it("uses module-level secret when set", () => {
@@ -240,16 +252,15 @@ describe("license", () => {
         expect(info.holder).toBe("signed-holder")
       })
 
-      it("accepts correctly signed key (sync keygen, djb2 fallback match)", async () => {
-        // generateTestKeySync uses djb2 HMAC. activateLicense uses Web Crypto
-        // when available, so signatures may not match in environments with crypto.
-        // This test verifies the sync path works in fallback mode.
+      it("accepts sync-generated key with secret (cross-algorithm compat)", async () => {
+        // generateTestKeySync uses djb2, activateLicense detects the "djb2:" prefix
+        // and verifies using the same algorithm — ensuring cross-env compatibility.
+        setLicenseSecret(SECRET)
         const key = generateTestKeySync("pro", "signed-holder", 365, SECRET)
-        // Without setting the module secret, unsigned keys are accepted
         const info = await activateLicense(key)
-        // In dev mode (no secret set), the signed key is accepted by payload alone
         expect(info.tier).toBe("pro")
         expect(info.valid).toBe(true)
+        expect(info.holder).toBe("signed-holder")
       })
 
       it("rejects unsigned key when secret is configured", async () => {
@@ -395,6 +406,64 @@ describe("license", () => {
       // With devMode=false and valid=false, only community modules allowed
       expect(isModulePermitted("token-counter")).toBe(true)
       expect(isModulePermitted("response-cache")).toBe(false)
+    })
+  })
+
+  describe("ECDSA asymmetric signing", () => {
+    it("generates a key pair", async () => {
+      const pair = await generateLicenseKeyPair()
+      expect(pair.publicKey).toBeDefined()
+      expect(pair.privateKey).toBeDefined()
+      expect(pair.publicKey.kty).toBe("EC")
+      expect(pair.publicKey.crv).toBe("P-256")
+    })
+
+    it("signs and verifies a key with ECDSA", async () => {
+      const pair = await generateLicenseKeyPair()
+      await setLicensePrivateKey(pair.privateKey)
+      await setLicensePublicKey(pair.publicKey)
+
+      const key = await generateTestKey("enterprise", "ECDSA Corp", 365)
+      const decoded = JSON.parse(atob(key))
+      expect(decoded.signature).toMatch(/^ecdsa:/)
+
+      const info = await activateLicense(key)
+      expect(info.tier).toBe("enterprise")
+      expect(info.valid).toBe(true)
+      expect(info.holder).toBe("ECDSA Corp")
+    })
+
+    it("rejects ECDSA key signed with different private key", async () => {
+      // Generate two key pairs
+      const pair1 = await generateLicenseKeyPair()
+      const pair2 = await generateLicenseKeyPair()
+
+      // Sign with pair1's private key
+      await setLicensePrivateKey(pair1.privateKey)
+      const key = await generateTestKey("enterprise", "Forger", 365)
+
+      // Verify with pair2's public key — should fail
+      resetLicense()
+      await setLicensePublicKey(pair2.publicKey)
+      const info = await activateLicense(key)
+      expect(info.valid).toBe(false)
+      expect(info.tier).toBe("community")
+    })
+
+    it("ECDSA takes priority over HMAC when both configured", async () => {
+      const pair = await generateLicenseKeyPair()
+      await setLicensePrivateKey(pair.privateKey)
+      await setLicensePublicKey(pair.publicKey)
+      setLicenseSecret("hmac-secret")
+
+      const key = await generateTestKey("pro", "Priority Test", 365)
+      const decoded = JSON.parse(atob(key))
+      // ECDSA should be preferred for signing
+      expect(decoded.signature).toMatch(/^ecdsa:/)
+
+      const info = await activateLicense(key)
+      expect(info.tier).toBe("pro")
+      expect(info.valid).toBe(true)
     })
   })
 })

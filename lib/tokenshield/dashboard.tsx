@@ -37,7 +37,9 @@ import {
   EventLogSection,
   ProviderHealthSection,
   PipelineMetricsSection,
+  AuditLogSection,
 } from "./dashboard-sections"
+import type { AuditLog } from "./audit-log"
 
 // -------------------------------------------------------
 // Error boundary
@@ -73,6 +75,8 @@ export interface TokenShieldDashboardProps {
   showPipeline?: boolean
   /** Optional provider adapter for health monitoring */
   providerAdapter?: ProviderAdapter
+  /** Optional audit log instance for compliance monitoring */
+  auditLog?: AuditLog
   /** CSS class name for the outer container */
   className?: string
   /** Inline styles for the outer container */
@@ -91,6 +95,7 @@ export function TokenShieldDashboard({
   showEventLog = true,
   showPipeline = true,
   providerAdapter,
+  auditLog,
   className,
   style,
 }: TokenShieldDashboardProps) {
@@ -143,6 +148,12 @@ export function TokenShieldDashboard({
         {showPipeline && (
           <OptionalSection>
             <PipelineMetricsSection />
+          </OptionalSection>
+        )}
+
+        {auditLog && (
+          <OptionalSection>
+            <AuditLogSection auditLog={auditLog} />
           </OptionalSection>
         )}
       </div>

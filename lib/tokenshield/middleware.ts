@@ -277,8 +277,24 @@ export function tokenShieldMiddleware(
     })
     on("router:downgraded", (d) => {
       const data = d as Record<string, unknown>
-      auditLog.logModelRouted(String(data.from ?? ""), String(data.to ?? ""), String(data.reason ?? "complexity"))
+      auditLog.logModelRouted(
+        String(data.originalModel ?? data.from ?? ""),
+        String(data.selectedModel ?? data.to ?? ""),
+        String(data.reason ?? "complexity"),
+      )
     })
+  }
+
+  // Auto-hydrate audit log from IndexedDB if persistence is enabled
+  if (auditLog && config.auditLog && !(config.auditLog instanceof AuditLog)) {
+    const auditConfig = config.auditLog as AuditLogConfig
+    if (auditConfig.persist) {
+      auditLog.hydrate().catch((err) => {
+        log?.warn("audit", "Failed to hydrate audit log — starting fresh", {
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
+    }
   }
 
   // License enforcement: warn when modules require a higher tier

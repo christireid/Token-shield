@@ -155,6 +155,8 @@ export class AuditLog {
   private lastHash = "genesis"
   private config: Required<AuditLogConfig>
   private persistTimer: ReturnType<typeof setTimeout> | null = null
+  /** True when entries have been pruned — first entry's prevHash won't match "genesis" */
+  private pruned = false
 
   constructor(config: AuditLogConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
@@ -210,6 +212,7 @@ export class AuditLog {
     // Prune if over limit
     if (this.entries.length > this.config.maxEntries) {
       this.entries = this.entries.slice(-this.config.maxEntries)
+      this.pruned = true
     }
 
     // Forward to external handler
@@ -323,8 +326,12 @@ export class AuditLog {
    * Verify the integrity of the audit chain.
    * Returns true if no entries have been tampered with.
    */
-  verifyIntegrity(): { valid: boolean; brokenAt?: number } {
-    let prevHash = "genesis"
+  verifyIntegrity(): { valid: boolean; brokenAt?: number; pruned?: boolean; verifiedFrom?: number } {
+    if (this.entries.length === 0) return { valid: true }
+
+    // For pruned chains, the first entry's prevHash won't be "genesis"
+    // — start verification from the first available entry's recorded prevHash.
+    let prevHash = this.pruned ? this.entries[0].prevHash : "genesis"
     for (const entry of this.entries) {
       if (entry.prevHash !== prevHash) {
         return { valid: false, brokenAt: entry.seq }
@@ -335,6 +342,10 @@ export class AuditLog {
         return { valid: false, brokenAt: entry.seq }
       }
       prevHash = entry.hash
+    }
+
+    if (this.pruned) {
+      return { valid: true, pruned: true, verifiedFrom: this.entries[0].seq }
     }
     return { valid: true }
   }
@@ -455,6 +466,7 @@ export class AuditLog {
     this.entries = []
     this.seq = 0
     this.lastHash = "genesis"
+    this.pruned = false
     if (this.config.persist) {
       try {
         await set(this.config.storageKey, [])

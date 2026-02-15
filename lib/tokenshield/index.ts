@@ -410,6 +410,9 @@ export {
   generateTestKey,
   generateTestKeySync,
   setLicenseSecret,
+  setLicensePublicKey,
+  setLicensePrivateKey,
+  generateLicenseKeyPair,
   type LicenseTier,
   type LicenseInfo,
 } from "./license"

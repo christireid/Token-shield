@@ -21,6 +21,8 @@ import type { ProviderAdapter, AdapterConfig } from "./provider-adapter"
 import type { ComplexityScore } from "./model-router"
 import type { AnomalyDetector, AnomalyConfig, AnomalyEvent } from "./anomaly-detector"
 import type { AuditLog, AuditLogConfig } from "./audit-log"
+import type { CompressorConfig } from "./prompt-compressor"
+import type { DeltaEncoderConfig } from "./conversation-delta-encoder"
 import { estimateCost } from "./cost-estimator"
 
 // -------------------------------------------------------
@@ -59,6 +61,8 @@ export interface TokenShieldMiddlewareConfig {
     prefix?: boolean
     ledger?: boolean
     anomaly?: boolean
+    compressor?: boolean
+    delta?: boolean
   }
 
   /** Request guard config */
@@ -219,6 +223,22 @@ export interface TokenShieldMiddlewareConfig {
 
   /** Optional enterprise audit logging. Records all pipeline events to a tamper-evident log. */
   auditLog?: AuditLogConfig | AuditLog
+
+  /**
+   * Optional prompt compression. Reduces user message tokens by 15-40% using
+   * stopword elision, verbose pattern contraction, and redundancy elimination.
+   * Set to false to disable, true to enable with defaults, or a CompressorConfig
+   * for fine-grained control. Default: enabled.
+   */
+  compressor?: boolean | CompressorConfig
+
+  /**
+   * Optional conversation delta encoding. Eliminates cross-turn paragraph
+   * duplication, system prompt overlap, and quoted response redundancy.
+   * Set to false to disable, true to enable with defaults, or a DeltaEncoderConfig
+   * for fine-grained control. Default: enabled.
+   */
+  delta?: boolean | DeltaEncoderConfig
 }
 
 // -------------------------------------------------------
@@ -321,6 +341,10 @@ export interface ShieldMeta {
   abTestHoldout?: boolean
   /** Cached last user text to avoid redundant extraction in wrapGenerate/wrapStream */
   lastUserText?: string
+  /** Tokens saved by prompt compressor */
+  compressorSaved?: number
+  /** Tokens saved by delta encoder */
+  deltaSaved?: number
 }
 
 /**

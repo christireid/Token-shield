@@ -3,11 +3,13 @@
  *
  * Builds the transformParams function that runs BEFORE the model receives
  * the request. This is where all pre-model optimizations happen:
- * breaker -> user budget -> guard -> cache lookup -> context trim -> route -> prefix optimize
+ * breaker -> user budget -> guard -> cache lookup -> compress -> delta -> context trim -> route -> prefix optimize
  */
 
 import { countTokens } from "gpt-tokenizer"
 import { fitToBudget, type Message } from "./context-manager"
+import { compressMessages, type CompressorConfig } from "./prompt-compressor"
+import { encodeDelta, type DeltaEncoderConfig } from "./conversation-delta-encoder"
 import { analyzeComplexity, routeToModel } from "./model-router"
 import { optimizePrefix } from "./prefix-optimizer"
 import { MODEL_PRICING, estimateCost } from "./cost-estimator"
@@ -373,6 +375,48 @@ export function buildTransformParams(ctx: MiddlewareContext) {
       if (!meta.originalModel) meta.originalModel = String(params.modelId ?? "")
 
       let workingMessages = messages
+
+      // -- 2b. PROMPT COMPRESSION --
+      if (config.modules?.compressor !== false && config.compressor !== false) {
+        try {
+          const compressorCfg: CompressorConfig =
+            typeof config.compressor === "object" ? config.compressor : {}
+          const compResult = compressMessages(
+            workingMessages.map((m) => ({ role: m.role, content: m.content })),
+            compressorCfg,
+          )
+          if (compResult.totalSavedTokens > 0) {
+            meta.compressorSaved = compResult.totalSavedTokens
+            workingMessages = compResult.messages.map((m) => ({
+              role: m.role as ChatMessage["role"],
+              content: m.content,
+            }))
+          }
+        } catch {
+          /* non-fatal: compression failed, proceed with original */
+        }
+      }
+
+      // -- 2c. DELTA ENCODING --
+      if (config.modules?.delta !== false && config.delta !== false) {
+        try {
+          const deltaCfg: DeltaEncoderConfig =
+            typeof config.delta === "object" ? config.delta : {}
+          const deltaResult = encodeDelta(
+            workingMessages.map((m) => ({ role: m.role, content: m.content })),
+            deltaCfg,
+          )
+          if (deltaResult.applied && deltaResult.savedTokens > 0) {
+            meta.deltaSaved = deltaResult.savedTokens
+            workingMessages = deltaResult.messages.map((m) => ({
+              role: m.role as ChatMessage["role"],
+              content: m.content,
+            }))
+          }
+        } catch {
+          /* non-fatal: delta encoding failed, proceed with original */
+        }
+      }
 
       // -- 3. CONTEXT TRIM --
       if (modules.context && config.context?.maxInputTokens) {

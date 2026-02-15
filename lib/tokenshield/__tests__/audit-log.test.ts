@@ -133,6 +133,29 @@ describe("AuditLog", () => {
       expect(entries[0].description).toBe("Entry 2")
       expect(entries[2].description).toBe("Entry 4")
     })
+
+    it("verifyIntegrity returns valid with pruned flag after pruning", () => {
+      const smallLog = new AuditLog({ maxEntries: 3 })
+      smallLog.record("api_call", "info", "test", "Entry 1")
+      smallLog.record("api_call", "info", "test", "Entry 2")
+      smallLog.record("api_call", "info", "test", "Entry 3")
+      smallLog.record("api_call", "info", "test", "Entry 4")
+      smallLog.record("api_call", "info", "test", "Entry 5")
+
+      const result = smallLog.verifyIntegrity()
+      expect(result.valid).toBe(true)
+      expect(result.pruned).toBe(true)
+      expect(result.verifiedFrom).toBe(3) // first entry after pruning has seq 3
+    })
+
+    it("hash chain integrity is maintained across pruning", () => {
+      const smallLog = new AuditLog({ maxEntries: 2 })
+      for (let i = 0; i < 10; i++) {
+        smallLog.record("api_call", "info", "test", `Entry ${i + 1}`)
+      }
+      expect(smallLog.size).toBe(2)
+      expect(smallLog.verifyIntegrity().valid).toBe(true)
+    })
   })
 
   describe("onEntry callback", () => {

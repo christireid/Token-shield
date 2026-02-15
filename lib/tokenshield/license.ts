@@ -85,12 +85,16 @@ let _signingSecret: string | null = null
 // HMAC-SHA256 helpers
 // -------------------------------------------------------
 
+/** Algorithm prefix constants for cross-environment signature compatibility. */
+const ALG_SHA256 = "sha256:"
+const ALG_DJB2 = "djb2:"
+
 /**
- * Compute HMAC-SHA256 hex digest using Web Crypto API.
- * Falls back to a synchronous djb2-based HMAC for environments
- * without Web Crypto (e.g., older Node.js test runners).
+ * Compute HMAC hex digest using the best available algorithm.
+ * Returns a prefixed string ("sha256:..." or "djb2:...") so that
+ * verification can detect the algorithm used and verify accordingly.
  */
-async function hmacSha256(secret: string, message: string): Promise<string> {
+async function hmacSign(secret: string, message: string): Promise<string> {
   if (
     typeof globalThis !== "undefined" &&
     typeof globalThis.crypto?.subtle?.importKey === "function"
@@ -104,21 +108,43 @@ async function hmacSha256(secret: string, message: string): Promise<string> {
       ["sign"],
     )
     const sig = await globalThis.crypto.subtle.sign("HMAC", key, enc.encode(message))
-    return Array.from(new Uint8Array(sig))
+    const hex = Array.from(new Uint8Array(sig))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("")
+    return ALG_SHA256 + hex
   }
   // Fallback: keyed djb2 (not cryptographically strong, but better than nothing)
-  return djb2Hmac(secret, message)
+  return ALG_DJB2 + djb2Raw(secret, message)
 }
 
-/** Synchronous HMAC for test environments without Web Crypto. */
-function hmacSha256Sync(secret: string, message: string): string {
-  return djb2Hmac(secret, message)
+/** Synchronous HMAC for environments without Web Crypto. Always uses djb2. */
+function hmacSignSync(secret: string, message: string): string {
+  return ALG_DJB2 + djb2Raw(secret, message)
+}
+
+/**
+ * Verify a prefixed signature against a message.
+ * Supports both "sha256:..." and "djb2:..." prefixes.
+ * Tries both algorithms if no prefix is found (legacy keys).
+ */
+async function hmacVerify(secret: string, message: string, signature: string): Promise<boolean> {
+  if (signature.startsWith(ALG_SHA256)) {
+    const expected = await hmacSign(secret, message)
+    return signature === expected
+  }
+  if (signature.startsWith(ALG_DJB2)) {
+    return signature === ALG_DJB2 + djb2Raw(secret, message)
+  }
+  // Legacy unprefixed signature — try both algorithms
+  const djb2Match = signature === djb2Raw(secret, message)
+  if (djb2Match) return true
+  // Try SHA-256 (stripping prefix from our own output)
+  const sha256Sig = await hmacSign(secret, message)
+  return signature === sha256Sig.slice(ALG_SHA256.length)
 }
 
 /** Simple keyed hash using djb2 — used as fallback only. */
-function djb2Hmac(secret: string, message: string): string {
+function djb2Raw(secret: string, message: string): string {
   const input = `${secret}:${message}`
   let hash = 5381
   for (let i = 0; i < input.length; i++) {
@@ -142,10 +168,120 @@ interface SignedLicenseKey {
   signature: string
 }
 
+// -------------------------------------------------------
+// ECDSA P-256 helpers (asymmetric signing)
+// -------------------------------------------------------
+
+let _ecPublicKey: CryptoKey | null = null
+let _ecPrivateKey: CryptoKey | null = null
+
+function isSubtleAvailable(): boolean {
+  return (
+    typeof globalThis !== "undefined" &&
+    typeof globalThis.crypto?.subtle?.importKey === "function"
+  )
+}
+
 /**
- * Set the signing secret used to validate license keys.
+ * Generate an ECDSA P-256 key pair for license signing.
+ * The server keeps the private key; the client embeds the public key.
+ * Returns JWK-formatted keys.
+ */
+export async function generateLicenseKeyPair(): Promise<{
+  publicKey: JsonWebKey
+  privateKey: JsonWebKey
+}> {
+  if (!isSubtleAvailable()) throw new Error("Web Crypto API required for ECDSA key generation")
+  const pair = await globalThis.crypto.subtle.generateKey(
+    { name: "ECDSA", namedCurve: "P-256" },
+    true,
+    ["sign", "verify"],
+  )
+  const [publicKey, privateKey] = await Promise.all([
+    globalThis.crypto.subtle.exportKey("jwk", pair.publicKey),
+    globalThis.crypto.subtle.exportKey("jwk", pair.privateKey),
+  ])
+  return { publicKey, privateKey }
+}
+
+/**
+ * Set the ECDSA public key for asymmetric license verification.
+ * Only the public key is needed on the client — the private key
+ * stays on the TokenShield license server.
+ */
+export async function setLicensePublicKey(jwk: JsonWebKey): Promise<void> {
+  if (!isSubtleAvailable()) return // silently no-op in non-crypto environments
+  _ecPublicKey = await globalThis.crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["verify"],
+  )
+}
+
+/**
+ * Set the ECDSA private key for signing license keys (server-side only).
+ */
+export async function setLicensePrivateKey(jwk: JsonWebKey): Promise<void> {
+  if (!isSubtleAvailable()) throw new Error("Web Crypto API required for ECDSA private key")
+  _ecPrivateKey = await globalThis.crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["sign"],
+  )
+}
+
+/** Sign payload with ECDSA P-256. Returns base64url signature. */
+async function ecdsaSign(payload: string): Promise<string> {
+  if (!_ecPrivateKey) throw new Error("ECDSA private key not set")
+  const enc = new TextEncoder()
+  const sig = await globalThis.crypto.subtle.sign(
+    { name: "ECDSA", hash: "SHA-256" },
+    _ecPrivateKey,
+    enc.encode(payload),
+  )
+  // Convert to base64url
+  return btoa(String.fromCharCode(...new Uint8Array(sig)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "")
+}
+
+/** Verify ECDSA P-256 signature. */
+async function ecdsaVerify(payload: string, signature: string): Promise<boolean> {
+  if (!_ecPublicKey) return false
+  try {
+    const enc = new TextEncoder()
+    // Restore base64url to base64
+    const b64 = signature.replace(/-/g, "+").replace(/_/g, "/")
+    const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4))
+    const binary = atob(b64 + pad)
+    const sigBytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) sigBytes[i] = binary.charCodeAt(i)
+    return await globalThis.crypto.subtle.verify(
+      { name: "ECDSA", hash: "SHA-256" },
+      _ecPublicKey,
+      sigBytes,
+      enc.encode(payload),
+    )
+  } catch {
+    return false
+  }
+}
+
+// -------------------------------------------------------
+// Public API
+// -------------------------------------------------------
+
+/**
+ * Set the signing secret used to validate license keys (HMAC mode).
  * Must be called before activateLicense() for signature verification to work.
  * If not set, keys are still decoded but signature is not verified (dev mode).
+ *
+ * For stronger security, use setLicensePublicKey() with ECDSA instead.
  */
 export function setLicenseSecret(secret: string): void {
   _signingSecret = secret
@@ -193,8 +329,8 @@ export async function activateLicense(key: string): Promise<LicenseInfo> {
       throw new Error(`Unknown tier: ${tier}`)
     }
 
-    // Verify signature if a secret is configured
-    if (_signingSecret) {
+    // Verify signature if a secret or public key is configured
+    if (_signingSecret || _ecPublicKey) {
       if (!signature) {
         _currentLicense = {
           tier: "community",
@@ -204,8 +340,15 @@ export async function activateLicense(key: string): Promise<LicenseInfo> {
         }
         return _currentLicense
       }
-      const expectedSig = await hmacSha256(_signingSecret, JSON.stringify(payload))
-      if (signature !== expectedSig) {
+
+      let sigValid = false
+      if (signature.startsWith("ecdsa:") && _ecPublicKey) {
+        sigValid = await ecdsaVerify(JSON.stringify(payload), signature.slice(6))
+      } else if (_signingSecret) {
+        sigValid = await hmacVerify(_signingSecret, JSON.stringify(payload), signature)
+      }
+
+      if (!sigValid) {
         _currentLicense = {
           tier: "community",
           expiresAt: null,
@@ -312,6 +455,8 @@ export function resetLicense(): void {
   _devMode = true
   _warningShown = false
   _signingSecret = null
+  _ecPublicKey = null
+  _ecPrivateKey = null
 }
 
 /**
@@ -336,9 +481,15 @@ export async function generateTestKey(
     holder,
   }
 
+  // Prefer ECDSA if private key is available
+  if (_ecPrivateKey) {
+    const rawSig = await ecdsaSign(JSON.stringify(payload))
+    return btoa(JSON.stringify({ payload, signature: "ecdsa:" + rawSig }))
+  }
+
   const signingKey = secret ?? _signingSecret
   if (signingKey) {
-    const signature = await hmacSha256(signingKey, JSON.stringify(payload))
+    const signature = await hmacSign(signingKey, JSON.stringify(payload))
     return btoa(JSON.stringify({ payload, signature }))
   }
 
@@ -364,7 +515,7 @@ export function generateTestKeySync(
 
   const signingKey = secret ?? _signingSecret
   if (signingKey) {
-    const signature = hmacSha256Sync(signingKey, JSON.stringify(payload))
+    const signature = hmacSignSync(signingKey, JSON.stringify(payload))
     return btoa(JSON.stringify({ payload, signature }))
   }
 

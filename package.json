@@ -1,6 +1,6 @@
 {
   "name": "@tokenshield/ai-sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Cut LLM API costs 30-60% with 3 lines of code. TypeScript middleware for caching, routing, budget enforcement, and token optimization.",
   "type": "module",
   "main": "./dist/index.cjs",
