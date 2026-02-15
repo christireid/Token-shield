@@ -456,7 +456,7 @@ describe("Framework adapters", () => {
     })
 
     const chat = createOpenAIAdapter(shield, mockCreateFn, { defaultModel: "gpt-4.1" })
-    const result = await chat({
+    const result: any = await chat({
       messages: [{ role: "user", content: "Test the OpenAI adapter with a meaningful prompt" }],
     })
 
@@ -476,7 +476,7 @@ describe("Framework adapters", () => {
       defaultModel: "claude-sonnet-4-20250514",
       defaultMaxTokens: 1024,
     })
-    const result = await chat({
+    const result: any = await chat({
       messages: [{ role: "user", content: "Test the Anthropic adapter with a thorough prompt" }],
     })
 

@@ -137,7 +137,7 @@ describe("createOpenAIAdapter", () => {
     })
 
     const chat = createOpenAIAdapter(shield, createFn, { defaultModel: "gpt-4o-mini" })
-    const result = await chat({
+    const result: any = await chat({
       messages: [{ role: "user", content: "Hello" }],
     })
 
@@ -199,7 +199,7 @@ describe("createOpenAIAdapter", () => {
     })
 
     const chat = createOpenAIAdapter(shield, createFn, { defaultModel: "gpt-4o-mini" })
-    const result = await chat({
+    const result: any = await chat({
       messages: [{ role: "user", content: "test" }],
     })
 
@@ -221,7 +221,7 @@ describe("createAnthropicAdapter", () => {
       defaultModel: "claude-sonnet-4-20250514",
       defaultMaxTokens: 1024,
     })
-    const result = await chat({
+    const result: any = await chat({
       messages: [{ role: "user", content: "Hello" }],
     })
 
@@ -304,7 +304,7 @@ describe("createAnthropicAdapter", () => {
     })
 
     const chat = createAnthropicAdapter(shield, createFn)
-    const result = await chat({
+    const result: any = await chat({
       messages: [{ role: "user", content: "test" }],
     })
 
