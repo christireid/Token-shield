@@ -104,6 +104,7 @@ export class TokenShieldLogger {
   private spans: CompletedSpan[] = []
   /** Guard against double-connecting to the event bus */
   private eventBusConnected = false
+  private eventBusCleanup: (() => void) | null = null
 
   constructor(config?: LoggerConfig) {
     this.config = {
@@ -210,9 +211,10 @@ export class TokenShieldLogger {
       handler: (event: TokenShieldEvents[K]) => void,
     ) => void
   }): () => void {
-    // Prevent double-connecting which would accumulate duplicate handlers
+    // Prevent double-connecting which would accumulate duplicate handlers.
+    // Return the stored cleanup so callers can still disconnect.
     if (this.eventBusConnected) {
-      return () => {} // no-op cleanup
+      return this.eventBusCleanup ?? (() => {})
     }
     this.eventBusConnected = true
     const handlers: Array<() => void> = []
@@ -226,10 +228,13 @@ export class TokenShieldLogger {
       handlers.push(() => events.off(key, handler))
     }
 
-    return () => {
+    const cleanup = () => {
       handlers.forEach((unsub) => unsub())
       this.eventBusConnected = false
+      this.eventBusCleanup = null
     }
+    this.eventBusCleanup = cleanup
+    return cleanup
   }
 }
 

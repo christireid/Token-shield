@@ -41,6 +41,15 @@ describe("ProviderAdapter - Constructor", () => {
     expect(result.provider).toBe("openai")
   })
 
+  it("rejects providers with empty models array", () => {
+    expect(
+      () =>
+        new ProviderAdapter({
+          providers: [{ name: "openai", models: [] }],
+        }),
+    ).toThrow(/must have at least one model/)
+  })
+
   it("initializes all providers as healthy by default", () => {
     const adapter = new ProviderAdapter(makeConfig())
     for (const h of adapter.getHealth()) {

@@ -148,14 +148,20 @@ export class EncryptedStore {
         .then((k) => {
           this.cryptoKey = k
         })
-        .catch(() => {})
+        .catch(() => {
+          // eslint-disable-next-line no-console
+          console.warn("[TokenShield] Failed to derive encryption key from passphrase")
+        })
     } else if (config.encryption.mode === "session") {
       this.keyPromise = getSessionKey()
       this.keyPromise
         .then((k) => {
           this.cryptoKey = k
         })
-        .catch(() => {})
+        .catch(() => {
+          // eslint-disable-next-line no-console
+          console.warn("[TokenShield] Failed to generate session encryption key")
+        })
     }
   }
 

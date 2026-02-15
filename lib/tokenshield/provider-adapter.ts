@@ -6,6 +6,7 @@
  */
 
 import { estimateCost } from "./cost-estimator"
+import { TokenShieldConfigError } from "./errors"
 
 export type ProviderName = "openai" | "anthropic" | "google"
 
@@ -81,6 +82,9 @@ export class ProviderAdapter {
     this.onFallback = config.onFallback
     this.onHealthChange = config.onHealthChange
     for (const p of config.providers) {
+      if (!p.models || p.models.length === 0) {
+        throw new TokenShieldConfigError(`Provider "${p.name}" must have at least one model`)
+      }
       this.configs.set(p.name, p)
       this.healthMap.set(p.name, {
         name: p.name,
