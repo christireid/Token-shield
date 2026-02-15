@@ -160,15 +160,29 @@ const MODEL_OUTPUT_MULTIPLIERS: Record<string, number> = {
   "gpt-4.1": 1.0,
   "gpt-4.1-mini": 0.85,
   "gpt-4.1-nano": 0.75,
+  "gpt-5": 1.05,
   "gpt-5.2": 1.1,
   "gpt-5-mini": 0.9,
+  "gpt-5-nano": 0.75,
+  // OpenAI reasoning models (verbose due to chain-of-thought)
+  "o1": 1.4,
+  "o3": 1.3,
+  "o3-pro": 1.5,
+  "o4-mini": 1.1,
   // Anthropic Claude tends to be more verbose
+  "claude-opus-4": 1.3,
   "claude-opus-4.5": 1.3,
+  "claude-opus-4.6": 1.3,
+  "claude-sonnet-4": 1.2,
   "claude-sonnet-4.5": 1.2,
+  "claude-haiku-3.5": 0.95,
   "claude-haiku-4.5": 0.95,
   // Google Gemini varies
   "gemini-2.5-pro": 1.15,
   "gemini-2.5-flash": 0.9,
+  "gemini-2.5-flash-lite": 0.85,
+  "gemini-3-pro": 1.15,
+  "gemini-3-flash": 0.9,
 }
 
 /**

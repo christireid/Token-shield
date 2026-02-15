@@ -1,9 +1,15 @@
 /**
  * TokenShield - Token Counter
  *
- * Uses `gpt-tokenizer` for EXACT BPE token counts matching OpenAI's tiktoken.
- * This is not an approximation. It uses the real cl100k_base / o200k_base
- * encoding used by GPT-4o, GPT-4.1, GPT-5, etc.
+ * Uses `gpt-tokenizer` (v3.4+) for EXACT BPE token counts matching OpenAI's
+ * tiktoken. The default encoding is o200k_base, used by GPT-4o, GPT-4.1,
+ * GPT-5, and all modern OpenAI models.
+ *
+ * For non-OpenAI models (Anthropic, Google), provider-specific correction
+ * factors are applied. For billing-accurate counts on these providers, use
+ * their native countTokens APIs:
+ * - Anthropic: client.messages.countTokens()
+ * - Google: models.countTokens() (free, 3000 RPM)
  *
  * npm dependency: gpt-tokenizer (works in browser, no WASM needed)
  */
@@ -48,7 +54,7 @@ export interface ChatTokenCount {
 /**
  * Count the exact number of BPE tokens in a string using the GPT tokenizer.
  *
- * Uses the same cl100k_base / o200k_base encoding that OpenAI uses server-side,
+ * Uses the o200k_base encoding that OpenAI uses server-side for modern models,
  * so the result matches `prompt_tokens` in the API response exactly.
  *
  * @param text - The input text to tokenize
@@ -232,10 +238,10 @@ export function truncateToTokenBudget(
 /**
  * Detect the tokenizer accuracy level for a given model.
  *
- * gpt-tokenizer uses cl100k_base (OpenAI). This is exact for OpenAI models,
- * approximate for other providers. Returns an accuracy descriptor and an
- * optional margin of error so consumers can decide whether to trust the count
- * or fall back to the provider's usage response.
+ * gpt-tokenizer uses o200k_base (OpenAI). This is exact for modern OpenAI
+ * models, approximate for other providers. Returns an accuracy descriptor
+ * and margin of error so consumers can decide whether to trust the count
+ * or fall back to the provider's native countTokens API.
  *
  * @param modelId - The model identifier
  * @returns Accuracy info: "exact" for OpenAI, "approximate" for others, with error margin
@@ -248,10 +254,10 @@ export function getTokenizerAccuracy(modelId: string): {
 } {
   const lower = modelId.toLowerCase()
   if (lower.includes("claude") || lower.includes("anthropic")) {
-    return { accuracy: "approximate", provider: "anthropic", marginOfError: 0.15, note: "Anthropic uses a different BPE vocabulary. Counts may differ by ~15%. Use usage.input_tokens from the API response for billing accuracy." }
+    return { accuracy: "approximate", provider: "anthropic", marginOfError: 0.35, note: "Anthropic uses a proprietary BPE tokenizer. Counts may differ by 20-50%. For billing accuracy, use client.messages.countTokens() from the Anthropic SDK." }
   }
   if (lower.includes("gemini") || lower.includes("google")) {
-    return { accuracy: "approximate", provider: "google", marginOfError: 0.20, note: "Google uses SentencePiece tokenization. Counts may differ by ~20%. Use usageMetadata from the API response for billing accuracy." }
+    return { accuracy: "approximate", provider: "google", marginOfError: 0.15, note: "Google uses SentencePiece tokenization (256K vocab). Counts may differ by 10-15%. For billing accuracy, use models.countTokens() API (free, 3000 RPM)." }
   }
   if (lower.includes("llama") || lower.includes("mistral") || lower.includes("mixtral")) {
     return { accuracy: "approximate", provider: "open-source", marginOfError: 0.15, note: "Open-source models use various tokenizers. Counts may differ by ~15%." }
@@ -265,18 +271,20 @@ export function getTokenizerAccuracy(modelId: string): {
  * gpt-tokenizer uses OpenAI's cl100k_base encoding which is exact for OpenAI
  * models. Other providers use different tokenizers:
  *
- * - **Anthropic (Claude):** Uses a custom BPE tokenizer that typically produces
- *   ~10% more tokens than OpenAI's for the same text (empirically measured).
- * - **Google (Gemini):** Uses SentencePiece which tends to produce ~15% more
- *   tokens, especially for non-English text and technical content.
+ * - **Anthropic (Claude):** Uses a proprietary BPE tokenizer (unpublished vocab).
+ *   Real-world measurements show 20-50% divergence from OpenAI's encoding.
+ *   For billing-accurate counts, use `client.messages.countTokens()` API.
+ * - **Google (Gemini):** Uses SentencePiece with a 256K vocab. Real-world
+ *   measurements show 10-15% divergence. Use `models.countTokens()` API
+ *   (free, 3000 RPM) for billing-accurate counts.
  * - **Open-source (Llama, Mistral):** Use various tokenizers; ~10% correction.
  *
- * These factors were derived from cross-tokenizer comparison studies and
- * community benchmarks (glukhov.org, Hugging Face tokenizer comparison).
+ * These factors represent the midpoint of empirically measured divergence
+ * ranges from cross-tokenizer comparison studies.
  */
 const PROVIDER_TOKEN_CORRECTION: Record<string, number> = {
-  anthropic: 1.10,  // Anthropic's tokenizer produces ~10% more tokens
-  google: 1.15,     // SentencePiece produces ~15% more tokens
+  anthropic: 1.35,  // Anthropic's proprietary tokenizer: 20-50% divergence (midpoint ~35%)
+  google: 1.12,     // SentencePiece 256K vocab: 10-15% divergence (midpoint ~12%)
   "open-source": 1.10,
 }
 
@@ -284,13 +292,14 @@ const PROVIDER_TOKEN_CORRECTION: Record<string, number> = {
  * Count tokens for a specific model using BPE encoding with provider-specific
  * correction factors applied.
  *
- * Uses gpt-tokenizer (BPE) as the base tokenizer for all providers, then
- * applies an empirical correction factor for non-OpenAI models. This is
- * 100% accurate for OpenAI models and ~95% accurate for others (vs ~85-90%
- * without correction).
+ * Uses gpt-tokenizer (o200k_base BPE) as the base tokenizer for all providers,
+ * then applies an empirical correction factor for non-OpenAI models. This is
+ * 100% accurate for modern OpenAI models. For Anthropic (Claude), accuracy is
+ * within ~35% after correction. For Google (Gemini), within ~12%.
  *
- * For billing-accurate counts on non-OpenAI models, use the `usage`
- * object from the API response instead.
+ * For billing-accurate counts on non-OpenAI models, use provider APIs:
+ * - Anthropic: `client.messages.countTokens()` (exact)
+ * - Google: `models.countTokens()` (free, 3000 RPM, exact)
  *
  * @param modelId - The model identifier (e.g., "gpt-4o", "claude-sonnet-4.5")
  * @param text - The input text to tokenize
