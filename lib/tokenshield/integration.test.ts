@@ -881,11 +881,33 @@ describe("All index.ts exports are importable", () => {
       // Worker
       "ShieldWorker",
       "createShieldWorker",
+      // API Client
+      "callOpenAI",
+      "callAnthropic",
+      "callGoogle",
+      "callLLM",
+      "calculateRealCost",
+      "detectModelProvider",
+      // Savings Calculator
+      "estimateSavings",
+      "SavingsCalculator",
+      // Storage Adapter
+      "isPersistent",
       // Benchmarks
       "bench",
       "benchAsync",
       "runAllBenchmarks",
       "formatResults",
+      // License Gating
+      "activateLicense",
+      "getLicenseInfo",
+      "isModulePermitted",
+      "getModuleTier",
+      "getModulesForTier",
+      "resetLicense",
+      "generateTestKey",
+      // Audit Logging
+      "AuditLog",
     ]
 
     const indexModule = idx as Record<string, unknown>
