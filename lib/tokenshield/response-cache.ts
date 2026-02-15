@@ -14,6 +14,15 @@
 import { get, set, del, keys, createStore } from "./storage-adapter"
 import { NeuroElasticEngine, type NeuroElasticConfig } from "./neuro-elastic"
 
+/**
+ * Content type classification for TTL-aware caching.
+ * Different content types have different staleness characteristics:
+ * - "factual": Stable facts (capitals, definitions) — long TTL
+ * - "general": General knowledge, explanations — medium TTL
+ * - "time-sensitive": Current events, prices, weather — short TTL
+ */
+export type ContentType = "factual" | "general" | "time-sensitive"
+
 export interface CacheEntry {
   key: string
   normalizedKey: string
@@ -25,13 +34,23 @@ export interface CacheEntry {
   createdAt: number
   accessCount: number
   lastAccessed: number
+  /** Detected content type for TTL resolution */
+  contentType: ContentType
 }
 
 export interface CacheConfig {
   /** Max entries before LRU eviction */
   maxEntries: number
-  /** Max age in ms before entry expires */
+  /** Default max age in ms before entry expires (used for "general" content) */
   ttlMs: number
+  /**
+   * Per-content-type TTL overrides in milliseconds.
+   * Falls back to `ttlMs` for any unset category.
+   * - factual: Stable facts (e.g. "What is the capital of France?") — default 7 days
+   * - general: General knowledge, explanations — default 24 hours (same as ttlMs)
+   * - time-sensitive: Current events, prices, weather — default 5 minutes
+   */
+  ttlByContentType?: Partial<Record<ContentType, number>>
   /** Similarity threshold for fuzzy matching (0-1). 1 = exact only */
   similarityThreshold: number
   /** IndexedDB store name */
@@ -51,6 +70,13 @@ export interface CacheConfig {
   semanticSeeds?: Record<string, number>
 }
 
+/** Default per-content-type TTL values */
+const DEFAULT_CONTENT_TTL: Record<ContentType, number> = {
+  factual: 7 * 24 * 60 * 60 * 1000,   // 7 days
+  general: 24 * 60 * 60 * 1000,        // 24 hours
+  "time-sensitive": 5 * 60 * 1000,     // 5 minutes
+}
+
 const DEFAULT_CONFIG: CacheConfig = {
   maxEntries: 500,
   ttlMs: 24 * 60 * 60 * 1000, // 24 hours
@@ -58,6 +84,53 @@ const DEFAULT_CONFIG: CacheConfig = {
   storeName: "tokenshield-cache",
 }
 
+// -------------------------------------------------------
+// Content-Type Classification
+// -------------------------------------------------------
+
+/** Patterns that indicate factual, stable content (long cache life) */
+const FACTUAL_PATTERNS: RegExp[] = [
+  /^(what|who|where|which)\s+(is|are|was|were)\s+(the|a|an)\b/i,
+  /\b(capital of|definition of|meaning of|formula for)\b/i,
+  /\b(invented|discovered|founded|born|died)\b.*\b(in|by|at)\b/i,
+  /\b(how many|how much)\b.*\b(in a|per)\b/i,
+  /\b(convert|conversion)\b.*\b(to|from)\b/i,
+  /\b(element|symbol|atomic|molecule|chemical)\b/i,
+  /\b(population|area|height|distance|length|weight)\b.*\b(of)\b/i,
+]
+
+/** Patterns that indicate time-sensitive content (short cache life) */
+const TIME_SENSITIVE_PATTERNS: RegExp[] = [
+  /\b(today|tonight|yesterday|tomorrow|this week|this month|this year)\b/i,
+  /\b(current|latest|recent|now|live|real[- ]?time)\b/i,
+  /\b(stock price|market|trading|crypto|bitcoin|eth)\b/i,
+  /\b(weather|forecast|temperature)\b/i,
+  /\b(news|headline|breaking|trending|viral)\b/i,
+  /\b(score|game|match|playoff|tournament)\b.*\b(today|tonight|now|live)\b/i,
+  /\b(schedule|upcoming|next game|when does)\b/i,
+  /\b(election|poll|vote|ballot)\b.*\b(result|count|update)\b/i,
+  /\b(status|outage|incident|downtime)\b/i,
+  /\b(20\d{2})\b/i, // Year references often indicate time-sensitivity
+]
+
+/**
+ * Classify a prompt's content type for TTL resolution.
+ * Returns "factual" for stable facts, "time-sensitive" for current/live data,
+ * and "general" as the default for everything else.
+ */
+export function classifyContentType(prompt: string): ContentType {
+  // Check time-sensitive first — if the prompt mentions "current", "today", etc.,
+  // even a factual question like "What is the current population of France?" is time-sensitive
+  for (const pattern of TIME_SENSITIVE_PATTERNS) {
+    if (pattern.test(prompt)) return "time-sensitive"
+  }
+
+  for (const pattern of FACTUAL_PATTERNS) {
+    if (pattern.test(prompt)) return "factual"
+  }
+
+  return "general"
+}
 
 /**
  * Normalize text for comparison: lowercase, collapse whitespace,
@@ -150,6 +223,20 @@ export class ResponseCache {
     }
   }
 
+  /** Resolve the TTL for a cache entry based on its content type */
+  private getTtl(contentType: ContentType): number {
+    const overrides = this.config.ttlByContentType
+    if (overrides && overrides[contentType] !== undefined) {
+      return overrides[contentType]!
+    }
+    return DEFAULT_CONTENT_TTL[contentType]
+  }
+
+  /** Check if a cache entry has expired */
+  private isExpired(entry: CacheEntry): boolean {
+    return Date.now() - entry.createdAt >= this.getTtl(entry.contentType)
+  }
+
   private getStore(): ReturnType<typeof createStore> | null {
     if (typeof window === "undefined") return null
     if (!this.idbStore) {
@@ -172,7 +259,7 @@ export class ResponseCache {
 
     // Exact match from memory only (no IDB, no mutations)
     const memHit = this.memoryCache.get(key)
-    if (memHit && Date.now() - memHit.createdAt < this.config.ttlMs) {
+    if (memHit && !this.isExpired(memHit)) {
       // Verify normalized prompt matches to guard against djb2 hash collisions
       if (memHit.normalizedKey === normalized) {
         return { hit: true, entry: memHit, matchType: "exact", similarity: 1 }
@@ -185,7 +272,7 @@ export class ResponseCache {
       let bestSimilarity = 0
       for (const entry of this.memoryCache.values()) {
         if (model && entry.model !== model) continue
-        if (Date.now() - entry.createdAt >= this.config.ttlMs) continue
+        if (this.isExpired(entry)) continue
         const sim = textSimilarity(prompt, entry.prompt)
         if (sim > bestSimilarity && sim >= this.config.similarityThreshold) {
           bestSimilarity = sim
@@ -219,7 +306,7 @@ export class ResponseCache {
     // 1. Exact match from memory (key is already model-scoped)
     const memHit = this.memoryCache.get(key)
     if (memHit) {
-      if (Date.now() - memHit.createdAt < this.config.ttlMs) {
+      if (!this.isExpired(memHit)) {
         // Verify normalized prompt matches to guard against djb2 hash collisions
         if (memHit.normalizedKey === normalized) {
           // Copy-on-read: create a new object to avoid shared mutable state
@@ -241,7 +328,7 @@ export class ResponseCache {
       if (!store) throw new Error("no idb")
       const idbHit = await get<CacheEntry>(key, store)
       if (idbHit) {
-        if (Date.now() - idbHit.createdAt < this.config.ttlMs) {
+        if (!this.isExpired(idbHit)) {
           // Verify normalized prompt matches to guard against hash collisions
           if (idbHit.normalizedKey === normalized) {
             // Copy-on-read: create a fresh object before mutating and storing
@@ -273,7 +360,7 @@ export class ResponseCache {
           for (const [entryKey, entry] of this.memoryCache.entries()) {
             if (entry.prompt === holoResult.prompt && (!model || entry.model === model)) {
               // TTL check — skip expired entries
-              if (Date.now() - entry.createdAt >= this.config.ttlMs) continue
+              if (this.isExpired(entry)) continue
               const updated: CacheEntry = { ...entry, accessCount: entry.accessCount + 1, lastAccessed: Date.now() }
               this.memoryCache.set(entryKey, updated)
               this.totalHits++
@@ -294,7 +381,7 @@ export class ResponseCache {
 
       for (const entry of this.memoryCache.values()) {
         if (model && entry.model !== model) continue
-        if (Date.now() - entry.createdAt >= this.config.ttlMs) continue
+        if (this.isExpired(entry)) continue
 
         const sim = textSimilarity(prompt, entry.prompt)
         if (sim > bestSimilarity && sim >= this.config.similarityThreshold) {
@@ -341,6 +428,7 @@ export class ResponseCache {
       createdAt: Date.now(),
       accessCount: 0,
       lastAccessed: Date.now(),
+      contentType: classifyContentType(prompt),
     }
 
     this.memoryCache.set(key, entry)
@@ -391,7 +479,13 @@ export class ResponseCache {
       let loaded = 0
       for (const key of allKeys) {
         const entry = (await get(key, store)) as CacheEntry | undefined
-        if (entry && Date.now() - entry.createdAt < this.config.ttlMs) {
+        if (entry) {
+          // Backfill contentType for entries created before this feature
+          if (!entry.contentType) {
+            entry.contentType = classifyContentType(entry.prompt)
+          }
+        }
+        if (entry && !this.isExpired(entry)) {
           this.memoryCache.set(key, entry)
           // Populate holographic engine so fuzzy matching works after reload
           if (this.holoEngine) {

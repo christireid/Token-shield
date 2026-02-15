@@ -774,6 +774,7 @@ describe("All index.ts exports are importable", () => {
       "ResponseCache",
       "normalizeText",
       "textSimilarity",
+      "classifyContentType",
       // 5. Model Router
       "analyzeComplexity",
       "routeToModel",

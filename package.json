@@ -27,6 +27,7 @@
   "scripts": {
     "dev": "next dev",
     "sync-pricing": "tsx scripts/sync-pricing.ts",
+    "validate-pricing": "tsx scripts/validate-pricing.ts",
     "prebuild": "tsx scripts/sync-pricing.ts",
     "build": "tsup",
     "start": "next start",
@@ -126,6 +127,7 @@
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.5.1",
     "input-otp": "1.4.1",
+    "llm-info": "^1.0.69",
     "lucide-react": "^0.544.0",
     "next": "16.1.6",
     "next-themes": "^0.4.6",

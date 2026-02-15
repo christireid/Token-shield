@@ -78,6 +78,8 @@ export {
   ResponseCache,
   normalizeText,
   textSimilarity,
+  classifyContentType,
+  type ContentType,
   type CacheEntry,
   type CacheConfig,
 } from "./response-cache"
