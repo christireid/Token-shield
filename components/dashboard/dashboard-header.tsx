@@ -1,5 +1,6 @@
 "use client"
 
+import { useMemo } from "react"
 import { useDashboard, type TimeRange } from "./dashboard-provider"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -17,7 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { ArrowLeft, Download, Pause, Play, Shield } from "lucide-react"
+import { ArrowLeft, Bell, Download, Pause, Play, Shield } from "lucide-react"
 import Link from "next/link"
 
 const TIME_RANGES: { value: TimeRange; label: string }[] = [
@@ -30,6 +31,27 @@ const TIME_RANGES: { value: TimeRange; label: string }[] = [
 
 export function DashboardHeader() {
   const { mode, setMode, timeRange, setTimeRange, data, isPaused, setIsPaused } = useDashboard()
+
+  const notificationBadge = useMemo(() => {
+    const activeAlerts = data.alerts.filter((a) => !a.dismissed)
+    const unacknowledgedAnomalies = data.anomalies.filter((a) => !a.acknowledged)
+    const count = activeAlerts.length + unacknowledgedAnomalies.length
+
+    if (count === 0) return null
+
+    const hasCritical = activeAlerts.some((a) => a.severity === "critical")
+    const hasWarning =
+      activeAlerts.some((a) => a.severity === "warning") ||
+      unacknowledgedAnomalies.some((a) => a.severity === "high")
+
+    const bgColor = hasCritical
+      ? "bg-[hsl(0,72%,51%)]"
+      : hasWarning
+        ? "bg-[hsl(38,92%,50%)]"
+        : "bg-blue-500"
+
+    return { count, bgColor }
+  }, [data.alerts, data.anomalies])
 
   const handleExport = (format: "json" | "csv") => {
     const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-")
@@ -80,6 +102,14 @@ export function DashboardHeader() {
           <h1 className="text-lg font-semibold tracking-tight text-foreground">
             TokenShield Dashboard
           </h1>
+          {notificationBadge && (
+            <span
+              className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold leading-none text-white ${notificationBadge.bgColor}`}
+              title={`${notificationBadge.count} active alert(s) / anomalies`}
+            >
+              {notificationBadge.count > 99 ? "99+" : notificationBadge.count}
+            </span>
+          )}
         </div>
         <div className="hidden h-5 w-px bg-border/50 md:block" />
         <span className="hidden text-xs text-muted-foreground md:inline">

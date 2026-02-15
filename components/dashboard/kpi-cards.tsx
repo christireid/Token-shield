@@ -1,9 +1,9 @@
 "use client"
 
-import { useDashboard } from "./dashboard-provider"
+import { useDashboard, type KpiDelta } from "./dashboard-provider"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
-import { DollarSign, Percent, Zap, ShieldOff, Timer, TrendingUp } from "lucide-react"
+import { DollarSign, Percent, Zap, ShieldOff, Timer, TrendingUp, TrendingDown } from "lucide-react"
 import { AreaChart, Area, ResponsiveContainer } from "recharts"
 
 interface KpiCardProps {
@@ -13,6 +13,9 @@ interface KpiCardProps {
   color: string
   accentClass: string
   icon: React.ReactNode
+  delta: KpiDelta
+  /** When true, an "up" direction is favorable (green). When false, "up" is unfavorable (red). */
+  upIsGood: boolean
 }
 
 function MiniSparkline({ data, color }: { data: number[]; color: string }) {
@@ -42,7 +45,21 @@ function MiniSparkline({ data, color }: { data: number[]; color: string }) {
   )
 }
 
-function KpiCard({ label, value, sparkline, color, accentClass, icon }: KpiCardProps) {
+function KpiCard({ label, value, sparkline, color, accentClass, icon, delta, upIsGood }: KpiCardProps) {
+  const isFavorable =
+    delta.direction === "flat"
+      ? null
+      : delta.direction === "up"
+        ? upIsGood
+        : !upIsGood
+
+  const trendColor =
+    isFavorable === null
+      ? "text-muted-foreground"
+      : isFavorable
+        ? "text-emerald-500"
+        : "text-red-500"
+
   return (
     <Card className="group relative overflow-hidden border-border/40 bg-card/50 p-4 transition-colors hover:border-border/80">
       <div className={cn("absolute left-0 top-0 h-full w-0.5", accentClass)} />
@@ -52,6 +69,22 @@ function KpiCard({ label, value, sparkline, color, accentClass, icon }: KpiCardP
           <span className="font-mono text-2xl font-bold tabular-nums tracking-tight text-foreground">
             {value}
           </span>
+          {delta.direction !== "flat" && (
+            <div className="flex items-center gap-1">
+              <div className={cn("flex items-center gap-0.5 text-xs font-medium", trendColor)}>
+                {delta.direction === "up" ? (
+                  <TrendingUp className="h-3 w-3" />
+                ) : (
+                  <TrendingDown className="h-3 w-3" />
+                )}
+                <span className="tabular-nums">{delta.percentChange.toFixed(1)}%</span>
+              </div>
+              <span className="text-[10px] text-muted-foreground/70">vs prior period</span>
+            </div>
+          )}
+          {delta.direction === "flat" && (
+            <span className="text-[10px] text-muted-foreground/70">no change vs prior period</span>
+          )}
         </div>
         <div className="flex flex-col items-end gap-2">
           <div
@@ -86,6 +119,8 @@ export function KpiCards() {
       color: "hsl(152, 60%, 52%)",
       accentClass: "bg-primary",
       icon: <TrendingUp className="h-4 w-4" />,
+      delta: data.kpiDeltas.totalSaved,
+      upIsGood: true,
     },
     {
       label: "Total Spent",
@@ -94,6 +129,8 @@ export function KpiCards() {
       color: "hsl(215, 15%, 55%)",
       accentClass: "bg-muted-foreground",
       icon: <DollarSign className="h-4 w-4" />,
+      delta: data.kpiDeltas.totalSpent,
+      upIsGood: false,
     },
     {
       label: "Savings Rate",
@@ -112,6 +149,8 @@ export function KpiCards() {
             ? "bg-chart-3"
             : "bg-destructive",
       icon: <Percent className="h-4 w-4" />,
+      delta: data.kpiDeltas.savingsRate,
+      upIsGood: true,
     },
     {
       label: "Cache Hit Rate",
@@ -120,6 +159,8 @@ export function KpiCards() {
       color: "hsl(190, 70%, 50%)",
       accentClass: "bg-chart-2",
       icon: <Zap className="h-4 w-4" />,
+      delta: data.kpiDeltas.cacheHitRate,
+      upIsGood: true,
     },
     {
       label: "Requests Blocked",
@@ -128,6 +169,8 @@ export function KpiCards() {
       color: "hsl(38, 92%, 50%)",
       accentClass: "bg-chart-3",
       icon: <ShieldOff className="h-4 w-4" />,
+      delta: data.kpiDeltas.requestsBlocked,
+      upIsGood: true,
     },
     {
       label: "Avg Latency",
@@ -136,6 +179,8 @@ export function KpiCards() {
       color: "hsl(215, 15%, 55%)",
       accentClass: "bg-muted-foreground",
       icon: <Timer className="h-4 w-4" />,
+      delta: data.kpiDeltas.avgLatency,
+      upIsGood: false,
     },
   ]
 

@@ -43,6 +43,54 @@ export interface UserBudget {
   isOverBudget: boolean
 }
 
+export interface KpiDelta {
+  previousValue: number
+  percentChange: number
+  direction: "up" | "down" | "flat"
+}
+
+export interface AnomalyRecord {
+  id: number
+  timestamp: number
+  type: "cost_spike" | "token_spike" | "cost_rate_change" | "token_rate_change" | "cost_percentile"
+  severity: "low" | "medium" | "high"
+  metric: string
+  value: number
+  expected: number
+  message: string
+  acknowledged: boolean
+}
+
+export interface PipelineStageMetric {
+  stage: string
+  avgDurationMs: number
+  totalExecutions: number
+  totalSavings: number
+  errorCount: number
+  lastDurationMs: number
+  successRate: number
+}
+
+export interface ProviderHealthRecord {
+  provider: string
+  status: "healthy" | "degraded" | "down"
+  latencyMs: number
+  errorRate: number
+  lastChecked: number
+  requestCount: number
+  uptimePercent: number
+}
+
+export interface DashboardAlert {
+  id: number
+  timestamp: number
+  severity: "info" | "warning" | "critical"
+  title: string
+  message: string
+  source: string
+  dismissed: boolean
+}
+
 export interface DashboardData {
   totalSpent: number
   totalSaved: number
@@ -59,6 +107,15 @@ export interface DashboardData {
     cacheHitRate: number[]
     blocked: number[]
     latency: number[]
+  }
+
+  kpiDeltas: {
+    totalSaved: KpiDelta
+    totalSpent: KpiDelta
+    savingsRate: KpiDelta
+    cacheHitRate: KpiDelta
+    requestsBlocked: KpiDelta
+    avgLatency: KpiDelta
   }
 
   timeSeries: TimeSeriesPoint[]
@@ -89,6 +146,14 @@ export interface DashboardData {
   }
 
   users: UserBudget[]
+
+  anomalies: AnomalyRecord[]
+
+  pipelineMetrics: PipelineStageMetric[]
+
+  providerHealth: ProviderHealthRecord[]
+
+  alerts: DashboardAlert[]
 }
 
 export type TimeRange = "1h" | "6h" | "24h" | "7d" | "30d"
@@ -103,6 +168,8 @@ interface DashboardContextValue {
   addUser: (user: Omit<UserBudget, "spend" | "remaining" | "percentUsed" | "isOverBudget">) => void
   removeUser: (userId: string) => void
   resetUserSpend: (userId: string) => void
+  dismissAlert: (id: number) => void
+  acknowledgeAnomaly: (id: number) => void
   isPaused: boolean
   setIsPaused: (p: boolean) => void
 }
@@ -138,6 +205,21 @@ const EVENT_TYPES: DashboardEvent["type"][] = [
   "prefix:optimized",
   "ledger:entry",
   "breaker:warning",
+]
+
+const PIPELINE_STAGES = [
+  "Circuit Breaker",
+  "Request Guard",
+  "Response Cache",
+  "Context Manager",
+  "Model Router",
+  "Prefix Optimizer",
+]
+
+const PROVIDERS = [
+  { name: "OpenAI", baseLatency: 180 },
+  { name: "Anthropic", baseLatency: 220 },
+  { name: "Google", baseLatency: 150 },
 ]
 
 const INITIAL_USERS: UserBudget[] = [
@@ -226,6 +308,91 @@ function generateEventMessage(
   }
 }
 
+function makeDelta(current: number, previous: number): KpiDelta {
+  if (previous === 0) return { previousValue: 0, percentChange: 0, direction: "flat" }
+  const pct = ((current - previous) / previous) * 100
+  return {
+    previousValue: previous,
+    percentChange: Math.abs(pct),
+    direction: pct > 1 ? "up" : pct < -1 ? "down" : "flat",
+  }
+}
+
+function generateInitialPipelineMetrics(): PipelineStageMetric[] {
+  return PIPELINE_STAGES.map((stage) => ({
+    stage,
+    avgDurationMs: rand(2, 25),
+    totalExecutions: randInt(40, 60),
+    totalSavings: rand(0.01, 0.2),
+    errorCount: randInt(0, 2),
+    lastDurationMs: rand(1, 30),
+    successRate: rand(96, 100),
+  }))
+}
+
+function generateInitialProviderHealth(): ProviderHealthRecord[] {
+  return PROVIDERS.map((p) => ({
+    provider: p.name,
+    status: "healthy" as const,
+    latencyMs: p.baseLatency + rand(-30, 50),
+    errorRate: rand(0, 1.5),
+    lastChecked: Date.now(),
+    requestCount: randInt(15, 30),
+    uptimePercent: rand(99.5, 100),
+  }))
+}
+
+function generateInitialAnomalies(eventIdRef: React.RefObject<number>): AnomalyRecord[] {
+  const now = Date.now()
+  const anomalies: AnomalyRecord[] = []
+  const types: AnomalyRecord["type"][] = ["cost_spike", "token_spike", "cost_rate_change"]
+  for (let i = 0; i < 3; i++) {
+    eventIdRef.current!++
+    anomalies.push({
+      id: eventIdRef.current!,
+      timestamp: now - randInt(5, 45) * 60_000,
+      type: types[i],
+      severity: (["low", "medium", "high"] as const)[randInt(0, 3)],
+      metric: types[i] === "cost_spike" ? "request_cost" : types[i] === "token_spike" ? "token_count" : "cost_delta",
+      value: rand(0.05, 0.5),
+      expected: rand(0.01, 0.08),
+      message:
+        types[i] === "cost_spike"
+          ? `Cost spike: $${rand(0.1, 0.4).toFixed(4)} vs expected $${rand(0.01, 0.05).toFixed(4)}`
+          : types[i] === "token_spike"
+            ? `Token count ${randInt(3000, 8000)} exceeds 2-sigma threshold`
+            : `Cost rate increased ${rand(2, 5).toFixed(1)}x over previous window`,
+      acknowledged: i === 0,
+    })
+  }
+  return anomalies
+}
+
+function generateInitialAlerts(eventIdRef: React.RefObject<number>): DashboardAlert[] {
+  const now = Date.now()
+  eventIdRef.current!++
+  return [
+    {
+      id: eventIdRef.current!,
+      timestamp: now - 120_000,
+      severity: "warning",
+      title: "Budget threshold approaching",
+      message: "Hourly spend has reached 72% of the configured limit.",
+      source: "Circuit Breaker",
+      dismissed: false,
+    },
+  ]
+}
+
+const INITIAL_DELTAS: DashboardData["kpiDeltas"] = {
+  totalSaved: { previousValue: 0, percentChange: 0, direction: "flat" },
+  totalSpent: { previousValue: 0, percentChange: 0, direction: "flat" },
+  savingsRate: { previousValue: 0, percentChange: 0, direction: "flat" },
+  cacheHitRate: { previousValue: 0, percentChange: 0, direction: "flat" },
+  requestsBlocked: { previousValue: 0, percentChange: 0, direction: "flat" },
+  avgLatency: { previousValue: 0, percentChange: 0, direction: "flat" },
+}
+
 /* ------------------------------------------------------------------ */
 /*  Provider                                                           */
 /* ------------------------------------------------------------------ */
@@ -234,6 +401,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [mode, setMode] = React.useState<"demo" | "live">("demo")
   const [timeRange, setTimeRange] = React.useState<TimeRange>("24h")
   const [isPaused, setIsPaused] = React.useState(false)
+  const eventIdRef = React.useRef(0)
   const [data, setData] = React.useState<DashboardData>(() => ({
     totalSpent: 0,
     totalSaved: 0,
@@ -250,6 +418,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       blocked: [],
       latency: [],
     },
+    kpiDeltas: INITIAL_DELTAS,
     timeSeries: [],
     byModule: { guard: 0, cache: 0, context: 0, router: 0, prefix: 0 },
     byModel: {},
@@ -262,8 +431,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       remaining: { session: 50, hour: 10, day: 50, month: 500 },
     },
     users: INITIAL_USERS.map((u) => ({ ...u })),
+    anomalies: [],
+    pipelineMetrics: generateInitialPipelineMetrics(),
+    providerHealth: generateInitialProviderHealth(),
+    alerts: [],
   }))
-  const eventIdRef = React.useRef(0)
 
   React.useEffect(() => {
     if (mode !== "demo" || isPaused) return
@@ -280,6 +452,13 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       const events: DashboardEvent[] = []
       const users = INITIAL_USERS.map((u) => ({ ...u }))
 
+      // Track mid-point for delta computation
+      let midSpent = 0
+      let midSaved = 0
+      let midBlocked = 0
+      let midLatency = 0
+      const midPoint = 30
+
       for (let i = 60; i >= 1; i--) {
         const ts = now - i * 60_000
         const model = pickWeighted(MODELS)
@@ -291,6 +470,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
         cumSpent += spent
         cumSaved += saved
+
+        if (i === midPoint) {
+          midSpent = cumSpent
+          midSaved = cumSaved
+        }
 
         const moduleKey = MODULE_KEYS[randInt(0, MODULE_KEYS.length)]
         modules[moduleKey] += saved
@@ -328,6 +512,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       const totalReqs = 60
       const blocked = Math.round(totalReqs * rand(0.03, 0.08))
       const cacheHits = Math.round(totalReqs * rand(0.25, 0.45))
+      midBlocked = Math.round(blocked * 0.45)
+      midLatency = rand(130, 300)
 
       const updatedUsers = users.map((u) => {
         const pctDaily = u.limits.daily > 0 ? (u.spend.daily / u.limits.daily) * 100 : 0
@@ -343,14 +529,20 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         }
       })
 
+      const savingsRate = (cumSaved / (cumSpent + cumSaved)) * 100
+      const cacheHitRate = (cacheHits / totalReqs) * 100
+      const avgLatency = rand(120, 350)
+      const midSavingsRate = midSaved + midSpent > 0 ? (midSaved / (midSpent + midSaved)) * 100 : 0
+      const midCacheRate = rand(25, 45)
+
       return {
         totalSpent: cumSpent,
         totalSaved: cumSaved,
-        savingsRate: (cumSaved / (cumSpent + cumSaved)) * 100,
-        cacheHitRate: (cacheHits / totalReqs) * 100,
+        savingsRate,
+        cacheHitRate,
         totalRequests: totalReqs,
         requestsBlocked: blocked,
-        avgLatencyMs: rand(120, 350),
+        avgLatencyMs: avgLatency,
         sparklines: {
           saved: points.slice(-20).map((p) => p.saved),
           spent: points.slice(-20).map((p) => p.spent),
@@ -358,6 +550,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           cacheHitRate: points.slice(-20).map(() => rand(25, 50)),
           blocked: points.slice(-20).map(() => randInt(0, 3)),
           latency: points.slice(-20).map(() => rand(100, 400)),
+        },
+        kpiDeltas: {
+          totalSaved: makeDelta(cumSaved, midSaved),
+          totalSpent: makeDelta(cumSpent, midSpent),
+          savingsRate: makeDelta(savingsRate, midSavingsRate),
+          cacheHitRate: makeDelta(cacheHitRate, midCacheRate),
+          requestsBlocked: makeDelta(blocked, midBlocked),
+          avgLatency: makeDelta(avgLatency, midLatency),
         },
         timeSeries: points,
         byModule: modules,
@@ -376,6 +576,10 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
           },
         },
         users: updatedUsers,
+        anomalies: generateInitialAnomalies(eventIdRef),
+        pipelineMetrics: generateInitialPipelineMetrics(),
+        providerHealth: generateInitialProviderHealth(),
+        alerts: generateInitialAlerts(eventIdRef),
       }
     })
 
@@ -461,6 +665,76 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
         const pushSparkline = (arr: number[], val: number) => [...arr.slice(-19), val]
 
+        // Update pipeline metrics with slight drift
+        const newPipelineMetrics = prev.pipelineMetrics.map((pm) => ({
+          ...pm,
+          totalExecutions: pm.totalExecutions + 1,
+          lastDurationMs: rand(1, 30),
+          avgDurationMs: pm.avgDurationMs * 0.95 + rand(2, 25) * 0.05,
+          totalSavings: pm.totalSavings + saved / PIPELINE_STAGES.length,
+          errorCount: pm.errorCount + (Math.random() < 0.005 ? 1 : 0),
+          successRate: Math.max(95, pm.successRate * 0.999 + rand(99, 100) * 0.001),
+        }))
+
+        // Update provider health with slight drift
+        const newProviderHealth = prev.providerHealth.map((ph) => {
+          const provConfig = PROVIDERS.find((p) => p.name === ph.provider) || PROVIDERS[0]
+          const newLatencyVal = ph.latencyMs * 0.9 + (provConfig.baseLatency + rand(-40, 60)) * 0.1
+          const newErrorRate = Math.max(0, ph.errorRate * 0.95 + rand(0, 2) * 0.05)
+          return {
+            ...ph,
+            latencyMs: newLatencyVal,
+            errorRate: newErrorRate,
+            lastChecked: now,
+            requestCount: ph.requestCount + (ph.provider === "OpenAI" ? 1 : Math.random() < 0.5 ? 1 : 0),
+            status: (newErrorRate > 5 ? "degraded" : newLatencyVal > 500 ? "degraded" : "healthy") as ProviderHealthRecord["status"],
+            uptimePercent: Math.max(95, Math.min(100, ph.uptimePercent * 0.999 + rand(99.5, 100) * 0.001)),
+          }
+        })
+
+        // Occasionally generate anomaly (2% chance)
+        let newAnomalies = prev.anomalies
+        if (Math.random() < 0.02) {
+          const anomalyTypes: AnomalyRecord["type"][] = ["cost_spike", "token_spike", "cost_rate_change", "token_rate_change", "cost_percentile"]
+          const type = anomalyTypes[randInt(0, anomalyTypes.length)]
+          eventIdRef.current++
+          const newAnomaly: AnomalyRecord = {
+            id: eventIdRef.current,
+            timestamp: now,
+            type,
+            severity: (["low", "medium", "high"] as const)[randInt(0, 3)],
+            metric: type.startsWith("cost") ? "request_cost" : "token_count",
+            value: rand(0.05, 0.5),
+            expected: rand(0.01, 0.08),
+            message:
+              type === "cost_spike"
+                ? `Cost spike detected: $${rand(0.1, 0.4).toFixed(4)} (${rand(2.5, 6).toFixed(1)}x expected)`
+                : type === "token_spike"
+                  ? `Token count ${randInt(3000, 8000)} exceeds 2-sigma threshold`
+                  : type === "cost_rate_change"
+                    ? `Cost rate increased ${rand(2, 5).toFixed(1)}x over previous window`
+                    : type === "token_rate_change"
+                      ? `Token rate jumped ${rand(1.8, 4).toFixed(1)}x in last 5 minutes`
+                      : `Cost $${rand(0.08, 0.3).toFixed(4)} above 95th percentile`,
+            acknowledged: false,
+          }
+          newAnomalies = [...prev.anomalies, newAnomaly].slice(-20)
+        }
+
+        // Occasionally generate alert (1% chance)
+        let newAlerts = prev.alerts
+        if (Math.random() < 0.01) {
+          const alertTemplates = [
+            { severity: "warning" as const, title: "High latency detected", message: `Provider latency exceeded 400ms for ${PROVIDERS[randInt(0, PROVIDERS.length)].name}.`, source: "Provider Health" },
+            { severity: "critical" as const, title: "Budget threshold exceeded", message: `Spending has reached ${randInt(85, 98)}% of the hourly limit.`, source: "Circuit Breaker" },
+            { severity: "info" as const, title: "Cache efficiency improved", message: `Cache hit rate increased to ${rand(40, 55).toFixed(1)}% in the last 10 minutes.`, source: "Response Cache" },
+            { severity: "warning" as const, title: "Anomaly cluster detected", message: `${randInt(2, 4)} anomalies detected within a 5-minute window.`, source: "Anomaly Detector" },
+          ]
+          const template = alertTemplates[randInt(0, alertTemplates.length)]
+          eventIdRef.current++
+          newAlerts = [...prev.alerts, { ...template, id: eventIdRef.current, timestamp: now, dismissed: false }].slice(-10)
+        }
+
         return {
           totalSpent: newCumSpent,
           totalSaved: newCumSaved,
@@ -476,6 +750,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
             cacheHitRate: pushSparkline(prev.sparklines.cacheHitRate, newCacheRate),
             blocked: pushSparkline(prev.sparklines.blocked, isBlocked ? 1 : 0),
             latency: pushSparkline(prev.sparklines.latency, newLatency),
+          },
+          kpiDeltas: {
+            totalSaved: makeDelta(newCumSaved, prev.totalSaved),
+            totalSpent: makeDelta(newCumSpent, prev.totalSpent),
+            savingsRate: makeDelta(newSavingsRate, prev.savingsRate),
+            cacheHitRate: makeDelta(newCacheRate, prev.cacheHitRate),
+            requestsBlocked: makeDelta(newBlocked, prev.requestsBlocked),
+            avgLatency: makeDelta(newLatency, prev.avgLatencyMs),
           },
           timeSeries: newTimeSeries,
           byModule: newModules,
@@ -494,6 +776,10 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
             },
           },
           users: newUsers,
+          anomalies: newAnomalies,
+          pipelineMetrics: newPipelineMetrics,
+          providerHealth: newProviderHealth,
+          alerts: newAlerts,
         }
       })
     }, 1500)
@@ -569,6 +855,20 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [])
 
+  const dismissAlert = React.useCallback((id: number) => {
+    setData((prev) => ({
+      ...prev,
+      alerts: prev.alerts.map((a) => (a.id === id ? { ...a, dismissed: true } : a)),
+    }))
+  }, [])
+
+  const acknowledgeAnomaly = React.useCallback((id: number) => {
+    setData((prev) => ({
+      ...prev,
+      anomalies: prev.anomalies.map((a) => (a.id === id ? { ...a, acknowledged: true } : a)),
+    }))
+  }, [])
+
   return (
     <DashboardContext.Provider
       value={{
@@ -581,6 +881,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         addUser,
         removeUser,
         resetUserSpend,
+        dismissAlert,
+        acknowledgeAnomaly,
         isPaused,
         setIsPaused,
       }}
