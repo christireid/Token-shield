@@ -156,19 +156,16 @@ function StageRow({ metric, isTopSaver, index }: { metric: PipelineStageMetric; 
       </span>
 
       {/* Errors */}
-      <span
-        className={cn(
-          "font-mono text-xs tabular-nums",
-          metric.errorCount > 0
-            ? "font-medium text-[hsl(0,72%,65%)]"
-            : "text-muted-foreground/60",
-        )}
-      >
-        {metric.errorCount > 0 && (
-          <AlertTriangle className="mr-1 inline-block h-3 w-3 align-text-bottom" />
-        )}
-        {metric.errorCount}
-      </span>
+      {metric.errorCount > 0 ? (
+        <span className="inline-flex items-center gap-1 rounded-full bg-[hsl(0,72%,51%)]/10 px-1.5 font-mono text-xs font-medium tabular-nums text-[hsl(0,72%,65%)]">
+          <AlertTriangle className="h-3 w-3" />
+          {metric.errorCount}
+        </span>
+      ) : (
+        <span className="font-mono text-xs tabular-nums text-muted-foreground/60">
+          {metric.errorCount}
+        </span>
+      )}
     </div>
   )
 }
@@ -185,8 +182,19 @@ export function PipelineMetrics() {
   const totalExecutions = metrics.reduce((sum, m) => sum + m.totalExecutions, 0)
   const totalSavings = metrics.reduce((sum, m) => sum + m.totalSavings, 0)
 
+  const topSaverStage = metrics.length > 0
+    ? metrics.reduce((best, m) => (m.totalSavings > best.totalSavings ? m : best)).stage
+    : ""
+
   return (
     <Card className="border-border/40 bg-card/50">
+      {/* Pulse-glow keyframe for top-saver dot */}
+      <style>{`
+        @keyframes pulse-glow {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.7; transform: scale(1.35); }
+        }
+      `}</style>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div>
@@ -243,7 +251,7 @@ export function PipelineMetrics() {
           </div>
 
           {/* Totals footer */}
-          <div className="flex items-center justify-between rounded-md border border-border/30 bg-secondary/20 px-3 py-2">
+          <div className="flex items-center justify-between rounded-md border border-border/30 bg-gradient-to-r from-secondary/30 via-secondary/20 to-secondary/30 px-3 py-2">
             <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               Pipeline totals
             </span>
@@ -264,7 +272,7 @@ export function PipelineMetrics() {
               <div className="h-6 w-px bg-border/30" />
               <div className="flex flex-col items-end gap-0.5">
                 <span className="text-[10px] text-muted-foreground/60">Savings</span>
-                <span className="font-mono text-xs font-medium tabular-nums text-primary">
+                <span className="font-mono text-sm font-bold tabular-nums text-primary">
                   ${totalSavings.toFixed(4)}
                 </span>
               </div>

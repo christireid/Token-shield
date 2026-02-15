@@ -10,16 +10,16 @@ import {
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { Activity, Wifi, WifiOff, Clock } from "lucide-react"
+import { Activity, Wifi, WifiOff, Clock, Sparkles } from "lucide-react"
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
 const STATUS_DOT_CLASS: Record<ProviderHealthRecord["status"], string> = {
-  healthy: "bg-[hsl(152,60%,52%)] animate-pulse",
-  degraded: "bg-[hsl(38,92%,50%)]",
-  down: "bg-[hsl(0,72%,51%)]",
+  healthy: "bg-[hsl(152,60%,52%)] animate-pulse ring-2 ring-[hsl(152,60%,52%)]/20",
+  degraded: "bg-[hsl(38,92%,50%)] ring-2 ring-[hsl(38,92%,50%)]/20",
+  down: "bg-[hsl(0,72%,51%)] ring-2 ring-[hsl(0,72%,51%)]/20",
 }
 
 const STATUS_BADGE_CLASS: Record<ProviderHealthRecord["status"], string> = {
@@ -43,6 +43,12 @@ const STATUS_ICON: Record<ProviderHealthRecord["status"], React.ReactNode> = {
   down: <WifiOff className="h-3.5 w-3.5 text-[hsl(0,72%,65%)]" />,
 }
 
+const PROVIDER_ACCENT: Record<string, { bg: string; border: string }> = {
+  OpenAI: { bg: "bg-emerald-500/5", border: "border-l-emerald-500" },
+  Anthropic: { bg: "bg-orange-500/5", border: "border-l-orange-500" },
+  Google: { bg: "bg-blue-500/5", border: "border-l-blue-500" },
+}
+
 function formatRelativeTime(ts: number): string {
   const diff = Math.floor((Date.now() - ts) / 1000)
   if (diff < 5) return "just now"
@@ -62,11 +68,18 @@ function LatencyBar({ latencyMs }: { latencyMs: number }) {
         ? "bg-[hsl(38,92%,50%)]"
         : "bg-primary"
 
+  const shadow =
+    clamped >= 400
+      ? "shadow-[0_0_6px_hsl(0,72%,51%,0.4)]"
+      : clamped >= 250
+        ? "shadow-[0_0_6px_hsl(38,92%,50%,0.4)]"
+        : "shadow-[0_0_6px_hsl(152,60%,52%,0.4)]"
+
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-secondary">
+      <div className="h-2 w-16 overflow-hidden rounded-full bg-gradient-to-r from-secondary to-secondary/60">
         <div
-          className={cn("h-full rounded-full transition-all duration-500", color)}
+          className={cn("h-full rounded-full transition-all duration-500", color, shadow)}
           style={{ width: `${percent}%` }}
         />
       </div>
@@ -83,9 +96,10 @@ function LatencyBar({ latencyMs }: { latencyMs: number }) {
 
 function ProviderRow({ record }: { record: ProviderHealthRecord }) {
   const errorRateHigh = record.errorRate > 2
+  const accent = PROVIDER_ACCENT[record.provider]
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border/30 bg-secondary/20 px-4 py-3 transition-colors hover:border-border/50 hover:bg-secondary/30">
+    <div className={cn("flex flex-col gap-3 rounded-lg border border-border/30 bg-secondary/20 px-4 py-3 transition-colors hover:border-border/50 hover:bg-secondary/30", accent && "border-l-2", accent?.border, accent?.bg)}>
       {/* Top row: provider name + status */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
@@ -157,7 +171,7 @@ function ProviderRow({ record }: { record: ProviderHealthRecord }) {
           </span>
           <span
             className={cn(
-              "font-mono text-xs tabular-nums",
+              "inline-flex items-center gap-1 font-mono text-xs tabular-nums",
               record.uptimePercent >= 99.5
                 ? "text-primary"
                 : record.uptimePercent >= 99
@@ -166,6 +180,9 @@ function ProviderRow({ record }: { record: ProviderHealthRecord }) {
             )}
           >
             {record.uptimePercent.toFixed(2)}%
+            {record.uptimePercent >= 99.9 && (
+              <Sparkles className="h-3 w-3 text-yellow-400" />
+            )}
           </span>
         </div>
       </div>

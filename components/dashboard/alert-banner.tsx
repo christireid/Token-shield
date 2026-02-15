@@ -47,6 +47,23 @@ const SEVERITY_CONFIG: Record<
 }
 
 /* ------------------------------------------------------------------ */
+/*  Relative time helper                                               */
+/* ------------------------------------------------------------------ */
+
+function formatRelativeTime(timestamp: number): string {
+  const now = Date.now()
+  const diffMs = now - timestamp
+  const diffSec = Math.floor(diffMs / 1000)
+  if (diffSec < 60) return `${diffSec}s ago`
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return `${diffHr}h ago`
+  const diffDay = Math.floor(diffHr / 24)
+  return `${diffDay}d ago`
+}
+
+/* ------------------------------------------------------------------ */
 /*  Single alert row                                                   */
 /* ------------------------------------------------------------------ */
 
@@ -64,6 +81,7 @@ function AlertRow({
       className={cn(
         "flex items-center gap-3 rounded-md border px-3 py-2",
         config.containerClass,
+        alert.severity === "critical" && "animate-pulse",
       )}
     >
       {/* Severity icon */}
@@ -95,6 +113,11 @@ function AlertRow({
         {alert.source}
       </Badge>
 
+      {/* Timestamp */}
+      <span className="shrink-0 text-[10px] text-muted-foreground/50">
+        {formatRelativeTime(alert.timestamp)}
+      </span>
+
       {/* Dismiss button */}
       <Button
         variant="ghost"
@@ -121,7 +144,7 @@ export function AlertBanner() {
   if (activeAlerts.length === 0) return null
 
   return (
-    <section aria-label="Active alerts" className="flex flex-col gap-1.5">
+    <section aria-label="Active alerts" className="flex flex-col gap-1.5 animate-in fade-in-0 slide-in-from-top-2 duration-300">
       {/* Count indicator when more than 2 alerts */}
       {activeAlerts.length > 2 && (
         <div className="flex items-center gap-1.5 px-1">
