@@ -46,7 +46,7 @@ const TIER_BADGE_CLASSES: Record<string, string> = {
   unlimited: "border-primary/30 bg-primary/10 text-primary",
 }
 
-function StatusBadge({ user }: { user: UserBudget }) {
+const StatusBadge = React.memo(function StatusBadge({ user }: { user: UserBudget }) {
   if (user.isOverBudget) {
     return (
       <Badge
@@ -72,15 +72,21 @@ function StatusBadge({ user }: { user: UserBudget }) {
       OK
     </Badge>
   )
-}
+})
 
-function PercentBar({ percent }: { percent: number }) {
+const PercentBar = React.memo(function PercentBar({ percent }: { percent: number }) {
   const clamped = Math.min(100, Math.max(0, percent))
   const color =
     clamped >= 80 ? "bg-[hsl(0,72%,51%)]" : clamped >= 60 ? "bg-[hsl(38,92%,50%)]" : "bg-primary"
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-secondary">
+      <div
+        className="h-1.5 w-16 overflow-hidden rounded-full bg-secondary"
+        role="progressbar"
+        aria-valuenow={clamped}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
         <div
           className={cn("h-full rounded-full transition-all", color)}
           style={{ width: `${clamped}%` }}
@@ -91,7 +97,7 @@ function PercentBar({ percent }: { percent: number }) {
       </span>
     </div>
   )
-}
+})
 
 /* ---- Inline edit cell ---- */
 function EditableLimit({ value, onSave }: { value: number; onSave: (v: number) => void }) {
@@ -102,7 +108,8 @@ function EditableLimit({ value, onSave }: { value: number; onSave: (v: number) =
   React.useEffect(() => {
     if (editing) {
       setDraft(value.toFixed(0))
-      setTimeout(() => inputRef.current?.select(), 0)
+      const timeoutId = setTimeout(() => inputRef.current?.select(), 0)
+      return () => clearTimeout(timeoutId)
     }
   }, [editing, value])
 
@@ -269,62 +276,78 @@ function AddUserDialog() {
 
 type SortKey = "displayName" | "tier" | "dailySpend" | "monthlySpend" | "percentUsed"
 
-export function UserBudgetTable() {
-  const { data, updateUserBudget, removeUser, resetUserSpend } = useDashboard()
-  const [sortKey, setSortKey] = React.useState<SortKey>("percentUsed")
-  const [sortDir, setSortDir] = React.useState<"asc" | "desc">("desc")
-
-  const handleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "desc" ? "asc" : "desc"))
-    } else {
-      setSortKey(key)
-      setSortDir("desc")
-    }
+function getSortValue(u: UserBudget, key: SortKey): number | string {
+  switch (key) {
+    case "displayName":
+      return u.displayName
+    case "tier":
+      return u.tier
+    case "dailySpend":
+      return u.spend.daily
+    case "monthlySpend":
+      return u.spend.monthly
+    case "percentUsed":
+      return Math.max(u.percentUsed.daily, u.percentUsed.monthly)
   }
+}
 
-  const getSortValue = (u: UserBudget, key: SortKey): number | string => {
-    switch (key) {
-      case "displayName":
-        return u.displayName
-      case "tier":
-        return u.tier
-      case "dailySpend":
-        return u.spend.daily
-      case "monthlySpend":
-        return u.spend.monthly
-      case "percentUsed":
-        return Math.max(u.percentUsed.daily, u.percentUsed.monthly)
-    }
-  }
-
-  const sorted = [...data.users].sort((a, b) => {
-    const aVal = getSortValue(a, sortKey)
-    const bVal = getSortValue(b, sortKey)
-    if (typeof aVal === "string" && typeof bVal === "string") {
-      return sortDir === "desc" ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal)
-    }
-    return sortDir === "desc"
-      ? (bVal as number) - (aVal as number)
-      : (aVal as number) - (bVal as number)
-  })
-
-  const SortHeader = ({ label, sortKeyValue }: { label: string; sortKeyValue: SortKey }) => (
-    <TableHead
-      className="cursor-pointer text-xs select-none"
-      onClick={() => handleSort(sortKeyValue)}
-    >
+const SortHeader = React.memo(function SortHeader({
+  label,
+  sortKeyValue,
+  currentSortKey,
+  currentSortDir,
+  onSort,
+}: {
+  label: string
+  sortKeyValue: SortKey
+  currentSortKey: SortKey
+  currentSortDir: "asc" | "desc"
+  onSort: (key: SortKey) => void
+}) {
+  return (
+    <TableHead className="cursor-pointer text-xs select-none" onClick={() => onSort(sortKeyValue)}>
       <span className="inline-flex items-center gap-1">
         {label}
         <ArrowUpDown
           className={cn(
             "h-3 w-3",
-            sortKey === sortKeyValue ? "text-foreground" : "text-muted-foreground/40",
+            currentSortKey === sortKeyValue ? "text-foreground" : "text-muted-foreground/40",
           )}
         />
       </span>
     </TableHead>
   )
+})
+
+export function UserBudgetTable() {
+  const { data, updateUserBudget, removeUser, resetUserSpend } = useDashboard()
+  const [sortKey, setSortKey] = React.useState<SortKey>("percentUsed")
+  const [sortDir, setSortDir] = React.useState<"asc" | "desc">("desc")
+
+  const handleSort = React.useCallback(
+    (key: SortKey) => {
+      if (sortKey === key) {
+        setSortDir((d) => (d === "desc" ? "asc" : "desc"))
+      } else {
+        setSortKey(key)
+        setSortDir("desc")
+      }
+    },
+    [sortKey],
+  )
+
+  const sorted = React.useMemo(() => {
+    return [...data.users].sort((a, b) => {
+      const aVal = getSortValue(a, sortKey)
+      const bVal = getSortValue(b, sortKey)
+      if (typeof aVal === "string" && typeof bVal === "string") {
+        return sortDir === "desc" ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal)
+      }
+      return sortDir === "desc"
+        ? (bVal as number) - (aVal as number)
+        : (aVal as number) - (bVal as number)
+    })
+  }, [data.users, sortKey, sortDir])
 
   return (
     <Card className="border-border/40 bg-card/50">
@@ -344,13 +367,31 @@ export function UserBudgetTable() {
         <Table>
           <TableHeader>
             <TableRow className="border-border/30 hover:bg-transparent">
-              <SortHeader label="User" sortKeyValue="displayName" />
-              <SortHeader label="Tier" sortKeyValue="tier" />
+              <SortHeader
+                label="User"
+                sortKeyValue="displayName"
+                currentSortKey={sortKey}
+                currentSortDir={sortDir}
+                onSort={handleSort}
+              />
+              <SortHeader
+                label="Tier"
+                sortKeyValue="tier"
+                currentSortKey={sortKey}
+                currentSortDir={sortDir}
+                onSort={handleSort}
+              />
               <TableHead className="text-xs">Daily Spend</TableHead>
               <TableHead className="text-xs">Daily Limit</TableHead>
               <TableHead className="text-xs">Monthly Spend</TableHead>
               <TableHead className="text-xs">Monthly Limit</TableHead>
-              <SortHeader label="Usage" sortKeyValue="percentUsed" />
+              <SortHeader
+                label="Usage"
+                sortKeyValue="percentUsed"
+                currentSortKey={sortKey}
+                currentSortDir={sortDir}
+                onSort={handleSort}
+              />
               <TableHead className="text-xs">Status</TableHead>
               <TableHead className="w-10 text-xs">
                 <span className="sr-only">Actions</span>

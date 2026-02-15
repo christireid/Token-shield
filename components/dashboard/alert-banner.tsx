@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { useDashboard, type DashboardAlert } from "./dashboard-provider"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -40,7 +41,7 @@ const SEVERITY_CONFIG: Record<
 /*  Single alert row                                                   */
 /* ------------------------------------------------------------------ */
 
-function AlertRow({
+const AlertRow = React.memo(function AlertRow({
   alert,
   onDismiss,
   reducedMotion,
@@ -96,7 +97,7 @@ function AlertRow({
       </Button>
     </div>
   )
-}
+})
 
 /* ------------------------------------------------------------------ */
 /*  AlertBanner                                                        */
@@ -106,19 +107,27 @@ export function AlertBanner() {
   const { data, dismissAlert } = useDashboard()
   const reducedMotion = useReducedMotion()
 
-  const activeAlerts = data.alerts.filter((a) => !a.dismissed)
+  const activeAlerts = React.useMemo(() => data.alerts.filter((a) => !a.dismissed), [data.alerts])
 
   if (activeAlerts.length === 0) return null
 
   return (
     <section
       aria-label="Active alerts"
-      className="flex flex-col gap-1.5 animate-in fade-in-0 slide-in-from-top-2 duration-300"
+      className={cn(
+        "flex flex-col gap-1.5",
+        !reducedMotion && "animate-in fade-in-0 slide-in-from-top-2 duration-300",
+      )}
     >
       {/* Count indicator when more than 2 alerts */}
       {activeAlerts.length > 2 && (
         <div className="flex items-center gap-1.5 px-1">
-          <div className="h-1.5 w-1.5 rounded-full bg-[hsl(38,92%,50%)] animate-pulse" />
+          <div
+            className={cn(
+              "h-1.5 w-1.5 rounded-full bg-[hsl(38,92%,50%)]",
+              !reducedMotion && "animate-pulse",
+            )}
+          />
           <span className="text-[10px] font-medium text-muted-foreground">
             {activeAlerts.length} active alerts
           </span>

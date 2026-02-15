@@ -20,12 +20,24 @@ import {
 /*  Summary stats bar                                                  */
 /* ------------------------------------------------------------------ */
 
-function SummaryStats({ anomalies }: { anomalies: AnomalyRecord[] }) {
-  const total = anomalies.length
-  const unacknowledged = anomalies.filter((a) => !a.acknowledged).length
-  const high = anomalies.filter((a) => a.severity === "high").length
-  const medium = anomalies.filter((a) => a.severity === "medium").length
-  const low = anomalies.filter((a) => a.severity === "low").length
+const SummaryStats = React.memo(function SummaryStats({
+  anomalies,
+}: {
+  anomalies: AnomalyRecord[]
+}) {
+  const { total, unacknowledged, high, medium, low } = React.useMemo(() => {
+    let unack = 0
+    let h = 0
+    let m = 0
+    let l = 0
+    for (const a of anomalies) {
+      if (!a.acknowledged) unack++
+      if (a.severity === "high") h++
+      else if (a.severity === "medium") m++
+      else l++
+    }
+    return { total: anomalies.length, unacknowledged: unack, high: h, medium: m, low: l }
+  }, [anomalies])
 
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-md border border-border/30 bg-secondary/20 px-3 py-2">
@@ -70,7 +82,7 @@ function SummaryStats({ anomalies }: { anomalies: AnomalyRecord[] }) {
       </div>
     </div>
   )
-}
+})
 
 /* ------------------------------------------------------------------ */
 /*  Anomaly row                                                        */
@@ -97,8 +109,8 @@ const AnomalyRow = React.memo(function AnomalyRow({
         <div
           className={cn(
             "h-2 w-2 rounded-full",
-            SEVERITY_DOT_COLOR[anomaly.severity],
-            !anomaly.acknowledged && SEVERITY_DOT_ANIMATION[anomaly.severity],
+            SEVERITY_DOT_COLOR[anomaly.severity] ?? "bg-muted-foreground",
+            !anomaly.acknowledged && (SEVERITY_DOT_ANIMATION[anomaly.severity] ?? ""),
           )}
         />
       </div>
@@ -110,10 +122,11 @@ const AnomalyRow = React.memo(function AnomalyRow({
             variant="outline"
             className={cn(
               "shrink-0 rounded px-1.5 py-0 text-[10px] font-medium",
-              ANOMALY_TYPE_BADGE_COLOR[anomaly.type],
+              ANOMALY_TYPE_BADGE_COLOR[anomaly.type] ??
+                "border-border/30 bg-secondary/30 text-muted-foreground",
             )}
           >
-            {ANOMALY_TYPE_LABELS[anomaly.type]}
+            {ANOMALY_TYPE_LABELS[anomaly.type] ?? anomaly.type}
           </Badge>
           <span className="truncate text-xs text-muted-foreground">{anomaly.message}</span>
         </div>
@@ -179,7 +192,12 @@ export function AnomalyPanel() {
 
         {/* Anomaly list */}
         <ScrollArea className="h-[300px]">
-          <div className="flex flex-col gap-1">
+          <div
+            className="flex flex-col gap-1"
+            role="log"
+            aria-live="polite"
+            aria-label="Anomaly events"
+          >
             {displayAnomalies.map((anomaly) => (
               <AnomalyRow key={anomaly.id} anomaly={anomaly} onAcknowledge={acknowledgeAnomaly} />
             ))}

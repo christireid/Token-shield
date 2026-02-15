@@ -15,8 +15,9 @@ import { EventFeed } from "./event-feed"
 import { BudgetGauge } from "./budget-gauge"
 import { UserBudgetTable } from "./user-budget-table"
 import { useStaggeredReveal } from "@/hooks/use-staggered-reveal"
+import { DashboardErrorBoundary } from "./error-boundary"
 
-function SectionHeader({ title }: { title: string }) {
+const SectionHeader = React.memo(function SectionHeader({ title }: { title: string }) {
   return (
     <div className="flex items-center gap-4 pt-2">
       <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/50">
@@ -25,7 +26,10 @@ function SectionHeader({ title }: { title: string }) {
       <div className="h-px bg-border/20 flex-1" />
     </div>
   )
-}
+})
+
+const HIDDEN_STYLE: React.CSSProperties = { opacity: 0, transform: "translateY(12px)" }
+const VISIBLE_STYLE: React.CSSProperties = { opacity: 1, transform: "translateY(0)" }
 
 function RevealSection({
   order,
@@ -41,14 +45,15 @@ function RevealSection({
     <section
       aria-label={ariaLabel}
       className="transition-all duration-500 ease-out"
-      style={{
-        opacity: visible ? 1 : 0,
-        transform: visible ? "translateY(0)" : "translateY(12px)",
-      }}
+      style={visible ? VISIBLE_STYLE : HIDDEN_STYLE}
     >
       {children}
     </section>
   )
+}
+
+const RADIAL_BG_STYLE: React.CSSProperties = {
+  background: "radial-gradient(ellipse 80% 50% at 50% 0%, hsl(152 60% 52% / 0.03), transparent)",
 }
 
 export function DashboardShell() {
@@ -68,10 +73,7 @@ export function DashboardShell() {
           {/* Radial gradient glow at the top for depth */}
           <div
             className="pointer-events-none absolute inset-x-0 top-0 h-[600px]"
-            style={{
-              background:
-                "radial-gradient(ellipse 80% 50% at 50% 0%, hsl(152 60% 52% / 0.03), transparent)",
-            }}
+            style={RADIAL_BG_STYLE}
           />
 
           <div className="relative mx-auto flex max-w-[1400px] flex-col gap-6">
@@ -88,7 +90,9 @@ export function DashboardShell() {
 
             {/* Savings timeline - full width */}
             <RevealSection order={2} ariaLabel="Savings over time">
-              <SavingsTimelineChart />
+              <DashboardErrorBoundary name="Savings Timeline">
+                <SavingsTimelineChart />
+              </DashboardErrorBoundary>
             </RevealSection>
 
             {/* --- Cost Analytics --- */}
@@ -97,12 +101,16 @@ export function DashboardShell() {
             {/* Two-column: Module breakdown + Model usage */}
             <RevealSection order={3} ariaLabel="Cost analytics breakdown">
               <div className="grid gap-6 lg:grid-cols-2">
-                <section aria-label="Module savings breakdown">
-                  <ModuleBreakdownChart />
-                </section>
-                <section aria-label="Model usage distribution">
-                  <ModelUsageChart />
-                </section>
+                <DashboardErrorBoundary name="Module Breakdown">
+                  <section aria-label="Module savings breakdown">
+                    <ModuleBreakdownChart />
+                  </section>
+                </DashboardErrorBoundary>
+                <DashboardErrorBoundary name="Model Usage">
+                  <section aria-label="Model usage distribution">
+                    <ModelUsageChart />
+                  </section>
+                </DashboardErrorBoundary>
               </div>
             </RevealSection>
 
@@ -112,12 +120,16 @@ export function DashboardShell() {
             {/* Two-column: Pipeline metrics + Provider health */}
             <RevealSection order={4} ariaLabel="Infrastructure metrics">
               <div className="grid gap-6 lg:grid-cols-2">
-                <section aria-label="Pipeline performance">
-                  <PipelineMetrics />
-                </section>
-                <section aria-label="Provider health">
-                  <ProviderHealth />
-                </section>
+                <DashboardErrorBoundary name="Pipeline Metrics">
+                  <section aria-label="Pipeline performance">
+                    <PipelineMetrics />
+                  </section>
+                </DashboardErrorBoundary>
+                <DashboardErrorBoundary name="Provider Health">
+                  <section aria-label="Provider health">
+                    <ProviderHealth />
+                  </section>
+                </DashboardErrorBoundary>
               </div>
             </RevealSection>
 
@@ -127,15 +139,21 @@ export function DashboardShell() {
             {/* Three-column: Event feed + Anomaly detection + Budget gauge */}
             <RevealSection order={5} ariaLabel="Activity and security overview">
               <div className="grid gap-6 lg:grid-cols-[1fr_1fr_380px]">
-                <section aria-label="Live event feed">
-                  <EventFeed />
-                </section>
-                <section aria-label="Anomaly detection">
-                  <AnomalyPanel />
-                </section>
-                <section aria-label="Budget utilization">
-                  <BudgetGauge />
-                </section>
+                <DashboardErrorBoundary name="Event Feed">
+                  <section aria-label="Live event feed">
+                    <EventFeed />
+                  </section>
+                </DashboardErrorBoundary>
+                <DashboardErrorBoundary name="Anomaly Detection">
+                  <section aria-label="Anomaly detection">
+                    <AnomalyPanel />
+                  </section>
+                </DashboardErrorBoundary>
+                <DashboardErrorBoundary name="Budget Gauge">
+                  <section aria-label="Budget utilization">
+                    <BudgetGauge />
+                  </section>
+                </DashboardErrorBoundary>
               </div>
             </RevealSection>
 
@@ -144,7 +162,9 @@ export function DashboardShell() {
 
             {/* User budget management - full width */}
             <RevealSection order={6} ariaLabel="User budget management">
-              <UserBudgetTable />
+              <DashboardErrorBoundary name="User Budget Table">
+                <UserBudgetTable />
+              </DashboardErrorBoundary>
             </RevealSection>
           </div>
         </main>

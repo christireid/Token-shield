@@ -5,17 +5,28 @@ import { useDashboard } from "./dashboard-provider"
 import { useReducedMotion } from "@/hooks/use-reduced-motion"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { COLORS } from "@/lib/dashboard-utils"
 
 function getGaugeColor(percent: number): string {
-  if (percent >= 80) return "hsl(0, 72%, 51%)"
-  if (percent >= 60) return "hsl(38, 92%, 50%)"
-  return "hsl(152, 60%, 52%)"
+  if (percent >= 80) return COLORS.red
+  if (percent >= 60) return COLORS.amber
+  return COLORS.primary
 }
 
 function getGaugeTextClass(percent: number): string {
   if (percent >= 80) return "text-[hsl(0,72%,65%)]"
   if (percent >= 60) return "text-[hsl(38,92%,65%)]"
   return "text-primary"
+}
+
+/* Hoisted geometry helpers — depend only on constants */
+const GAUGE_RADIUS = 70
+const GAUGE_CX = 90
+const GAUGE_CY = 90
+
+function polarToCartesian(angle: number) {
+  const rad = ((angle - 90) * Math.PI) / 180
+  return { x: GAUGE_CX + GAUGE_RADIUS * Math.cos(rad), y: GAUGE_CY + GAUGE_RADIUS * Math.sin(rad) }
 }
 
 interface MiniBarProps {
@@ -38,7 +49,14 @@ const MiniBar = memo(function MiniBar({ label, value, max }: MiniBarProps) {
           ${remaining.toFixed(2)} left
         </span>
       </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-gradient-to-r from-secondary to-secondary/60">
+      <div
+        className="h-2 w-full overflow-hidden rounded-full bg-gradient-to-r from-secondary to-secondary/60"
+        role="progressbar"
+        aria-valuenow={Math.round(percent)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`${label} budget usage`}
+      >
         <div
           className="h-full rounded-full transition-all duration-500"
           style={{
@@ -61,19 +79,14 @@ export function BudgetGauge() {
   const gaugeColor = getGaugeColor(percent)
 
   // SVG arc gauge
-  const radius = 70
+  const radius = GAUGE_RADIUS
   const strokeWidth = 10
-  const cx = 90
-  const cy = 90
+  const cx = GAUGE_CX
+  const cy = GAUGE_CY
   const startAngle = 135
   const endAngle = 405
   const totalAngle = endAngle - startAngle
   const fillAngle = startAngle + (totalAngle * percent) / 100
-
-  const polarToCartesian = (angle: number) => {
-    const rad = ((angle - 90) * Math.PI) / 180
-    return { x: cx + radius * Math.cos(rad), y: cy + radius * Math.sin(rad) }
-  }
 
   const describeArc = (start: number, end: number) => {
     const s = polarToCartesian(start)

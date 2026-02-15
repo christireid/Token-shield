@@ -1,11 +1,12 @@
 "use client"
 
-import { useMemo } from "react"
+import React, { useMemo } from "react"
 import { useDashboard } from "./dashboard-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts"
 import { CHART_MARGINS, GRID_STROKE, GRID_DASH } from "@/lib/chart-theme"
+import { formatCurrency, COLORS } from "@/lib/dashboard-utils"
 
 const chartConfig = {
   cumulativeSaved: {
@@ -18,11 +19,15 @@ const chartConfig = {
   },
 }
 
-function formatCompact(value: number): string {
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(1)}k`
-  }
-  return `$${value.toFixed(2)}`
+const LEGEND_SAVED_STYLE: React.CSSProperties = {
+  backgroundColor: "hsl(152, 60%, 52%)",
+  boxShadow: "0 0 6px hsl(152, 60%, 52%)",
+}
+const LEGEND_SPENT_STYLE: React.CSSProperties = {
+  backgroundColor: "hsl(215, 15%, 45%)",
+}
+const LEGEND_NOSHIELD_STYLE: React.CSSProperties = {
+  borderColor: "hsl(215, 15%, 35%)",
 }
 
 export function SavingsTimelineChart() {
@@ -61,7 +66,7 @@ export function SavingsTimelineChart() {
               Total Saved
             </span>
             <span className="font-mono text-2xl font-black tabular-nums text-primary">
-              {formatCompact(data.totalSaved)}
+              {formatCurrency(data.totalSaved)}
             </span>
           </div>
           <div className="flex flex-col gap-0.5 text-right">
@@ -69,7 +74,7 @@ export function SavingsTimelineChart() {
               Total Spent
             </span>
             <span className="font-mono text-base font-semibold tabular-nums text-muted-foreground">
-              {formatCompact(data.totalSpent)}
+              {formatCurrency(data.totalSpent)}
             </span>
           </div>
           <div className="flex flex-col gap-0.5 text-right">
@@ -198,26 +203,17 @@ export function SavingsTimelineChart() {
         {/* ── Legend ── */}
         <div className="mt-3 flex items-center justify-center gap-6 text-xs text-muted-foreground">
           <div className="flex items-center gap-1.5">
-            <span
-              className="inline-block h-2.5 w-2.5 rounded-full"
-              style={{
-                backgroundColor: "hsl(152, 60%, 52%)",
-                boxShadow: "0 0 6px hsl(152, 60%, 52%)",
-              }}
-            />
+            <span className="inline-block h-2.5 w-2.5 rounded-full" style={LEGEND_SAVED_STYLE} />
             <span>Savings</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span
-              className="inline-block h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: "hsl(215, 15%, 45%)" }}
-            />
+            <span className="inline-block h-2.5 w-2.5 rounded-full" style={LEGEND_SPENT_STYLE} />
             <span>Actual Spend</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span
               className="inline-block h-[2px] w-4 border-t-2 border-dashed"
-              style={{ borderColor: "hsl(215, 15%, 35%)" }}
+              style={LEGEND_NOSHIELD_STYLE}
             />
             <span>Without Shield</span>
           </div>

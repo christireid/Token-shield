@@ -17,6 +17,13 @@ import {
 import { cn } from "@/lib/utils"
 import { getModelColor } from "@/lib/dashboard-utils"
 
+const CENTER_LABEL_STYLE: React.CSSProperties = {
+  background: "linear-gradient(135deg, hsl(152, 60%, 52%), hsl(190, 70%, 60%))",
+  WebkitBackgroundClip: "text",
+  WebkitTextFillColor: "transparent",
+  filter: "drop-shadow(0 0 8px rgba(52, 211, 153, 0.3))",
+}
+
 export function ModelUsageChart() {
   const { data } = useDashboard()
   const [sortKey, setSortKey] = React.useState<"cost" | "calls" | "tokens">("cost")
@@ -63,17 +70,21 @@ export function ModelUsageChart() {
     return { totalCost, modelCount, topModel }
   }, [entries])
 
-  const handleSort = (key: "cost" | "calls" | "tokens") => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "desc" ? "asc" : "desc"))
-    } else {
-      setSortKey(key)
-      setSortDir("desc")
-    }
-  }
+  const handleSort = React.useCallback(
+    (key: "cost" | "calls" | "tokens") => {
+      if (sortKey === key) {
+        setSortDir((d) => (d === "desc" ? "asc" : "desc"))
+      } else {
+        setSortKey(key)
+        setSortDir("desc")
+      }
+    },
+    [sortKey],
+  )
 
-  const chartConfig = Object.fromEntries(
-    entries.map((e) => [e.id, { label: e.id, color: e.color }]),
+  const chartConfig = useMemo(
+    () => Object.fromEntries(entries.map((e) => [e.id, { label: e.id, color: e.color }])),
+    [entries],
   )
 
   return (
@@ -91,6 +102,7 @@ export function ModelUsageChart() {
             <ChartContainer
               config={chartConfig}
               className="mx-auto aspect-square h-[180px] w-[180px]"
+              aria-label="Model cost distribution chart"
             >
               <PieChart>
                 <defs>
@@ -140,12 +152,7 @@ export function ModelUsageChart() {
             <div className="-mt-[124px] flex flex-col items-center justify-center pb-[40px]">
               <span
                 className="font-mono text-xl font-bold tracking-tight"
-                style={{
-                  background: "linear-gradient(135deg, hsl(152, 60%, 52%), hsl(190, 70%, 60%))",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  filter: "drop-shadow(0 0 8px rgba(52, 211, 153, 0.3))",
-                }}
+                style={CENTER_LABEL_STYLE}
               >
                 ${totalCost.toFixed(2)}
               </span>

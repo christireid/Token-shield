@@ -3,7 +3,7 @@
 import { useMemo } from "react"
 import { useDashboard } from "./dashboard-provider"
 import { KpiCard, type KpiCardProps } from "./kpi-card"
-import { formatCurrency } from "@/lib/dashboard-utils"
+import { formatCurrency, COLORS } from "@/lib/dashboard-utils"
 import { DollarSign, Percent, Zap, ShieldOff, Timer, TrendingUp } from "lucide-react"
 
 export function KpiCards() {
@@ -15,7 +15,7 @@ export function KpiCards() {
         label: "Total Saved",
         value: formatCurrency(data.totalSaved),
         sparkline: data.sparklines.saved,
-        color: "hsl(152, 60%, 52%)",
+        color: COLORS.primary,
         accentClass: "bg-primary",
         gradientClass: "bg-gradient-to-br from-card/80 via-card/50 to-primary/[0.03]",
         icon: <TrendingUp className="h-4 w-4" />,
@@ -40,10 +40,10 @@ export function KpiCards() {
         sparkline: data.sparklines.savingsRate,
         color:
           data.savingsRate >= 30
-            ? "hsl(152, 60%, 52%)"
+            ? COLORS.primary
             : data.savingsRate >= 15
-              ? "hsl(38, 92%, 50%)"
-              : "hsl(0, 72%, 51%)",
+              ? COLORS.amber
+              : COLORS.red,
         accentClass:
           data.savingsRate >= 30
             ? "bg-primary"
@@ -64,7 +64,7 @@ export function KpiCards() {
         label: "Cache Hit Rate",
         value: `${data.cacheHitRate.toFixed(1)}%`,
         sparkline: data.sparklines.cacheHitRate,
-        color: "hsl(190, 70%, 50%)",
+        color: COLORS.cyan,
         accentClass: "bg-chart-2",
         gradientClass: "bg-gradient-to-br from-card/80 via-card/50 to-cyan-500/[0.04]",
         icon: <Zap className="h-4 w-4" />,
@@ -75,7 +75,7 @@ export function KpiCards() {
         label: "Requests Blocked",
         value: data.requestsBlocked.toLocaleString(),
         sparkline: data.sparklines.blocked,
-        color: "hsl(38, 92%, 50%)",
+        color: COLORS.amber,
         accentClass: "bg-chart-3",
         gradientClass: "bg-gradient-to-br from-card/80 via-card/50 to-amber-500/[0.04]",
         icon: <ShieldOff className="h-4 w-4" />,
@@ -94,7 +94,16 @@ export function KpiCards() {
         upIsGood: false,
       },
     ],
-    [data],
+    [
+      data.totalSaved,
+      data.totalSpent,
+      data.savingsRate,
+      data.cacheHitRate,
+      data.requestsBlocked,
+      data.avgLatencyMs,
+      data.sparklines,
+      data.kpiDeltas,
+    ],
   )
 
   return (

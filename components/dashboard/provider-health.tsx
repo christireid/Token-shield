@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { useDashboard, type ProviderHealthRecord } from "./dashboard-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -25,7 +26,7 @@ const STATUS_ICON: Record<ProviderHealthRecord["status"], React.ReactNode> = {
 }
 
 /** Latency bar scaled to a 0-500ms range */
-function LatencyBar({ latencyMs }: { latencyMs: number }) {
+const LatencyBar = React.memo(function LatencyBar({ latencyMs }: { latencyMs: number }) {
   const clamped = Math.min(500, Math.max(0, latencyMs))
   const percent = (clamped / 500) * 100
   const color =
@@ -39,7 +40,13 @@ function LatencyBar({ latencyMs }: { latencyMs: number }) {
         : "shadow-[0_0_6px_hsl(152,60%,52%,0.4)]"
 
   return (
-    <div className="flex items-center gap-2">
+    <div
+      className="flex items-center gap-2"
+      role="progressbar"
+      aria-valuenow={Math.round(latencyMs)}
+      aria-valuemin={0}
+      aria-valuemax={500}
+    >
       <div className="h-2 w-16 overflow-hidden rounded-full bg-gradient-to-r from-secondary to-secondary/60">
         <div
           className={cn("h-full rounded-full transition-all duration-500", color, shadow)}
@@ -51,13 +58,13 @@ function LatencyBar({ latencyMs }: { latencyMs: number }) {
       </span>
     </div>
   )
-}
+})
 
 /* ------------------------------------------------------------------ */
 /*  Provider row                                                       */
 /* ------------------------------------------------------------------ */
 
-function ProviderRow({
+const ProviderRow = React.memo(function ProviderRow({
   record,
   reducedMotion,
 }: {
@@ -159,7 +166,7 @@ function ProviderRow({
       </div>
     </div>
   )
-}
+})
 
 /* ------------------------------------------------------------------ */
 /*  Main component                                                     */

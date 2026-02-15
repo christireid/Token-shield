@@ -45,7 +45,11 @@ export function ModuleBreakdownChart() {
           </span>
         </div>
 
-        <ChartContainer config={chartConfig} className="aspect-auto h-[280px] w-full md:h-[320px]">
+        <ChartContainer
+          config={chartConfig}
+          className="aspect-auto h-[280px] w-full md:h-[320px]"
+          aria-label="Savings by module chart"
+        >
           <BarChart data={chartData} layout="vertical" margin={CHART_MARGINS}>
             <defs>
               {/* Gradient fills for each module */}

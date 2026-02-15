@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import React, { useMemo } from "react"
 import { useDashboard, type PipelineStageMetric } from "./dashboard-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -22,8 +22,13 @@ function getSuccessRateColor(rate: number): string {
 /*  Stacked bar visualization                                          */
 /* ------------------------------------------------------------------ */
 
-function PipelineBar({ metrics }: { metrics: PipelineStageMetric[] }) {
-  const totalDuration = metrics.reduce((sum, m) => sum + m.avgDurationMs, 0)
+const PipelineBar = React.memo(function PipelineBar({
+  metrics,
+  totalDuration,
+}: {
+  metrics: PipelineStageMetric[]
+  totalDuration: number
+}) {
   if (totalDuration === 0) return null
 
   return (
@@ -34,7 +39,11 @@ function PipelineBar({ metrics }: { metrics: PipelineStageMetric[] }) {
           {totalDuration.toFixed(1)}ms total
         </span>
       </div>
-      <div className="flex h-4 w-full gap-px overflow-hidden rounded-full bg-secondary/50">
+      <div
+        className="flex h-4 w-full gap-px overflow-hidden rounded-full bg-secondary/50"
+        role="img"
+        aria-label="Pipeline stage duration distribution"
+      >
         {metrics
           .filter((m) => (m.avgDurationMs / totalDuration) * 100 >= 0.5)
           .map((m, idx, arr) => {
@@ -77,13 +86,13 @@ function PipelineBar({ metrics }: { metrics: PipelineStageMetric[] }) {
       </div>
     </div>
   )
-}
+})
 
 /* ------------------------------------------------------------------ */
 /*  Stage row                                                          */
 /* ------------------------------------------------------------------ */
 
-function StageRow({
+const StageRow = React.memo(function StageRow({
   metric,
   isTopSaver,
   index,
@@ -160,7 +169,7 @@ function StageRow({
       )}
     </div>
   )
-}
+})
 
 /* ------------------------------------------------------------------ */
 /*  Main component                                                     */
@@ -190,7 +199,7 @@ export function PipelineMetrics() {
   )
 
   return (
-    <Card className="border-border/40 bg-card/50">
+    <>
       {/* Pulse-glow keyframe for top-saver dot */}
       <style>{`
         @keyframes pulse-glow {
@@ -198,92 +207,94 @@ export function PipelineMetrics() {
           50% { opacity: 0.7; transform: scale(1.35); }
         }
       `}</style>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-sm font-medium text-foreground">
-              Pipeline Performance
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Per-stage execution metrics across the middleware pipeline
-            </CardDescription>
+      <Card className="border-border/40 bg-card/50">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-sm font-medium text-foreground">
+                Pipeline Performance
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Per-stage execution metrics across the middleware pipeline
+              </CardDescription>
+            </div>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/30 text-muted-foreground">
+              <Activity className="h-4 w-4" />
+            </div>
           </div>
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/30 text-muted-foreground">
-            <Activity className="h-4 w-4" />
-          </div>
-        </div>
-      </CardHeader>
+        </CardHeader>
 
-      <CardContent>
-        <div className="flex flex-col gap-4">
-          {/* Stacked bar visualization */}
-          <PipelineBar metrics={metrics} />
+        <CardContent>
+          <div className="flex flex-col gap-4">
+            {/* Stacked bar visualization */}
+            <PipelineBar metrics={metrics} totalDuration={totalDuration} />
 
-          {/* Column headers */}
-          <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] items-center gap-x-4 border-b border-border/30 px-2 pb-1.5">
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-              Stage
-            </span>
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-              Avg
-            </span>
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-              Execs
-            </span>
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-              Savings
-            </span>
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-              Success
-            </span>
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
-              Errors
-            </span>
-          </div>
+            {/* Column headers */}
+            <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] items-center gap-x-4 border-b border-border/30 px-2 pb-1.5">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                Stage
+              </span>
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                Avg
+              </span>
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                Execs
+              </span>
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                Savings
+              </span>
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                Success
+              </span>
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                Errors
+              </span>
+            </div>
 
-          {/* Stage rows */}
-          <div className="flex flex-col gap-0.5">
-            {metrics.map((m, idx) => (
-              <StageRow
-                key={m.stage}
-                metric={m}
-                isTopSaver={m.stage === topSaverStage}
-                index={idx}
-                reducedMotion={reducedMotion}
-              />
-            ))}
-          </div>
+            {/* Stage rows */}
+            <div className="flex flex-col gap-0.5">
+              {metrics.map((m, idx) => (
+                <StageRow
+                  key={m.stage}
+                  metric={m}
+                  isTopSaver={m.stage === topSaverStage}
+                  index={idx}
+                  reducedMotion={reducedMotion}
+                />
+              ))}
+            </div>
 
-          {/* Totals footer */}
-          <div className="flex items-center justify-between rounded-md border border-border/30 bg-gradient-to-r from-secondary/30 via-secondary/20 to-secondary/30 px-3 py-2">
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Pipeline totals
-            </span>
-            <div className="flex items-center gap-4">
-              <div className="flex flex-col items-end gap-0.5">
-                <span className="text-[10px] text-muted-foreground/60">Duration</span>
-                <span className="font-mono text-xs font-medium tabular-nums text-foreground">
-                  {totalDuration.toFixed(1)}ms
-                </span>
-              </div>
-              <div className="h-6 w-px bg-border/30" />
-              <div className="flex flex-col items-end gap-0.5">
-                <span className="text-[10px] text-muted-foreground/60">Executions</span>
-                <span className="font-mono text-xs font-medium tabular-nums text-foreground">
-                  {totalExecutions.toLocaleString()}
-                </span>
-              </div>
-              <div className="h-6 w-px bg-border/30" />
-              <div className="flex flex-col items-end gap-0.5">
-                <span className="text-[10px] text-muted-foreground/60">Savings</span>
-                <span className="font-mono text-sm font-bold tabular-nums text-primary">
-                  ${totalSavings.toFixed(4)}
-                </span>
+            {/* Totals footer */}
+            <div className="flex items-center justify-between rounded-md border border-border/30 bg-gradient-to-r from-secondary/30 via-secondary/20 to-secondary/30 px-3 py-2">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Pipeline totals
+              </span>
+              <div className="flex items-center gap-4">
+                <div className="flex flex-col items-end gap-0.5">
+                  <span className="text-[10px] text-muted-foreground/60">Duration</span>
+                  <span className="font-mono text-xs font-medium tabular-nums text-foreground">
+                    {totalDuration.toFixed(1)}ms
+                  </span>
+                </div>
+                <div className="h-6 w-px bg-border/30" />
+                <div className="flex flex-col items-end gap-0.5">
+                  <span className="text-[10px] text-muted-foreground/60">Executions</span>
+                  <span className="font-mono text-xs font-medium tabular-nums text-foreground">
+                    {totalExecutions.toLocaleString()}
+                  </span>
+                </div>
+                <div className="h-6 w-px bg-border/30" />
+                <div className="flex flex-col items-end gap-0.5">
+                  <span className="text-[10px] text-muted-foreground/60">Savings</span>
+                  <span className="font-mono text-sm font-bold tabular-nums text-primary">
+                    ${totalSavings.toFixed(4)}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </>
   )
 }

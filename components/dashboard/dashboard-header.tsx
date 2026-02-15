@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
 import { useDashboard, type TimeRange } from "./dashboard-provider"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -20,6 +20,9 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ArrowLeft, Bell, Download, Pause, Play, Shield, TrendingUp } from "lucide-react"
 import Link from "next/link"
+import { cn } from "@/lib/utils"
+import { ALERT_SEVERITY_CONFIG } from "@/lib/dashboard-utils"
+import { useReducedMotion } from "@/hooks/use-reduced-motion"
 
 const TIME_RANGES: { value: TimeRange; label: string }[] = [
   { value: "1h", label: "1 Hour" },
@@ -31,13 +34,16 @@ const TIME_RANGES: { value: TimeRange; label: string }[] = [
 
 export function DashboardHeader() {
   const { mode, setMode, timeRange, setTimeRange, data, isPaused, setIsPaused } = useDashboard()
+  const reducedMotion = useReducedMotion()
 
-  const notificationBadge = useMemo(() => {
+  // Consolidated: compute active alerts once, derive badge + count from it
+  const { notificationBadge, activeAlertCount } = useMemo(() => {
     const activeAlerts = data.alerts.filter((a) => !a.dismissed)
     const unacknowledgedAnomalies = data.anomalies.filter((a) => !a.acknowledged)
     const count = activeAlerts.length + unacknowledgedAnomalies.length
+    const alertCount = activeAlerts.length
 
-    if (count === 0) return null
+    if (count === 0) return { notificationBadge: null, activeAlertCount: alertCount }
 
     const hasCritical = activeAlerts.some((a) => a.severity === "critical")
     const hasWarning =
@@ -56,7 +62,10 @@ export function DashboardHeader() {
         ? "border-[hsl(38,92%,50%)]/30"
         : "border-blue-500/30"
 
-    return { count, bgColor, borderColor }
+    return {
+      notificationBadge: { count, bgColor, borderColor },
+      activeAlertCount: alertCount,
+    }
   }, [data.alerts, data.anomalies])
 
   const savingsRateColor = useMemo(() => {
@@ -65,43 +74,46 @@ export function DashboardHeader() {
     return "text-muted-foreground border-border/30 bg-secondary/30"
   }, [data.savingsRate])
 
-  const activeAlertCount = useMemo(() => {
-    return data.alerts.filter((a) => !a.dismissed).length
-  }, [data.alerts])
+  const handleExport = useCallback(
+    (format: "json" | "csv") => {
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-")
+      let content: string
+      let mimeType: string
+      let extension: string
 
-  const handleExport = (format: "json" | "csv") => {
-    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-")
-    let content: string
-    let mimeType: string
-    let extension: string
+      if (format === "json") {
+        content = JSON.stringify(data, null, 2)
+        mimeType = "application/json"
+        extension = "json"
+      } else {
+        const rows = data.timeSeries.map((p) =>
+          [
+            new Date(p.timestamp).toISOString(),
+            p.spent.toFixed(6),
+            p.saved.toFixed(6),
+            p.cumulativeSpent.toFixed(6),
+            p.cumulativeSaved.toFixed(6),
+          ].join(","),
+        )
+        content = ["timestamp,spent,saved,cumulative_spent,cumulative_saved", ...rows].join("\n")
+        mimeType = "text/csv"
+        extension = "csv"
+      }
 
-    if (format === "json") {
-      content = JSON.stringify(data, null, 2)
-      mimeType = "application/json"
-      extension = "json"
-    } else {
-      const rows = data.timeSeries.map((p) =>
-        [
-          new Date(p.timestamp).toISOString(),
-          p.spent.toFixed(6),
-          p.saved.toFixed(6),
-          p.cumulativeSpent.toFixed(6),
-          p.cumulativeSaved.toFixed(6),
-        ].join(","),
-      )
-      content = ["timestamp,spent,saved,cumulative_spent,cumulative_saved", ...rows].join("\n")
-      mimeType = "text/csv"
-      extension = "csv"
-    }
+      const blob = new Blob([content], { type: mimeType })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `tokenshield-export-${timestamp}.${extension}`
+      a.click()
+      URL.revokeObjectURL(url)
+    },
+    [data],
+  )
 
-    const blob = new Blob([content], { type: mimeType })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `tokenshield-export-${timestamp}.${extension}`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
+  const togglePause = useCallback(() => {
+    setIsPaused(!isPaused)
+  }, [setIsPaused, isPaused])
 
   return (
     <header className="relative sticky top-0 z-50 flex flex-col gap-4 border-b border-border/50 bg-background/80 px-4 py-4 backdrop-blur-xl md:flex-row md:items-center md:justify-between md:px-6">
@@ -123,8 +135,14 @@ export function DashboardHeader() {
           </h1>
           {notificationBadge && (
             <span
-              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold leading-none text-white animate-pulse ${notificationBadge.bgColor} ${notificationBadge.borderColor}`}
-              title={`${notificationBadge.count} active alert(s) / anomalies`}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold leading-none text-white",
+                !reducedMotion && "animate-pulse",
+                notificationBadge.bgColor,
+                notificationBadge.borderColor,
+              )}
+              role="status"
+              aria-label={`${notificationBadge.count} active alert${notificationBadge.count !== 1 ? "s" : ""} and anomalies`}
             >
               <Bell className="h-2.5 w-2.5" />
               {notificationBadge.count > 99 ? "99+" : notificationBadge.count}
@@ -142,7 +160,12 @@ export function DashboardHeader() {
             {data.savingsRate.toFixed(1)}% saved
           </span>
           {activeAlertCount > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full border border-[hsl(38,92%,50%)]/30 bg-[hsl(38,92%,50%)]/10 px-2 py-0.5 text-[10px] font-medium text-[hsl(38,92%,50%)]">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+                ALERT_SEVERITY_CONFIG.warning.badgeClass,
+              )}
+            >
               <Bell className="h-2.5 w-2.5" />
               {activeAlertCount} alert{activeAlertCount !== 1 ? "s" : ""}
             </span>
@@ -150,9 +173,12 @@ export function DashboardHeader() {
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
             {data.totalRequests.toLocaleString()} requests
             <span
-              className={`inline-block h-1.5 w-1.5 rounded-full ${
-                isPaused ? "bg-muted-foreground/40" : "bg-emerald-500 animate-pulse"
-              }`}
+              className={cn(
+                "inline-block h-1.5 w-1.5 rounded-full",
+                isPaused
+                  ? "bg-muted-foreground/40"
+                  : cn("bg-emerald-500", !reducedMotion && "animate-pulse"),
+              )}
             />
           </span>
         </div>
@@ -163,7 +189,7 @@ export function DashboardHeader() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setIsPaused(!isPaused)}
+          onClick={togglePause}
           className="h-8 gap-1.5 border-border/50 text-xs"
         >
           {isPaused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
