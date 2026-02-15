@@ -80,7 +80,7 @@ export function buildTransformParams(ctx: MiddlewareContext) {
         )
 
         if (guard && lastUserText) {
-          const stats = guard.getStats()
+          const stats = guard.getSnapshot()
           const wouldDebounce =
             Date.now() - (stats.lastRequestTime ?? 0) < (config.guard?.debounceMs ?? 300)
           const wouldRateLimit =

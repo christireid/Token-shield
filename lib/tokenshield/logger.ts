@@ -1,6 +1,8 @@
 import type { TokenShieldEvents } from "./event-bus"
 
-// --- Types ---
+// -------------------------------------------------------
+// Types
+// -------------------------------------------------------
 
 export type LogLevel = "debug" | "info" | "warn" | "error"
 
@@ -44,7 +46,9 @@ export interface Span {
 
 export type CompletedSpan = Span & { endTime?: number; events: SpanEvent[] }
 
-// --- Helpers ---
+// -------------------------------------------------------
+// Helpers
+// -------------------------------------------------------
 
 const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 }
 
@@ -60,14 +64,7 @@ function generateId(): string {
 function defaultHandler(entry: LogEntry): void {
   const dataStr = entry.data ? ` ${JSON.stringify(entry.data)}` : ""
   const msg = `[TokenShield] [${entry.level}] [${entry.module}] ${entry.message}${dataStr}`
-  const method =
-    entry.level === "debug"
-      ? "debug"
-      : entry.level === "warn"
-        ? "warn"
-        : entry.level === "error"
-          ? "error"
-          : "info"
+  const method = entry.level
   // eslint-disable-next-line no-console
   console[method](msg)
 }
@@ -94,7 +91,9 @@ const EVENT_LOG_LEVELS: Record<keyof TokenShieldEvents, LogLevel> = {
   "anomaly:detected": "warn",
 }
 
-// --- Logger class ---
+// -------------------------------------------------------
+// Logger Class
+// -------------------------------------------------------
 
 /** Maximum spans retained before FIFO eviction */
 const MAX_SPANS = 1000
@@ -234,7 +233,9 @@ export class TokenShieldLogger {
   }
 }
 
-// --- Exports ---
+// -------------------------------------------------------
+// Exports
+// -------------------------------------------------------
 
 /** Singleton logger instance */
 export const logger: TokenShieldLogger = /* @__PURE__ */ new TokenShieldLogger()

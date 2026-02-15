@@ -21,6 +21,7 @@
 
 import { get, set, keys, createStore, type UseStore } from "./storage-adapter"
 import { estimateCost, MODEL_PRICING } from "./cost-estimator"
+import { FALLBACK_INPUT_PER_MILLION, FALLBACK_OUTPUT_PER_MILLION } from "./middleware-types"
 
 // ----------------------------
 // Types
@@ -473,14 +474,6 @@ export class CostLedger {
    * Exact dollar cost from token counts and model pricing.
    * Accounts for OpenAI cached token discount.
    */
-  /**
-   * Fallback pricing for unknown models (matches middleware safeCost).
-   * Uses GPT-4o-mini rates as a conservative middle-ground estimate
-   * so that cost tracking and savings calculations remain functional.
-   */
-  private static FALLBACK_INPUT_PER_MILLION = 0.15
-  private static FALLBACK_OUTPUT_PER_MILLION = 0.6
-
   private calculateCost(
     modelId: string,
     inputTokens: number,
@@ -496,8 +489,8 @@ export class CostLedger {
         // Unknown model — use fallback pricing instead of 0 to keep
         // ledger entries, summaries, and exports accurate
         return (
-          (inputTokens / 1_000_000) * CostLedger.FALLBACK_INPUT_PER_MILLION +
-          (outputTokens / 1_000_000) * CostLedger.FALLBACK_OUTPUT_PER_MILLION
+          (inputTokens / 1_000_000) * FALLBACK_INPUT_PER_MILLION +
+          (outputTokens / 1_000_000) * FALLBACK_OUTPUT_PER_MILLION
         )
       }
     }

@@ -134,31 +134,13 @@ export class RequestGuard {
     // 0. Minimum length check
     const minLen = this.config.minInputLength ?? DEFAULT_CONFIG.minInputLength
     if (minLen !== undefined && prompt.trim().length < minLen) {
-      this.blockedCount++
-      this.totalBlocked++
-      this.totalSaved += cost.totalCost
-      return {
-        allowed: false,
-        reason: `Too short: ${prompt.trim().length} chars < ${minLen}`,
-        blockedCount: this.blockedCount,
-        estimatedCost: cost.totalCost,
-        currentHourlySpend: this.getCurrentHourlySpend(),
-      }
+      return this.blocked(`Too short: ${prompt.trim().length} chars < ${minLen}`, cost.totalCost)
     }
 
     // 0.5 Maximum token check
     const maxTok = this.config.maxInputTokens ?? DEFAULT_CONFIG.maxInputTokens
     if (maxTok !== undefined && Number.isFinite(maxTok) && inputTokens > maxTok) {
-      this.blockedCount++
-      this.totalBlocked++
-      this.totalSaved += cost.totalCost
-      return {
-        allowed: false,
-        reason: `Over budget: ${inputTokens} tokens > ${maxTok}`,
-        blockedCount: this.blockedCount,
-        estimatedCost: cost.totalCost,
-        currentHourlySpend: this.getCurrentHourlySpend(),
-      }
+      return this.blocked(`Over budget: ${inputTokens} tokens > ${maxTok}`, cost.totalCost)
     }
 
     // Time-based deduplication check
@@ -166,77 +148,44 @@ export class RequestGuard {
     if (dedupWindow && this.recentPrompts.has(normalized)) {
       const lastTime = this.recentPrompts.get(normalized)!
       if (now - lastTime < dedupWindow) {
-        this.blockedCount++
-        this.totalBlocked++
-        this.totalSaved += cost.totalCost
-        return {
-          allowed: false,
-          reason: `Deduped: identical prompt within ${dedupWindow}ms window`,
-          blockedCount: this.blockedCount,
-          estimatedCost: cost.totalCost,
-          currentHourlySpend: this.getCurrentHourlySpend(),
-        }
+        return this.blocked(
+          `Deduped: identical prompt within ${dedupWindow}ms window`,
+          cost.totalCost,
+        )
       }
     }
     // 1. Debounce check
     if (now - this.lastRequestTime < this.config.debounceMs) {
-      this.blockedCount++
-      this.totalBlocked++
-      this.totalSaved += cost.totalCost
-      return {
-        allowed: false,
-        reason: `Debounced: ${now - this.lastRequestTime}ms since last request (min: ${this.config.debounceMs}ms)`,
-        blockedCount: this.blockedCount,
-        estimatedCost: cost.totalCost,
-        currentHourlySpend: this.getCurrentHourlySpend(),
-      }
+      return this.blocked(
+        `Debounced: ${now - this.lastRequestTime}ms since last request (min: ${this.config.debounceMs}ms)`,
+        cost.totalCost,
+      )
     }
 
     // 2. Rate limit check
     const oneMinuteAgo = now - ONE_MINUTE_MS
     this.requestTimestamps = this.requestTimestamps.filter((t) => t > oneMinuteAgo)
     if (this.requestTimestamps.length >= this.config.maxRequestsPerMinute) {
-      this.blockedCount++
-      this.totalBlocked++
-      this.totalSaved += cost.totalCost
-      return {
-        allowed: false,
-        reason: `Rate limited: ${this.requestTimestamps.length}/${this.config.maxRequestsPerMinute} requests in the last minute`,
-        blockedCount: this.blockedCount,
-        estimatedCost: cost.totalCost,
-        currentHourlySpend: this.getCurrentHourlySpend(),
-      }
+      return this.blocked(
+        `Rate limited: ${this.requestTimestamps.length}/${this.config.maxRequestsPerMinute} requests in the last minute`,
+        cost.totalCost,
+      )
     }
 
     // 3. Cost gate check
     const currentSpend = this.getCurrentHourlySpend()
     if (currentSpend + cost.totalCost > this.config.maxCostPerHour) {
-      this.blockedCount++
-      this.totalBlocked++
-      this.totalSaved += cost.totalCost
-      return {
-        allowed: false,
-        reason: `Cost gate: would exceed hourly budget ($${(currentSpend + cost.totalCost).toFixed(4)} > $${this.config.maxCostPerHour.toFixed(2)})`,
-        blockedCount: this.blockedCount,
-        estimatedCost: cost.totalCost,
-        currentHourlySpend: currentSpend,
-      }
+      return this.blocked(
+        `Cost gate: would exceed hourly budget ($${(currentSpend + cost.totalCost).toFixed(4)} > $${this.config.maxCostPerHour.toFixed(2)})`,
+        cost.totalCost,
+      )
     }
 
     // 4. Deduplication check
     if (this.config.deduplicateInFlight) {
       const existing = this.inFlight.get(normalized)
       if (existing) {
-        this.blockedCount++
-        this.totalBlocked++
-        this.totalSaved += cost.totalCost
-        return {
-          allowed: false,
-          reason: "Deduplicated: identical request already in flight",
-          blockedCount: this.blockedCount,
-          estimatedCost: cost.totalCost,
-          currentHourlySpend: currentSpend,
-        }
+        return this.blocked("Deduplicated: identical request already in flight", cost.totalCost)
       }
     }
 
@@ -380,6 +329,19 @@ export class RequestGuard {
     }
   }
 
+  private blocked(reason: string, cost: number): GuardResult {
+    this.blockedCount++
+    this.totalBlocked++
+    this.totalSaved += cost
+    return {
+      allowed: false,
+      reason,
+      blockedCount: this.blockedCount,
+      estimatedCost: cost,
+      currentHourlySpend: this.getCurrentHourlySpend(),
+    }
+  }
+
   private getCurrentHourlySpend(): number {
     const oneHourAgo = Date.now() - ONE_HOUR_MS
     this.costLog = this.costLog.filter((c) => c.timestamp > oneHourAgo)
@@ -415,7 +377,7 @@ export class RequestGuard {
    * Read-only snapshot of guard state for dry-run simulation.
    * Does NOT mutate any internal state (debounce timers, timestamps, etc.).
    */
-  getStats(): {
+  getSnapshot(): {
     lastRequestTime: number
     requestsLastMinute: number
     currentHourlySpend: number

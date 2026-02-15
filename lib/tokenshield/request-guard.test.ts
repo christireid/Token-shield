@@ -149,7 +149,7 @@ describe("RequestGuard", () => {
     expect(stats.blockedRate).toBeCloseTo(2 / 3)
   })
 
-  it("getStats() does not mutate costLog (read-only)", () => {
+  it("getSnapshot() does not mutate costLog (read-only)", () => {
     const g = new RequestGuard({
       debounceMs: 0,
       maxRequestsPerMinute: 60,
@@ -161,9 +161,9 @@ describe("RequestGuard", () => {
     g.startRequest("first request")
     g.completeRequest("first request", 100, 50)
 
-    // Call getStats() multiple times — it should not change internal state
-    const stats1 = g.getStats()
-    const stats2 = g.getStats()
+    // Call getSnapshot() multiple times — it should not change internal state
+    const stats1 = g.getSnapshot()
+    const stats2 = g.getSnapshot()
     expect(stats1.currentHourlySpend).toBe(stats2.currentHourlySpend)
     expect(stats1.currentHourlySpend).toBeGreaterThan(0)
   })

@@ -255,10 +255,10 @@ describe("Fix 4: Tool result messages are volatile (not stable prefix)", () => {
 })
 
 // -------------------------------------------------------
-// Fix 5: RequestGuard.getStats() read-only snapshot
+// Fix 5: RequestGuard.getSnapshot() read-only snapshot
 // (Ensures dry-run mode doesn't mutate guard state)
 // -------------------------------------------------------
-describe("Fix 5: RequestGuard.getStats() is read-only", () => {
+describe("Fix 5: RequestGuard.getSnapshot() is read-only", () => {
   let guard: RequestGuard
 
   beforeEach(() => {
@@ -274,33 +274,33 @@ describe("Fix 5: RequestGuard.getStats() is read-only", () => {
     // Make a request to create some state
     guard.check("Hello world", undefined, "gpt-4o-mini")
 
-    const stats1 = guard.getStats()
-    const stats2 = guard.getStats()
+    const stats1 = guard.getSnapshot()
+    const stats2 = guard.getSnapshot()
 
-    // Calling getStats twice should return identical data
+    // Calling getSnapshot twice should return identical data
     expect(stats1.requestsLastMinute).toBe(stats2.requestsLastMinute)
     expect(stats1.lastRequestTime).toBe(stats2.lastRequestTime)
     expect(stats1.currentHourlySpend).toBe(stats2.currentHourlySpend)
   })
 
-  it("getStats does not affect subsequent check() calls", () => {
+  it("getSnapshot does not affect subsequent check() calls", () => {
     // Check a request
     const result1 = guard.check("Test prompt", undefined, "gpt-4o-mini")
     expect(result1.allowed).toBe(true)
 
-    // Call getStats many times (should be side-effect-free)
+    // Call getSnapshot many times (should be side-effect-free)
     for (let i = 0; i < 10; i++) {
-      guard.getStats()
+      guard.getSnapshot()
     }
 
-    // The next check should not be affected by getStats calls
+    // The next check should not be affected by getSnapshot calls
     // (wait past debounce window)
-    const stats = guard.getStats()
+    const stats = guard.getSnapshot()
     expect(stats.requestsLastMinute).toBe(1) // Only the one real check
   })
 
   it("returns correct structure", () => {
-    const stats = guard.getStats()
+    const stats = guard.getSnapshot()
     expect(typeof stats.lastRequestTime).toBe("number")
     expect(typeof stats.requestsLastMinute).toBe("number")
     expect(typeof stats.currentHourlySpend).toBe("number")
