@@ -40,7 +40,12 @@ import { AnomalyDetector } from "./anomaly-detector"
 import { TokenShieldConfigSchema } from "./config-schemas"
 import { TokenShieldConfigError } from "./errors"
 import * as v from "valibot"
-import { shieldEvents, createEventBus, subscribeToEvent, type TokenShieldEvents } from "./event-bus"
+import {
+  shieldEvents,
+  createEventBus,
+  subscribeToAnyEvent,
+  type TokenShieldEvents,
+} from "./event-bus"
 import { TokenShieldLogger, createLogger, type LogEntry } from "./logger"
 import { ProviderAdapter, type AdapterConfig } from "./provider-adapter"
 
@@ -167,13 +172,13 @@ export function tokenShieldMiddleware(
   ]
   const forwardingCleanups: Array<() => void> = []
   for (const name of EVENT_NAMES) {
-    const cleanup = subscribeToEvent(instanceEvents, name, ((data: unknown) => {
+    const cleanup = subscribeToAnyEvent(instanceEvents, name, (data) => {
       try {
         ;(shieldEvents.emit as (type: string, data: unknown) => void)(name, data)
       } catch {
         /* non-fatal */
       }
-    }) as never)
+    })
     forwardingCleanups.push(cleanup)
   }
 

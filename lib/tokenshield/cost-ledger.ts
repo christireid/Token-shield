@@ -186,11 +186,12 @@ export class CostLedger {
     )
 
     const savings: ModuleSavings = {
-      guard: entry.savings.guard ?? 0,
-      cache: entry.savings.cache ?? 0,
-      context: entry.savings.context ?? 0,
-      router: entry.savings.router ?? 0,
-      prefix: entry.savings.prefix ?? 0,
+      guard: 0,
+      cache: 0,
+      context: 0,
+      router: 0,
+      prefix: 0,
+      ...entry.savings,
     }
 
     const ledgerEntry: LedgerEntry = {

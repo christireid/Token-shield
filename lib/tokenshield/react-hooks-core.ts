@@ -13,11 +13,18 @@ import { estimateCost, type ModelPricing } from "./cost-estimator"
 import { routeToModel, type RoutingDecision } from "./model-router"
 import { useTokenShield } from "./react-context"
 
+export interface TokenCountResult {
+  tokens: number
+  cost: number
+  characters: number
+  ratio: number
+}
+
 /**
  * Count tokens in real-time as the user types.
  * Returns exact BPE token count and estimated cost.
  */
-export function useTokenCount(text: string, modelId?: string) {
+export function useTokenCount(text: string, modelId?: string): TokenCountResult {
   const { defaultModelId } = useTokenShield()
   const model = modelId ?? defaultModelId
 
@@ -39,7 +46,10 @@ export function useTokenCount(text: string, modelId?: string) {
 /**
  * Analyze prompt complexity and get a routing recommendation.
  */
-export function useComplexityAnalysis(prompt: string, defaultModel?: string) {
+export function useComplexityAnalysis(
+  prompt: string,
+  defaultModel?: string,
+): RoutingDecision | null {
   const { defaultModelId } = useTokenShield()
   const model = defaultModel ?? defaultModelId
 
@@ -77,7 +87,7 @@ export function useModelRouter(
     allowedProviders?: ModelPricing["provider"][]
     defaultModel?: string
   },
-) {
+): { routing: RoutingDecision | null; confirmRouting: () => void } {
   const { defaultModelId, savingsStore } = useTokenShield()
   const model = options?.defaultModel ?? defaultModelId
   // Derive a stable key from the providers array so callers don't need to memoize it
@@ -126,7 +136,17 @@ export interface ShieldedCallMetrics {
  * Checks the response cache first (bigram or holographic), calls the API on miss,
  * and teaches the cache on new responses. Exposes source/confidence/latency metrics.
  */
-export function useShieldedCall() {
+export function useShieldedCall(): {
+  call: (
+    prompt: string,
+    apiFn: (
+      prompt: string,
+    ) => Promise<{ response: string; inputTokens: number; outputTokens: number }>,
+    model?: string,
+  ) => Promise<string>
+  metrics: ShieldedCallMetrics
+  isReady: boolean
+} {
   const { cache, savingsStore, defaultModelId } = useTokenShield()
   const [metrics, setMetrics] = useState<ShieldedCallMetrics>({
     source: "none",

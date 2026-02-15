@@ -11,7 +11,7 @@ import { CostLedger } from "./cost-ledger"
 import { ResponseCache } from "./response-cache"
 import { RequestGuard } from "./request-guard"
 import { optimizePrefix } from "./prefix-optimizer"
-import { createEventBus, shieldEvents } from "./event-bus"
+import { createEventBus, shieldEvents, subscribeToAnyEvent } from "./event-bus"
 import type { ChatMessage } from "./token-counter"
 
 // -------------------------------------------------------
@@ -351,13 +351,13 @@ describe("Fix 6: Per-instance event bus isolation + global forwarding", () => {
     const globalReceived: unknown[] = []
 
     // Set up forwarding (mirrors what middleware.ts does)
-    instanceBus.on("ledger:entry", ((data: unknown) => {
+    subscribeToAnyEvent(instanceBus, "ledger:entry", (data) => {
       try {
         ;(shieldEvents.emit as (type: string, data: unknown) => void)("ledger:entry", data)
       } catch {
         /* non-fatal */
       }
-    }) as never)
+    })
 
     shieldEvents.on("ledger:entry", (data) => globalReceived.push(data))
 

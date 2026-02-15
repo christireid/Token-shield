@@ -63,3 +63,24 @@ export function subscribeToEvent<K extends keyof TokenShieldEvents>(
     bus.off(name, handler)
   }
 }
+
+/**
+ * Subscribe to an event with a loosely-typed handler.
+ *
+ * Use this in dynamic iteration loops where the event name is a runtime
+ * variable (e.g. forwarding all events). The handler receives `unknown`
+ * data, so callers must narrow the type themselves. This avoids the need
+ * for `as never` casts at every call site.
+ */
+export function subscribeToAnyEvent(
+  bus: EventBus,
+  name: keyof TokenShieldEvents,
+  handler: (data: unknown) => void,
+): () => void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- intentional: handler accepts any event payload
+  bus.on(name, handler as any)
+  return () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    bus.off(name, handler as any)
+  }
+}

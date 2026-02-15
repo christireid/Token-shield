@@ -46,7 +46,7 @@ function getServerSnapshot(): LedgerSnapshot {
  * Uses a version-based cache so that getSnapshot returns a referentially
  * stable object when the underlying data hasn't changed.
  */
-export function useCostLedger(featureName?: string) {
+export function useCostLedger(featureName?: string): LedgerSnapshot {
   const { ledger } = useTokenShield()
   if (!ledger) {
     throw new Error(
@@ -108,7 +108,7 @@ export function useCostLedger(featureName?: string) {
 /**
  * Alias for useCostLedger that emphasizes per-feature cost tracking.
  */
-export function useFeatureCost(featureName: string) {
+export function useFeatureCost(featureName: string): LedgerSnapshot {
   return useCostLedger(featureName)
 }
 

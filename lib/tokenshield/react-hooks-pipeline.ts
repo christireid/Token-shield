@@ -9,10 +9,10 @@
 
 import { useMemo, useState, useEffect, useCallback, useRef } from "react"
 import { estimateCost } from "./cost-estimator"
-import { smartFit, type Message, type ContextBudget } from "./context-manager"
+import { smartFit, type Message, type ContextBudget, type ContextResult } from "./context-manager"
 import { calculateSavings } from "./cost-estimator"
 import type { GuardResult } from "./request-guard"
-import { subscribeToEvent, type TokenShieldEvents } from "./event-bus"
+import { subscribeToAnyEvent, type TokenShieldEvents } from "./event-bus"
 import type { ProviderAdapter, ProviderHealth } from "./provider-adapter"
 import { useTokenShield } from "./react-context"
 
@@ -24,7 +24,12 @@ import { useTokenShield } from "./react-context"
  * Manage conversation context within a token budget.
  * Returns the trimmed messages and savings data.
  */
-export function useContextManager(messages: Message[], budget: ContextBudget) {
+export function useContextManager(
+  messages: Message[],
+  budget: ContextBudget,
+): ContextResult & {
+  savings: { tokensSaved: number; dollarsSaved: number; percentSaved: number } | null
+} {
   const { defaultModelId } = useTokenShield()
 
   return useMemo(() => {
@@ -59,7 +64,21 @@ export function useContextManager(messages: Message[], budget: ContextBudget) {
  * Check the response cache before making an API call.
  * Returns a function that wraps your API call with caching.
  */
-export function useResponseCache() {
+export function useResponseCache(): {
+  cachedFetch: (
+    prompt: string,
+    apiFn: (
+      prompt: string,
+    ) => Promise<{ response: string; inputTokens: number; outputTokens: number }>,
+    model?: string,
+  ) => Promise<{
+    response: string
+    fromCache: boolean
+    matchType: string | undefined
+    similarity: number | undefined
+  }>
+  stats: () => ReturnType<typeof import("./response-cache").ResponseCache.prototype.stats>
+} {
   const { cache, savingsStore, defaultModelId } = useTokenShield()
 
   const cachedFetch = useCallback(
@@ -120,7 +139,12 @@ export function useResponseCache() {
 /**
  * Guard requests with debouncing, rate limiting, and cost gating.
  */
-export function useRequestGuard() {
+export function useRequestGuard(): {
+  checkRequest: (prompt: string, expectedOutputTokens?: number) => GuardResult
+  startRequest: (prompt: string) => void
+  completeRequest: (prompt: string, inputTokens: number, outputTokens: number) => void
+  stats: () => ReturnType<import("./request-guard").RequestGuard["stats"]>
+} {
   const { guard, savingsStore } = useTokenShield()
 
   const checkRequest = useCallback(
@@ -202,19 +226,19 @@ export function useEventLog(maxEntries = 50): EventLogEntry[] {
     const handlers: Array<() => void> = []
 
     for (const eventType of allEventTypes) {
-      const handler = (data: Record<string, unknown>) => {
+      const handler = (data: unknown) => {
         const entry: EventLogEntry = {
           id: ++_eventIdCounter,
           timestamp: Date.now(),
           type: eventType,
-          data: data as Record<string, unknown>,
+          data: (data ?? {}) as Record<string, unknown>,
         }
         setLog((prev) => {
           const next = [entry, ...prev]
           return next.length > maxEntries ? next.slice(0, maxEntries) : next
         })
       }
-      handlers.push(subscribeToEvent(eventBus, eventType, handler as never))
+      handlers.push(subscribeToAnyEvent(eventBus, eventType, handler))
     }
 
     return () => {
@@ -317,14 +341,15 @@ export function usePipelineMetrics(): PipelineMetrics {
     const handlers: Array<() => void> = []
 
     for (const eventType of trackedEvents) {
-      const handler = (data: Record<string, unknown>) => {
+      const handler = (data: unknown) => {
         const c = countersRef.current
+        const record = (data ?? {}) as Record<string, unknown>
 
         const entry: EventLogEntry = {
           id: ++_eventIdCounter,
           timestamp: Date.now(),
           type: eventType,
-          data: data as Record<string, unknown>,
+          data: record,
         }
         lastEventRef.current = entry
 
@@ -344,7 +369,7 @@ export function usePipelineMetrics(): PipelineMetrics {
             c.totalRequests++
             break
           case "ledger:entry": {
-            const latency = typeof data.latencyMs === "number" ? data.latencyMs : 0
+            const latency = typeof record.latencyMs === "number" ? record.latencyMs : 0
             if (latency > 0) {
               c.cumulativeLatencyMs += latency
               c.latencySamples++
@@ -355,7 +380,7 @@ export function usePipelineMetrics(): PipelineMetrics {
 
         updateMetrics()
       }
-      handlers.push(subscribeToEvent(eventBus, eventType, handler as never))
+      handlers.push(subscribeToAnyEvent(eventBus, eventType, handler))
     }
 
     return () => {
