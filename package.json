@@ -26,6 +26,8 @@
   "sideEffects": false,
   "scripts": {
     "dev": "next dev",
+    "sync-pricing": "tsx scripts/sync-pricing.ts",
+    "prebuild": "tsx scripts/sync-pricing.ts",
     "build": "tsup",
     "start": "next start",
     "lint": "eslint .",
