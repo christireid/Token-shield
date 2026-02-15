@@ -20,6 +20,7 @@ import type { TokenShieldLogger, LogEntry } from "./logger"
 import type { ProviderAdapter, AdapterConfig } from "./provider-adapter"
 import type { ComplexityScore } from "./model-router"
 import type { AnomalyDetector, AnomalyConfig, AnomalyEvent } from "./anomaly-detector"
+import type { AuditLog, AuditLogConfig } from "./audit-log"
 import { estimateCost } from "./cost-estimator"
 
 // -------------------------------------------------------
@@ -215,6 +216,9 @@ export interface TokenShieldMiddlewareConfig {
 
   /** Optional multi-provider adapter for routing, retries, and health tracking */
   providerAdapter?: ProviderAdapter | AdapterConfig
+
+  /** Optional enterprise audit logging. Records all pipeline events to a tamper-evident log. */
+  auditLog?: AuditLogConfig | AuditLog
 }
 
 // -------------------------------------------------------
@@ -243,6 +247,8 @@ export interface TokenShieldMiddleware {
   logger: TokenShieldLogger | null
   /** Access the provider adapter for health data */
   providerAdapter: ProviderAdapter | null
+  /** Access the audit log for compliance/forensic data */
+  auditLog: AuditLog | null
   /** Pre-model transform — runs breaker, budget, guard, cache, context, router, prefix */
   transformParams: (args: { params: Record<string, unknown> }) => Promise<Record<string, unknown>>
   /** Wraps non-streaming model calls with caching, ledger, budget tracking */
@@ -354,6 +360,7 @@ export interface MiddlewareContext {
   instanceEvents: ReturnType<typeof createEventBus>
   log: TokenShieldLogger | null
   adapter: ProviderAdapter | null
+  auditLog: AuditLog | null
 }
 
 // -------------------------------------------------------

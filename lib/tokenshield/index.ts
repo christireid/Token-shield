@@ -408,6 +408,8 @@ export {
   getModulesForTier,
   resetLicense,
   generateTestKey,
+  generateTestKeySync,
+  setLicenseSecret,
   type LicenseTier,
   type LicenseInfo,
 } from "./license"
