@@ -44,8 +44,8 @@ export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES]
 export class TokenShieldError extends Error {
   readonly code: ErrorCode
 
-  constructor(message: string, code: ErrorCode) {
-    super(message)
+  constructor(message: string, code: ErrorCode, options?: { cause?: unknown }) {
+    super(message, options?.cause ? { cause: options.cause } : undefined)
     this.name = "TokenShieldError"
     this.code = code
     // Fix instanceof in ES5 transpilation (TypeScript's downlevelIteration)
@@ -55,9 +55,20 @@ export class TokenShieldError extends Error {
 
 /** Thrown when a request is blocked by the guard, breaker, or budget. */
 export class TokenShieldBlockedError extends TokenShieldError {
-  constructor(message: string, code: ErrorCode = ERROR_CODES.GUARD_MIN_LENGTH) {
-    super(message, code)
+  /** Actionable suggestion for how to resolve the block */
+  readonly suggestion?: string
+  /** Structured details about what triggered the block */
+  readonly details?: Record<string, unknown>
+
+  constructor(
+    message: string,
+    code: ErrorCode = ERROR_CODES.GUARD_MIN_LENGTH,
+    options?: { suggestion?: string; details?: Record<string, unknown>; cause?: unknown },
+  ) {
+    super(message, code, options?.cause ? { cause: options.cause } : undefined)
     this.name = "TokenShieldBlockedError"
+    this.suggestion = options?.suggestion
+    this.details = options?.details
     Object.setPrototypeOf(this, new.target.prototype)
   }
 }
@@ -66,8 +77,8 @@ export class TokenShieldBlockedError extends TokenShieldError {
 export class TokenShieldConfigError extends TokenShieldError {
   readonly path?: string
 
-  constructor(message: string, path?: string) {
-    super(message, ERROR_CODES.CONFIG_INVALID)
+  constructor(message: string, path?: string, options?: { cause?: unknown }) {
+    super(message, ERROR_CODES.CONFIG_INVALID, options)
     this.name = "TokenShieldConfigError"
     this.path = path
     Object.setPrototypeOf(this, new.target.prototype)
@@ -86,9 +97,18 @@ export class TokenShieldBudgetError extends TokenShieldBlockedError {
       limitType === "daily"
         ? ERROR_CODES.BUDGET_DAILY_EXCEEDED
         : ERROR_CODES.BUDGET_MONTHLY_EXCEEDED
+    const remaining = Math.max(0, limit - currentSpend)
+    const pct = limit > 0 ? ((currentSpend / limit) * 100).toFixed(0) : "100"
     super(
-      `User ${userId} ${limitType} budget exceeded ($${currentSpend.toFixed(4)} / $${limit.toFixed(2)})`,
+      `User "${userId}" ${limitType} budget exceeded: spent $${currentSpend.toFixed(4)} of $${limit.toFixed(2)} limit (${pct}% used)`,
       code,
+      {
+        suggestion:
+          remaining > 0
+            ? `Wait for the ${limitType} window to reset, or increase the ${limitType} limit via userBudget config.`
+            : `The ${limitType} budget is fully exhausted. Increase the limit via config.userBudget.defaultBudget.${limitType} or config.userBudget.userOverrides.`,
+        details: { userId, limitType, currentSpend, limit, remaining, percentUsed: Number(pct) },
+      },
     )
     this.name = "TokenShieldBudgetError"
     this.userId = userId
@@ -101,8 +121,12 @@ export class TokenShieldBudgetError extends TokenShieldBlockedError {
 
 /** Thrown when crypto operations fail. */
 export class TokenShieldCryptoError extends TokenShieldError {
-  constructor(message: string, code: ErrorCode = ERROR_CODES.CRYPTO_ENCRYPTION_FAILED) {
-    super(message, code)
+  constructor(
+    message: string,
+    code: ErrorCode = ERROR_CODES.CRYPTO_ENCRYPTION_FAILED,
+    options?: { cause?: unknown },
+  ) {
+    super(message, code, options)
     this.name = "TokenShieldCryptoError"
     Object.setPrototypeOf(this, new.target.prototype)
   }
@@ -118,8 +142,9 @@ export class TokenShieldAPIError extends TokenShieldError {
     provider: string,
     statusCode?: number,
     code: ErrorCode = ERROR_CODES.API_REQUEST_FAILED,
+    options?: { cause?: unknown },
   ) {
-    super(message, code)
+    super(message, code, options)
     this.name = "TokenShieldAPIError"
     this.provider = provider
     this.statusCode = statusCode

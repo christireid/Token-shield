@@ -67,6 +67,14 @@ describe("errors", () => {
       expect(err).toBeInstanceOf(Error)
       expect(err).toBeInstanceOf(TokenShieldError)
     })
+
+    it("preserves error cause when provided", () => {
+      const original = new TypeError("type issue")
+      const err = new TokenShieldError("wrapper", ERROR_CODES.CONFIG_INVALID, {
+        cause: original,
+      })
+      expect(err.cause).toBe(original)
+    })
   })
 
   describe("TokenShieldBlockedError", () => {
@@ -87,6 +95,29 @@ describe("errors", () => {
       const err = new TokenShieldBlockedError("blocked")
       expect(err.code).toBe("GUARD_MIN_LENGTH")
     })
+
+    it("accepts suggestion and details options", () => {
+      const err = new TokenShieldBlockedError("blocked", ERROR_CODES.GUARD_RATE_LIMIT, {
+        suggestion: "Slow down requests",
+        details: { rpm: 60, limit: 30 },
+      })
+      expect(err.suggestion).toBe("Slow down requests")
+      expect(err.details).toEqual({ rpm: 60, limit: 30 })
+    })
+
+    it("has undefined suggestion/details when no options given", () => {
+      const err = new TokenShieldBlockedError("blocked")
+      expect(err.suggestion).toBeUndefined()
+      expect(err.details).toBeUndefined()
+    })
+
+    it("preserves error cause chain", () => {
+      const original = new Error("root cause")
+      const err = new TokenShieldBlockedError("blocked", ERROR_CODES.GUARD_RATE_LIMIT, {
+        cause: original,
+      })
+      expect(err.cause).toBe(original)
+    })
   })
 
   describe("TokenShieldConfigError", () => {
@@ -101,6 +132,14 @@ describe("errors", () => {
     it("has undefined path when not provided", () => {
       const err = new TokenShieldConfigError("bad config")
       expect(err.path).toBeUndefined()
+    })
+
+    it("preserves error cause from validation library", () => {
+      const validationErr = new Error("valibot issue")
+      const err = new TokenShieldConfigError("invalid guard config", "guard.debounceMs", {
+        cause: validationErr,
+      })
+      expect(err.cause).toBe(validationErr)
     })
 
     it("is instanceof TokenShieldError", () => {
@@ -120,7 +159,9 @@ describe("errors", () => {
       expect(err.limitType).toBe("daily")
       expect(err.currentSpend).toBe(5.1234)
       expect(err.limit).toBe(5.0)
-      expect(err.message).toBe("User user-123 daily budget exceeded ($5.1234 / $5.00)")
+      expect(err.message).toBe(
+        'User "user-123" daily budget exceeded: spent $5.1234 of $5.00 limit (102% used)',
+      )
     })
 
     it("has correct code for monthly limit", () => {
@@ -135,6 +176,17 @@ describe("errors", () => {
       expect(err).toBeInstanceOf(TokenShieldBlockedError)
       expect(err).toBeInstanceOf(TokenShieldError)
       expect(err).toBeInstanceOf(Error)
+    })
+
+    it("includes suggestion and details from parent class", () => {
+      const err = new TokenShieldBudgetError("user-x", "daily", 10, 10)
+      expect(err.suggestion).toBeDefined()
+      expect(err.suggestion).toContain("daily")
+      expect(err.details).toBeDefined()
+      expect(err.details!.userId).toBe("user-x")
+      expect(err.details!.limitType).toBe("daily")
+      expect(err.details!.currentSpend).toBe(10)
+      expect(err.details!.limit).toBe(10)
     })
   })
 

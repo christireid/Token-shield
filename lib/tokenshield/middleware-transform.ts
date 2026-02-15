@@ -13,7 +13,7 @@ import { optimizePrefix } from "./prefix-optimizer"
 import { MODEL_PRICING, estimateCost } from "./cost-estimator"
 import { countToolTokens, predictOutputTokens, type ToolDefinition } from "./tool-token-counter"
 import type { ChatMessage } from "./token-counter"
-import { TokenShieldBlockedError, ERROR_CODES } from "./errors"
+import { TokenShieldBlockedError, ERROR_CODES, type ErrorCode } from "./errors"
 import {
   SHIELD_META,
   MSG_OVERHEAD_TOKENS,
@@ -24,6 +24,69 @@ import {
 
 /** Default expected output tokens when no explicit reserve is configured */
 const DEFAULT_RESERVE_OUTPUT_TOKENS = 500
+
+/** Map circuit-breaker limit type (from reason string) to specific error code. */
+const BREAKER_LIMIT_CODE: Record<string, ErrorCode> = {
+  session: ERROR_CODES.BREAKER_SESSION_LIMIT,
+  hour: ERROR_CODES.BREAKER_HOUR_LIMIT,
+  day: ERROR_CODES.BREAKER_DAY_LIMIT,
+  month: ERROR_CODES.BREAKER_MONTH_LIMIT,
+}
+
+/** Extract the limit type keyword from a breaker reason string like "Circuit breaker: day limit exceeded ..." */
+function parseBreakerLimitType(reason: string): string {
+  const match = reason.match(/Circuit breaker:\s*(\w+)\s+limit/)
+  return match?.[1] ?? "session"
+}
+
+/** Map guard reason strings to the correct error code and an actionable suggestion. */
+function resolveGuardError(reason: string): { code: ErrorCode; suggestion: string } {
+  if (reason.startsWith("Too short")) {
+    return {
+      code: ERROR_CODES.GUARD_MIN_LENGTH,
+      suggestion: "Provide a longer prompt, or lower config.guard.minInputLength.",
+    }
+  }
+  if (reason.startsWith("Over budget")) {
+    return {
+      code: ERROR_CODES.GUARD_MAX_TOKENS,
+      suggestion:
+        "Shorten the prompt or increase config.guard.maxInputTokens. Consider enabling context trimming (config.context.maxInputTokens) to auto-fit large prompts.",
+    }
+  }
+  if (reason.startsWith("Dedup") || reason.startsWith("Deduplicated")) {
+    return {
+      code: ERROR_CODES.GUARD_DUPLICATE,
+      suggestion:
+        "This identical prompt was sent recently. Wait for the dedup window to pass, or disable deduplication via config.guard.deduplicateInFlight / config.guard.deduplicateWindow.",
+    }
+  }
+  if (reason.startsWith("Debounced")) {
+    return {
+      code: ERROR_CODES.GUARD_RATE_LIMIT,
+      suggestion:
+        "Requests are arriving too fast. Wait at least config.guard.debounceMs between calls, or lower the debounce threshold.",
+    }
+  }
+  if (reason.startsWith("Rate limited")) {
+    return {
+      code: ERROR_CODES.GUARD_RATE_LIMIT,
+      suggestion:
+        "Request rate exceeded config.guard.maxRequestsPerMinute. Slow down requests or increase the rate limit.",
+    }
+  }
+  if (reason.startsWith("Cost gate")) {
+    return {
+      code: ERROR_CODES.GUARD_COST_LIMIT,
+      suggestion:
+        "Hourly cost budget reached. Wait for the hour window to roll over, or increase config.guard.maxCostPerHour.",
+    }
+  }
+  return {
+    code: ERROR_CODES.GUARD_RATE_LIMIT,
+    suggestion: "Review your guard configuration to adjust limits.",
+  }
+}
 
 /**
  * Build the transformParams function for the middleware pipeline.
@@ -163,15 +226,26 @@ export function buildTransformParams(ctx: MiddlewareContext) {
         const breakCheck = breaker.check(modelId, estimatedInput, expectedOut)
         if (!breakCheck.allowed) {
           const estCost = safeCost(modelId, estimatedInput, expectedOut)
-          safeEmit("request:blocked", {
-            reason: breakCheck.reason ?? "Budget exceeded",
-            estimatedCost: estCost,
+          const reason = breakCheck.reason ?? "Budget exceeded"
+          safeEmit("request:blocked", { reason, estimatedCost: estCost })
+          config.onBlocked?.(reason)
+
+          const limitType = parseBreakerLimitType(reason)
+          const code = BREAKER_LIMIT_CODE[limitType] ?? ERROR_CODES.BREAKER_SESSION_LIMIT
+          const { spend, remaining } = breakCheck.status
+          throw new TokenShieldBlockedError(reason, code, {
+            suggestion:
+              limitType === "session"
+                ? "Call breaker.reset() to start a new session, or increase limits via breaker.updateLimits()."
+                : `Wait for the ${limitType} window to roll over, or increase the per-${limitType.charAt(0).toUpperCase() + limitType.slice(1)} limit via config.breaker.limits.`,
+            details: {
+              limitType,
+              spend,
+              remaining,
+              estimatedRequestCost: estCost,
+              totalBlocked: breakCheck.status.requestsBlocked,
+            },
           })
-          config.onBlocked?.(breakCheck.reason ?? "Budget exceeded")
-          throw new TokenShieldBlockedError(
-            breakCheck.reason ?? "Request blocked by TokenShield breaker",
-            ERROR_CODES.BREAKER_SESSION_LIMIT,
-          )
         }
       }
 
@@ -185,12 +259,22 @@ export function buildTransformParams(ctx: MiddlewareContext) {
           throw new TokenShieldBlockedError(
             `Failed to resolve user ID: ${msg}`,
             ERROR_CODES.BUDGET_USER_ID_INVALID,
+            {
+              suggestion:
+                "Ensure config.userBudget.getUserId() returns a valid string. Common causes: missing auth context, expired session, or unresolved async user lookup.",
+              cause: err,
+            },
           )
         }
         if (!userId || typeof userId !== "string") {
           throw new TokenShieldBlockedError(
-            "getUserId() must return a non-empty string",
+            `getUserId() returned an invalid value (${JSON.stringify(userId)}). Expected a non-empty string.`,
             ERROR_CODES.BUDGET_USER_ID_INVALID,
+            {
+              suggestion:
+                "config.userBudget.getUserId() must synchronously return a non-empty string identifying the current user (e.g., JWT sub claim, database ID).",
+              details: { returnedValue: userId },
+            },
           )
         }
         meta.userId = userId
@@ -199,13 +283,32 @@ export function buildTransformParams(ctx: MiddlewareContext) {
         const expectedOut = config.context?.reserveForOutput ?? DEFAULT_RESERVE_OUTPUT_TOKENS
         const budgetCheck = userBudgetManager.check(userId, modelId, estimatedInput, expectedOut)
         if (!budgetCheck.allowed) {
-          config.onBlocked?.(budgetCheck.reason ?? "User budget exceeded")
-          throw new TokenShieldBlockedError(
-            budgetCheck.reason ?? "Request blocked by user budget limit",
+          const budgetReason = budgetCheck.reason ?? "User budget exceeded"
+          config.onBlocked?.(budgetReason)
+
+          const isDaily =
             budgetCheck.status.spend.daily >= (budgetCheck.status.limits?.daily ?? Infinity)
-              ? ERROR_CODES.BUDGET_DAILY_EXCEEDED
-              : ERROR_CODES.BUDGET_MONTHLY_EXCEEDED,
-          )
+          const budgetCode = isDaily
+            ? ERROR_CODES.BUDGET_DAILY_EXCEEDED
+            : ERROR_CODES.BUDGET_MONTHLY_EXCEEDED
+          const limitWindow = isDaily ? "daily" : "monthly"
+          const limitVal = isDaily
+            ? budgetCheck.status.limits?.daily
+            : budgetCheck.status.limits?.monthly
+          const spendVal = isDaily
+            ? budgetCheck.status.spend.daily
+            : budgetCheck.status.spend.monthly
+          throw new TokenShieldBlockedError(budgetReason, budgetCode, {
+            suggestion: `User "${userId}" has exhausted their ${limitWindow} budget. Wait for the ${limitWindow} window to reset, or increase the limit via config.userBudget.defaultBudget.${limitWindow} or config.userBudget.userOverrides["${userId}"].`,
+            details: {
+              userId,
+              limitWindow,
+              currentSpend: spendVal,
+              limit: limitVal,
+              remaining: limitVal != null ? Math.max(0, limitVal - (spendVal ?? 0)) : null,
+              model: modelId,
+            },
+          })
         }
 
         // Store the estimated cost that was reserved as in-flight
@@ -249,20 +352,25 @@ export function buildTransformParams(ctx: MiddlewareContext) {
           const guardModelId = String(params.modelId ?? "")
           const check = guard.check(lastUserText, undefined, guardModelId || undefined)
           if (!check.allowed) {
+            const reason = check.reason ?? "Request blocked"
             const estCost = safeCost(
               guardModelId,
               countTokens(lastUserText),
               config.context?.reserveForOutput ?? DEFAULT_RESERVE_OUTPUT_TOKENS,
             )
-            safeEmit("request:blocked", {
-              reason: check.reason ?? "Request blocked",
-              estimatedCost: estCost,
+            safeEmit("request:blocked", { reason, estimatedCost: estCost })
+            config.onBlocked?.(reason)
+
+            const { code: guardCode, suggestion: guardSuggestion } = resolveGuardError(reason)
+            throw new TokenShieldBlockedError(reason, guardCode, {
+              suggestion: guardSuggestion,
+              details: {
+                estimatedCost: check.estimatedCost,
+                currentHourlySpend: check.currentHourlySpend,
+                blockedCount: check.blockedCount,
+                model: guardModelId,
+              },
             })
-            config.onBlocked?.(check.reason ?? "Request blocked")
-            throw new TokenShieldBlockedError(
-              check.reason ?? "Request blocked by TokenShield guard",
-              ERROR_CODES.GUARD_RATE_LIMIT,
-            )
           }
           safeEmit("request:allowed", { prompt: lastUserText, model: guardModelId })
         }

@@ -91,7 +91,9 @@ export function tokenShieldMiddleware(
     if (err instanceof v.ValiError) {
       const path =
         err.issues?.[0]?.path?.map((p: { key: string | number }) => p.key).join(".") ?? "unknown"
-      throw new TokenShieldConfigError(`Invalid config at "${path}": ${err.message}`, path)
+      throw new TokenShieldConfigError(`Invalid config at "${path}": ${err.message}`, path, {
+        cause: err,
+      })
     }
     throw err
   }
