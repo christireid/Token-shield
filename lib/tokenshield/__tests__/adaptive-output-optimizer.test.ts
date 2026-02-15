@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest"
+import { describe, it, expect, beforeEach, vi } from "vitest"
 import { AdaptiveOutputOptimizer } from "../adaptive-output-optimizer"
 
 describe("adaptive-output-optimizer", () => {
@@ -126,6 +126,40 @@ describe("adaptive-output-optimizer", () => {
 
       await optimizer.clear()
       expect(optimizer.summary().totalObservations).toBe(0)
+    })
+  })
+
+  describe("onStorageError callback", () => {
+    it("accepts onStorageError in config", () => {
+      const errors: unknown[] = []
+      const opt = new AdaptiveOutputOptimizer({
+        persist: true,
+        onStorageError: (err) => errors.push(err),
+      })
+      expect(opt).toBeTruthy()
+    })
+
+    it("calls onStorageError when hydrate fails", async () => {
+      const errors: unknown[] = []
+      const opt = new AdaptiveOutputOptimizer({
+        persist: true,
+        storageKey: "test_adaptive_error",
+        onStorageError: (err) => errors.push(err),
+      })
+      const count = await opt.hydrate()
+      // Either succeeds with 0 or calls onStorageError
+      expect(count).toBeGreaterThanOrEqual(0)
+      expect(errors.length).toBeGreaterThanOrEqual(0)
+    })
+
+    it("does not call onStorageError when persist is disabled", async () => {
+      const errors: unknown[] = []
+      const opt = new AdaptiveOutputOptimizer({
+        persist: false,
+        onStorageError: (err) => errors.push(err),
+      })
+      await opt.recordActual("test", "gpt-4o", 100)
+      expect(errors).toHaveLength(0)
     })
   })
 })

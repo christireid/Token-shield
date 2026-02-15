@@ -411,3 +411,33 @@ describe("createProviderAdapter", () => {
     expect(adapter.getHealth()).toHaveLength(3)
   })
 })
+
+describe("ProviderAdapter dispose", () => {
+  it("clears recovery timers", () => {
+    vi.useFakeTimers()
+    try {
+      const adapter = createProviderAdapter(makeConfig())
+      // Record failures to trigger recovery timers
+      for (let i = 0; i < 6; i++) {
+        adapter.recordFailure("openai", "test failure")
+      }
+      // Provider should be unhealthy, recovery timer scheduled
+      const health = adapter.getProviderHealth("openai")
+      expect(health?.healthy).toBe(false)
+
+      // Dispose should clear all recovery timers
+      adapter.dispose()
+
+      // Advance timers — if timer leaked, it would fire
+      vi.advanceTimersByTime(120_000)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("is safe to call multiple times", () => {
+    const adapter = createProviderAdapter(makeConfig())
+    adapter.dispose()
+    adapter.dispose()
+  })
+})

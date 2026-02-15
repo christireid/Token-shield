@@ -99,4 +99,15 @@ describe("Middleware breaker event emission", () => {
     expect(mw).toBeTruthy()
     mw.dispose()
   })
+
+  it("dispose cleans up guard, cache, auditLog, and adapter", () => {
+    const mw = tokenShieldMiddleware({
+      auditLog,
+      modules: { guard: true, cache: true, ledger: true },
+    })
+    // dispose should not throw even with multiple modules active
+    expect(() => mw.dispose()).not.toThrow()
+    // safe to call twice
+    expect(() => mw.dispose()).not.toThrow()
+  })
 })

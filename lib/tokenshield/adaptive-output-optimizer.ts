@@ -42,6 +42,11 @@ export interface AdaptiveOptimizerConfig {
   persist?: boolean
   /** IndexedDB key prefix. Default: "shield_adaptive_output" */
   storageKey?: string
+  /**
+   * Called when IndexedDB operations fail (e.g., quota exceeded, IDB disabled).
+   * Without this callback, storage errors are silently ignored.
+   */
+  onStorageError?: (error: unknown) => void
 }
 
 /** Per-(taskType, model) learned statistics */
@@ -81,7 +86,7 @@ export interface AdaptivePrediction {
   stdDev: number
 }
 
-const DEFAULT_CONFIG: Required<AdaptiveOptimizerConfig> = {
+const DEFAULT_CONFIG: Required<Omit<AdaptiveOptimizerConfig, "onStorageError">> & Pick<AdaptiveOptimizerConfig, "onStorageError"> = {
   minObservations: 5,
   alpha: 0.15,
   safetyPercentile: 0.95,
@@ -96,7 +101,7 @@ const DEFAULT_CONFIG: Required<AdaptiveOptimizerConfig> = {
 // -------------------------------------------------------
 
 export class AdaptiveOutputOptimizer {
-  private config: Required<AdaptiveOptimizerConfig>
+  private config: Required<Omit<AdaptiveOptimizerConfig, "onStorageError">> & Pick<AdaptiveOptimizerConfig, "onStorageError">
   /** Learned stats keyed by "taskType:model" */
   private stats = new Map<string, OutputStats>()
   private isHydrated = false
@@ -118,7 +123,9 @@ export class AdaptiveOutputOptimizer {
         this.isHydrated = true
         return stored.length
       }
-    } catch { /* IDB not available */ }
+    } catch (err) {
+      this.config.onStorageError?.(err)
+    }
     this.isHydrated = true
     return 0
   }
@@ -291,7 +298,7 @@ export class AdaptiveOutputOptimizer {
   async clear(): Promise<void> {
     this.stats.clear()
     if (this.config.persist) {
-      try { await set(this.config.storageKey, []) } catch { /* IDB not available */ }
+      try { await set(this.config.storageKey, []) } catch (err) { this.config.onStorageError?.(err) }
     }
   }
 
@@ -301,6 +308,8 @@ export class AdaptiveOutputOptimizer {
   }
 
   private persistAsync(): Promise<void> {
-    return set(this.config.storageKey, [...this.stats.entries()]).catch(() => {})
+    return set(this.config.storageKey, [...this.stats.entries()]).catch((err) => {
+      this.config.onStorageError?.(err)
+    })
   }
 }

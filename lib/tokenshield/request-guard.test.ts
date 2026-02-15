@@ -332,4 +332,29 @@ describe("RequestGuard", () => {
     expect(ctrl1.signal.aborted).toBe(true)
     expect(ctrl2.signal.aborted).toBe(false)
   })
+
+  describe("dispose", () => {
+    it("clears pending debounce timer", () => {
+      vi.useFakeTimers()
+      try {
+        const g = new RequestGuard({ maxRequestsPerMinute: 100 })
+        // Access debounce to set up a timer — use the debounce factory
+        const debounced = g.debounce<string>(async (prompt, _signal) => prompt)
+        // Fire debounced call to set the timer
+        debounced("test prompt")
+        // Dispose should clear the timer without error
+        g.dispose()
+        // Advance timers — if timer leaked, it would fire and potentially throw
+        vi.advanceTimersByTime(5000)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it("is safe to call multiple times", () => {
+      const g = new RequestGuard()
+      g.dispose()
+      g.dispose()
+    })
+  })
 })

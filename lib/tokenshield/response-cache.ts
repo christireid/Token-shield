@@ -367,8 +367,7 @@ export class ResponseCache {
         }
       } catch (err) {
         // IDB read failed — fall through to fuzzy match (in-memory)
-        // eslint-disable-next-line no-console
-        console.warn("[TokenShield] Cache IDB read failed, falling back to in-memory lookup:", err)
+        this.config.onStorageError?.(err)
       }
     }
 
@@ -487,8 +486,7 @@ export class ResponseCache {
       try {
         await set(key, entry, persistStore)
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn("[TokenShield] Cache IDB write failed (SSR or quota exceeded):", err)
+        this.config.onStorageError?.(err)
       }
     }
   }

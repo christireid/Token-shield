@@ -571,6 +571,17 @@ export class AuditLog {
     }
   }
 
+  /**
+   * Dispose the audit log instance, clearing any pending persist timer.
+   * Does not clear stored data — call clear() first if needed.
+   */
+  dispose(): void {
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer)
+      this.persistTimer = null
+    }
+  }
+
   // -------------------------------------------------------
   // Persistence helpers
   // -------------------------------------------------------

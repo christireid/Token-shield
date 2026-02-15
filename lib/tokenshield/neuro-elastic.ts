@@ -28,6 +28,11 @@ export interface NeuroElasticConfig {
   enableInhibition?: boolean
   /** Persist memories to IndexedDB. Default: false */
   persist?: boolean
+  /**
+   * Called when IndexedDB operations fail (e.g., quota exceeded, IDB disabled).
+   * Without this callback, storage errors are silently ignored.
+   */
+  onStorageError?: (error: unknown) => void
 }
 
 export interface MemorySlot {
@@ -63,7 +68,7 @@ export class NeuroElasticEngine {
   private config: Required<
     Pick<NeuroElasticConfig, "threshold" | "maxMemories" | "enableInhibition" | "persist">
   > &
-    Pick<NeuroElasticConfig, "seeds">
+    Pick<NeuroElasticConfig, "seeds" | "onStorageError">
   private isHydrated = false
   /** Global noise vector — bits active in >50% of memories (IDF inhibition) */
   private noiseVector: Uint32Array = new Uint32Array(DIMENSIONS)
@@ -91,8 +96,8 @@ export class NeuroElasticEngine {
         this.isHydrated = true
         return stored.length
       }
-    } catch {
-      /* IDB not available */
+    } catch (err) {
+      this.config.onStorageError?.(err)
     }
     this.isHydrated = true
     return 0
@@ -203,8 +208,8 @@ export class NeuroElasticEngine {
     if (this.config.persist) {
       try {
         await set(DB_KEY, [])
-      } catch {
-        /* IDB not available */
+      } catch (err) {
+        this.config.onStorageError?.(err)
       }
     }
   }
@@ -363,8 +368,8 @@ export class NeuroElasticEngine {
 
   /** Persist to IDB. Returns a promise so callers can await if needed. */
   private persistAsync(): Promise<void> {
-    return set(DB_KEY, this.memory).catch(() => {
-      /* IDB not available */
+    return set(DB_KEY, this.memory).catch((err) => {
+      this.config.onStorageError?.(err)
     })
   }
 }
