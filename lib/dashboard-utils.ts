@@ -24,8 +24,9 @@ export function formatRelativeTime(ts: number): string {
 /*  Currency / number formatting                                       */
 /* ------------------------------------------------------------------ */
 
-/** Compact currency: "$12.5k", "$3.45", "$0.0012" */
+/** Compact currency: "$12.5k", "$3.45", "$0.0012", "-$5.00" */
 export function formatCurrency(n: number, prefix = "$"): string {
+  if (n < 0) return `-${formatCurrency(Math.abs(n), prefix)}`
   if (n >= 1000) return `${prefix}${(n / 1000).toFixed(1)}k`
   if (n >= 1) return `${prefix}${n.toFixed(2)}`
   return `${prefix}${n.toFixed(4)}`
@@ -59,15 +60,6 @@ export const COLORS = {
   blue: "hsl(215, 70%, 55%)",
   muted: "hsl(215, 15%, 45%)",
   grid: "hsl(220, 14%, 12%)",
-} as const
-
-export const COLORS_LIGHT = {
-  primary: "hsl(152, 60%, 65%)",
-  cyan: "hsl(190, 70%, 65%)",
-  amber: "hsl(38, 92%, 65%)",
-  red: "hsl(0, 72%, 65%)",
-  purple: "hsl(270, 60%, 75%)",
-  orange: "hsl(25, 95%, 65%)",
 } as const
 
 /* ------------------------------------------------------------------ */

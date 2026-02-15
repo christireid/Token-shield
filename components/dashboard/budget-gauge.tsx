@@ -29,6 +29,13 @@ function polarToCartesian(angle: number) {
   return { x: GAUGE_CX + GAUGE_RADIUS * Math.cos(rad), y: GAUGE_CY + GAUGE_RADIUS * Math.sin(rad) }
 }
 
+function describeArc(start: number, end: number) {
+  const s = polarToCartesian(start)
+  const e = polarToCartesian(end)
+  const largeArc = end - start > 180 ? 1 : 0
+  return `M ${s.x} ${s.y} A ${GAUGE_RADIUS} ${GAUGE_RADIUS} 0 ${largeArc} 1 ${e.x} ${e.y}`
+}
+
 interface MiniBarProps {
   label: string
   value: number | null
@@ -79,50 +86,43 @@ export function BudgetGauge() {
   const gaugeColor = getGaugeColor(percent)
 
   // SVG arc gauge
-  const radius = GAUGE_RADIUS
   const strokeWidth = 10
-  const cx = GAUGE_CX
-  const cy = GAUGE_CY
   const startAngle = 135
   const endAngle = 405
   const totalAngle = endAngle - startAngle
   const fillAngle = startAngle + (totalAngle * percent) / 100
 
-  const describeArc = (start: number, end: number) => {
-    const s = polarToCartesian(start)
-    const e = polarToCartesian(end)
-    const largeArc = end - start > 180 ? 1 : 0
-    return `M ${s.x} ${s.y} A ${radius} ${radius} 0 ${largeArc} 1 ${e.x} ${e.y}`
-  }
-
-  // Tick marks at 0%, 25%, 50%, 75%, 100%
+  // Tick marks at 0%, 25%, 50%, 75%, 100% — all inputs are constants
   const { ticks, labelStartPos, labelEndPos } = useMemo(() => {
     const tickPercents = [0, 25, 50, 75, 100]
     const tickLength = 8
     const ticks = tickPercents.map((tp) => {
       const angle = startAngle + (totalAngle * tp) / 100
       const inner = polarToCartesian(angle)
-      const outerRadius = radius + tickLength
+      const outerRadius = GAUGE_RADIUS + tickLength
       const rad = ((angle - 90) * Math.PI) / 180
-      const outer = { x: cx + outerRadius * Math.cos(rad), y: cy + outerRadius * Math.sin(rad) }
+      const outer = {
+        x: GAUGE_CX + outerRadius * Math.cos(rad),
+        y: GAUGE_CY + outerRadius * Math.sin(rad),
+      }
       return { percent: tp, inner, outer, angle }
     })
 
     // Label positions (slightly further out than tick marks)
-    const labelRadius = radius + tickLength + 10
+    const labelRadius = GAUGE_RADIUS + tickLength + 10
     const labelStartRad = ((startAngle - 90) * Math.PI) / 180
     const labelEndRad = ((endAngle - 90) * Math.PI) / 180
     const labelStartPos = {
-      x: cx + labelRadius * Math.cos(labelStartRad),
-      y: cy + labelRadius * Math.sin(labelStartRad),
+      x: GAUGE_CX + labelRadius * Math.cos(labelStartRad),
+      y: GAUGE_CY + labelRadius * Math.sin(labelStartRad),
     }
     const labelEndPos = {
-      x: cx + labelRadius * Math.cos(labelEndRad),
-      y: cy + labelRadius * Math.sin(labelEndRad),
+      x: GAUGE_CX + labelRadius * Math.cos(labelEndRad),
+      y: GAUGE_CY + labelRadius * Math.sin(labelEndRad),
     }
 
     return { ticks, labelStartPos, labelEndPos }
-  }, [percent])
+  }, [])
 
   return (
     <>
@@ -130,6 +130,9 @@ export function BudgetGauge() {
         @keyframes budget-pulse {
           0%, 100% { box-shadow: 0 0 20px hsl(0 72% 51% / 0.1); }
           50% { box-shadow: 0 0 30px hsl(0 72% 51% / 0.2); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .animate-\\[budget-pulse_2s_ease-in-out_infinite\\] { animation: none; }
         }
       `}</style>
       <Card

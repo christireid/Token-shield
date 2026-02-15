@@ -37,6 +37,17 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { MoreHorizontal, Plus, RotateCcw, Trash2, ArrowUpDown, Pencil } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -83,6 +94,7 @@ const PercentBar = React.memo(function PercentBar({ percent }: { percent: number
       <div
         className="h-1.5 w-16 overflow-hidden rounded-full bg-secondary"
         role="progressbar"
+        aria-label="Budget usage percentage"
         aria-valuenow={clamped}
         aria-valuemin={0}
         aria-valuemax={100}
@@ -115,7 +127,7 @@ function EditableLimit({ value, onSave }: { value: number; onSave: (v: number) =
 
   const commit = () => {
     const parsed = parseFloat(draft)
-    if (!isNaN(parsed) && parsed >= 0) {
+    if (!isNaN(parsed) && parsed >= 0 && parsed <= 1_000_000) {
       onSave(parsed)
     }
     setEditing(false)
@@ -163,7 +175,11 @@ function AddUserDialog() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
-    const userId = `usr_${name.toLowerCase().replace(/\s+/g, "_")}_${Date.now().toString(36)}`
+    const sanitizedName = name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, "")
+      .replace(/\s+/g, "_")
+    const userId = `usr_${sanitizedName}_${Date.now().toString(36)}`
     addUser({
       userId,
       displayName: name.trim(),
@@ -211,9 +227,11 @@ function AddUserDialog() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label className="text-xs">Tier</Label>
+            <Label htmlFor="tier-select" className="text-xs">
+              Tier
+            </Label>
             <Select value={tier} onValueChange={(v) => setTier(v as typeof tier)}>
-              <SelectTrigger className="border-border/50 bg-secondary/30 text-sm">
+              <SelectTrigger id="tier-select" className="border-border/50 bg-secondary/30 text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -304,15 +322,25 @@ const SortHeader = React.memo(function SortHeader({
   currentSortDir: "asc" | "desc"
   onSort: (key: SortKey) => void
 }) {
+  const isActive = currentSortKey === sortKeyValue
+  const ariaSortValue = isActive ? (currentSortDir === "asc" ? "ascending" : "descending") : "none"
   return (
-    <TableHead className="cursor-pointer text-xs select-none" onClick={() => onSort(sortKeyValue)}>
+    <TableHead
+      className="cursor-pointer text-xs select-none"
+      onClick={() => onSort(sortKeyValue)}
+      tabIndex={0}
+      aria-sort={ariaSortValue}
+      onKeyDown={(e: React.KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          onSort(sortKeyValue)
+        }
+      }}
+    >
       <span className="inline-flex items-center gap-1">
         {label}
         <ArrowUpDown
-          className={cn(
-            "h-3 w-3",
-            currentSortKey === sortKeyValue ? "text-foreground" : "text-muted-foreground/40",
-          )}
+          className={cn("h-3 w-3", isActive ? "text-foreground" : "text-muted-foreground/40")}
         />
       </span>
     </TableHead>
@@ -470,13 +498,32 @@ export function UserBudgetTable() {
                         <RotateCcw className="mr-2 h-3.5 w-3.5" />
                         Reset Spend
                       </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => removeUser(user.userId)}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="mr-2 h-3.5 w-3.5" />
-                        Remove User
-                      </DropdownMenuItem>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <DropdownMenuItem
+                            onSelect={(e) => e.preventDefault()}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="mr-2 h-3.5 w-3.5" />
+                            Remove User
+                          </DropdownMenuItem>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Remove User</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to remove {user.displayName}? This action cannot
+                              be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => removeUser(user.userId)}>
+                              Remove
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>

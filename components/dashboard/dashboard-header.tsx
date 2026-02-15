@@ -112,8 +112,8 @@ export function DashboardHeader() {
   )
 
   const togglePause = useCallback(() => {
-    setIsPaused(!isPaused)
-  }, [setIsPaused, isPaused])
+    setIsPaused((prev: boolean) => !prev)
+  }, [setIsPaused])
 
   return (
     <header className="relative sticky top-0 z-50 flex flex-col gap-4 border-b border-border/50 bg-background/80 px-4 py-4 backdrop-blur-xl md:flex-row md:items-center md:justify-between md:px-6">

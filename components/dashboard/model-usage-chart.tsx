@@ -24,6 +24,58 @@ const CENTER_LABEL_STYLE: React.CSSProperties = {
   filter: "drop-shadow(0 0 8px rgba(52, 211, 153, 0.3))",
 }
 
+const ModelTableRow = React.memo(function ModelTableRow({
+  entry,
+  hoveredRow,
+  onMouseEnter,
+  onMouseLeave,
+}: {
+  entry: { id: string; color: string; calls: number; cost: number; tokens: number }
+  hoveredRow: string | null
+  onMouseEnter: () => void
+  onMouseLeave: () => void
+}) {
+  return (
+    <TableRow
+      className="border-border/20 cursor-default transition-all duration-200"
+      style={{
+        backgroundColor:
+          hoveredRow === entry.id
+            ? `color-mix(in srgb, ${entry.color} 8%, transparent)`
+            : undefined,
+        boxShadow:
+          hoveredRow === entry.id
+            ? `inset 2px 0 0 ${entry.color}, 0 0 12px ${entry.color}15`
+            : undefined,
+      }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      <TableCell className="py-2">
+        <div className="flex items-center gap-2">
+          <div
+            className="h-2.5 w-2.5 rounded-full transition-shadow duration-200"
+            style={{
+              backgroundColor: entry.color,
+              boxShadow: hoveredRow === entry.id ? `0 0 8px 2px ${entry.color}60` : "none",
+            }}
+          />
+          <span className="font-mono text-xs text-foreground">{entry.id}</span>
+        </div>
+      </TableCell>
+      <TableCell className="py-2 text-right font-mono text-xs tabular-nums text-muted-foreground">
+        {entry.calls.toLocaleString()}
+      </TableCell>
+      <TableCell className="py-2 text-right font-mono text-xs tabular-nums text-foreground">
+        ${entry.cost.toFixed(4)}
+      </TableCell>
+      <TableCell className="py-2 text-right font-mono text-xs tabular-nums text-muted-foreground">
+        {entry.tokens.toLocaleString()}
+      </TableCell>
+    </TableRow>
+  )
+})
+
 export function ModelUsageChart() {
   const { data } = useDashboard()
   const [sortKey, setSortKey] = React.useState<"cost" | "calls" | "tokens">("cost")
@@ -197,6 +249,21 @@ export function ModelUsageChart() {
                       sortKey === "calls" && "text-foreground",
                     )}
                     onClick={() => handleSort("calls")}
+                    tabIndex={0}
+                    role="columnheader"
+                    aria-sort={
+                      sortKey === "calls"
+                        ? sortDir === "desc"
+                          ? "descending"
+                          : "ascending"
+                        : "none"
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        handleSort("calls")
+                      }
+                    }}
                   >
                     Calls {sortKey === "calls" && (sortDir === "desc" ? "↓" : "↑")}
                   </TableHead>
@@ -206,6 +273,21 @@ export function ModelUsageChart() {
                       sortKey === "cost" && "text-foreground",
                     )}
                     onClick={() => handleSort("cost")}
+                    tabIndex={0}
+                    role="columnheader"
+                    aria-sort={
+                      sortKey === "cost"
+                        ? sortDir === "desc"
+                          ? "descending"
+                          : "ascending"
+                        : "none"
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        handleSort("cost")
+                      }
+                    }}
                   >
                     Cost {sortKey === "cost" && (sortDir === "desc" ? "↓" : "↑")}
                   </TableHead>
@@ -215,6 +297,21 @@ export function ModelUsageChart() {
                       sortKey === "tokens" && "text-foreground",
                     )}
                     onClick={() => handleSort("tokens")}
+                    tabIndex={0}
+                    role="columnheader"
+                    aria-sort={
+                      sortKey === "tokens"
+                        ? sortDir === "desc"
+                          ? "descending"
+                          : "ascending"
+                        : "none"
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        handleSort("tokens")
+                      }
+                    }}
                   >
                     Tokens {sortKey === "tokens" && (sortDir === "desc" ? "↓" : "↑")}
                   </TableHead>
@@ -222,45 +319,13 @@ export function ModelUsageChart() {
               </TableHeader>
               <TableBody>
                 {sorted.map((entry) => (
-                  <TableRow
+                  <ModelTableRow
                     key={entry.id}
-                    className="border-border/20 cursor-default transition-all duration-200"
-                    style={{
-                      backgroundColor:
-                        hoveredRow === entry.id
-                          ? `color-mix(in srgb, ${entry.color} 8%, transparent)`
-                          : undefined,
-                      boxShadow:
-                        hoveredRow === entry.id
-                          ? `inset 2px 0 0 ${entry.color}, 0 0 12px ${entry.color}15`
-                          : undefined,
-                    }}
+                    entry={entry}
+                    hoveredRow={hoveredRow}
                     onMouseEnter={() => setHoveredRow(entry.id)}
                     onMouseLeave={() => setHoveredRow(null)}
-                  >
-                    <TableCell className="py-2">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="h-2.5 w-2.5 rounded-full transition-shadow duration-200"
-                          style={{
-                            backgroundColor: entry.color,
-                            boxShadow:
-                              hoveredRow === entry.id ? `0 0 8px 2px ${entry.color}60` : "none",
-                          }}
-                        />
-                        <span className="font-mono text-xs text-foreground">{entry.id}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-2 text-right font-mono text-xs tabular-nums text-muted-foreground">
-                      {entry.calls.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="py-2 text-right font-mono text-xs tabular-nums text-foreground">
-                      ${entry.cost.toFixed(4)}
-                    </TableCell>
-                    <TableCell className="py-2 text-right font-mono text-xs tabular-nums text-muted-foreground">
-                      {entry.tokens.toLocaleString()}
-                    </TableCell>
-                  </TableRow>
+                  />
                 ))}
               </TableBody>
             </Table>

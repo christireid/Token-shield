@@ -6,6 +6,14 @@ import { KpiCard, type KpiCardProps } from "./kpi-card"
 import { formatCurrency, COLORS } from "@/lib/dashboard-utils"
 import { DollarSign, Percent, Zap, ShieldOff, Timer, TrendingUp } from "lucide-react"
 
+/* Hoisted icon elements — never change so they avoid re-creation */
+const ICON_TRENDING_UP = <TrendingUp className="h-4 w-4" />
+const ICON_DOLLAR_SIGN = <DollarSign className="h-4 w-4" />
+const ICON_PERCENT = <Percent className="h-4 w-4" />
+const ICON_ZAP = <Zap className="h-4 w-4" />
+const ICON_SHIELD_OFF = <ShieldOff className="h-4 w-4" />
+const ICON_TIMER = <Timer className="h-4 w-4" />
+
 export function KpiCards() {
   const { data } = useDashboard()
 
@@ -18,7 +26,7 @@ export function KpiCards() {
         color: COLORS.primary,
         accentClass: "bg-primary",
         gradientClass: "bg-gradient-to-br from-card/80 via-card/50 to-primary/[0.03]",
-        icon: <TrendingUp className="h-4 w-4" />,
+        icon: ICON_TRENDING_UP,
         delta: data.kpiDeltas.totalSaved,
         upIsGood: true,
         isHero: true,
@@ -30,7 +38,7 @@ export function KpiCards() {
         color: "hsl(215, 15%, 55%)",
         accentClass: "bg-muted-foreground",
         gradientClass: "bg-gradient-to-br from-card/80 via-card/50 to-muted-foreground/[0.04]",
-        icon: <DollarSign className="h-4 w-4" />,
+        icon: ICON_DOLLAR_SIGN,
         delta: data.kpiDeltas.totalSpent,
         upIsGood: false,
       },
@@ -56,7 +64,7 @@ export function KpiCards() {
             : data.savingsRate >= 15
               ? "bg-gradient-to-br from-card/80 via-card/50 to-amber-500/[0.04]"
               : "bg-gradient-to-br from-card/80 via-card/50 to-destructive/[0.04]",
-        icon: <Percent className="h-4 w-4" />,
+        icon: ICON_PERCENT,
         delta: data.kpiDeltas.savingsRate,
         upIsGood: true,
       },
@@ -67,7 +75,7 @@ export function KpiCards() {
         color: COLORS.cyan,
         accentClass: "bg-chart-2",
         gradientClass: "bg-gradient-to-br from-card/80 via-card/50 to-cyan-500/[0.04]",
-        icon: <Zap className="h-4 w-4" />,
+        icon: ICON_ZAP,
         delta: data.kpiDeltas.cacheHitRate,
         upIsGood: true,
       },
@@ -78,7 +86,7 @@ export function KpiCards() {
         color: COLORS.amber,
         accentClass: "bg-chart-3",
         gradientClass: "bg-gradient-to-br from-card/80 via-card/50 to-amber-500/[0.04]",
-        icon: <ShieldOff className="h-4 w-4" />,
+        icon: ICON_SHIELD_OFF,
         delta: data.kpiDeltas.requestsBlocked,
         upIsGood: true,
       },
@@ -89,7 +97,7 @@ export function KpiCards() {
         color: "hsl(215, 15%, 55%)",
         accentClass: "bg-muted-foreground",
         gradientClass: "bg-gradient-to-br from-card/80 via-card/50 to-slate-500/[0.04]",
-        icon: <Timer className="h-4 w-4" />,
+        icon: ICON_TIMER,
         delta: data.kpiDeltas.avgLatency,
         upIsGood: false,
       },

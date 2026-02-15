@@ -61,6 +61,7 @@ const PipelineBar = React.memo(function PipelineBar({
                   backgroundColor: STAGE_COLORS[m.stage] ?? "hsl(215, 15%, 45%)",
                 }}
                 title={`${m.stage}: ${m.avgDurationMs.toFixed(1)}ms (${pct.toFixed(1)}%)`}
+                aria-hidden="true"
               />
             )
           })}
@@ -113,8 +114,11 @@ const StageRow = React.memo(function StageRow({
         index % 2 === 1 && "bg-secondary/10",
       )}
       style={{ ["--stage-color" as string]: color }}
+      tabIndex={0}
       onMouseEnter={(e) => (e.currentTarget.style.borderLeftColor = color)}
       onMouseLeave={(e) => (e.currentTarget.style.borderLeftColor = "transparent")}
+      onFocus={(e) => (e.currentTarget.style.borderLeftColor = color)}
+      onBlur={(e) => (e.currentTarget.style.borderLeftColor = "transparent")}
     >
       {/* Stage name with color dot */}
       <div className="flex items-center gap-2 min-w-0">
@@ -205,6 +209,9 @@ export function PipelineMetrics() {
         @keyframes pulse-glow {
           0%, 100% { opacity: 1; transform: scale(1); }
           50% { opacity: 0.7; transform: scale(1.35); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .animate-\\[pulse-glow_2s_ease-in-out_infinite\\] { animation: none; }
         }
       `}</style>
       <Card className="border-border/40 bg-card/50">

@@ -2,7 +2,7 @@
 
 import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle, RefreshCw } from "lucide-react"
 
 interface Props {
   children: React.ReactNode
@@ -31,6 +31,10 @@ export class DashboardErrorBoundary extends React.Component<Props, State> {
     )
   }
 
+  private handleRetry = () => {
+    this.setState({ hasError: false })
+  }
+
   render() {
     if (this.state.hasError) {
       return (
@@ -42,9 +46,16 @@ export class DashboardErrorBoundary extends React.Component<Props, State> {
                 {this.props.name} failed to load
               </span>
               <span className="text-[10px] text-muted-foreground">
-                An error occurred rendering this section. Refresh the page to try again.
+                An error occurred rendering this section.
               </span>
             </div>
+            <button
+              onClick={this.handleRetry}
+              className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-border/50 bg-secondary/50 px-2.5 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Retry
+            </button>
           </CardContent>
         </Card>
       )

@@ -91,6 +91,20 @@ describe("formatCurrency", () => {
   it("handles zero", () => {
     expect(formatCurrency(0)).toBe("$0.0000")
   })
+
+  it("handles negative numbers", () => {
+    expect(formatCurrency(-5)).toBe("-$5.00")
+    expect(formatCurrency(-1500)).toBe("-$1.5k")
+    expect(formatCurrency(-0.1234)).toBe("-$0.1234")
+  })
+
+  it("handles boundary value of exactly 1000", () => {
+    expect(formatCurrency(1000)).toBe("$1.0k")
+  })
+
+  it("handles very small positive values", () => {
+    expect(formatCurrency(0.00001)).toBe("$0.0000")
+  })
 })
 
 /* ------------------------------------------------------------------ */

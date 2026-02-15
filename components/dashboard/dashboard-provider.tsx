@@ -171,7 +171,7 @@ interface DashboardContextValue {
   dismissAlert: (id: number) => void
   acknowledgeAnomaly: (id: number) => void
   isPaused: boolean
-  setIsPaused: (p: boolean) => void
+  setIsPaused: React.Dispatch<React.SetStateAction<boolean>>
 }
 
 const DashboardContext = React.createContext<DashboardContextValue | null>(null)

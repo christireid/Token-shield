@@ -43,6 +43,7 @@ const LatencyBar = React.memo(function LatencyBar({ latencyMs }: { latencyMs: nu
     <div
       className="flex items-center gap-2"
       role="progressbar"
+      aria-label="Provider latency"
       aria-valuenow={Math.round(latencyMs)}
       aria-valuemin={0}
       aria-valuemax={500}

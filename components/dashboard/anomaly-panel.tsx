@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { AlertTriangle, Check, Activity, ShieldAlert, ShieldCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useReducedMotion } from "@/hooks/use-reduced-motion"
 import {
   formatRelativeTime,
   SEVERITY_DOT_COLOR,
@@ -88,12 +89,20 @@ const SummaryStats = React.memo(function SummaryStats({
 /*  Anomaly row                                                        */
 /* ------------------------------------------------------------------ */
 
+const SEVERITY_LABELS: Record<string, string> = {
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+}
+
 const AnomalyRow = React.memo(function AnomalyRow({
   anomaly,
   onAcknowledge,
+  reducedMotion,
 }: {
   anomaly: AnomalyRecord
   onAcknowledge: (id: number) => void
+  reducedMotion: boolean
 }) {
   return (
     <div
@@ -110,8 +119,12 @@ const AnomalyRow = React.memo(function AnomalyRow({
           className={cn(
             "h-2 w-2 rounded-full",
             SEVERITY_DOT_COLOR[anomaly.severity] ?? "bg-muted-foreground",
-            !anomaly.acknowledged && (SEVERITY_DOT_ANIMATION[anomaly.severity] ?? ""),
+            !anomaly.acknowledged &&
+              !reducedMotion &&
+              (SEVERITY_DOT_ANIMATION[anomaly.severity] ?? ""),
           )}
+          role="img"
+          aria-label={`${SEVERITY_LABELS[anomaly.severity] ?? anomaly.severity} severity`}
         />
       </div>
 
@@ -149,7 +162,7 @@ const AnomalyRow = React.memo(function AnomalyRow({
             size="sm"
             onClick={() => onAcknowledge(anomaly.id)}
             className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-            title="Acknowledge anomaly"
+            aria-label="Acknowledge anomaly"
           >
             <AlertTriangle className="h-3.5 w-3.5" />
           </Button>
@@ -165,6 +178,7 @@ const AnomalyRow = React.memo(function AnomalyRow({
 
 export function AnomalyPanel() {
   const { data, acknowledgeAnomaly } = useDashboard()
+  const reducedMotion = useReducedMotion()
   const anomalies = data.anomalies
   const displayAnomalies = React.useMemo(
     () => [...anomalies].sort((a, b) => b.timestamp - a.timestamp),
@@ -199,7 +213,12 @@ export function AnomalyPanel() {
             aria-label="Anomaly events"
           >
             {displayAnomalies.map((anomaly) => (
-              <AnomalyRow key={anomaly.id} anomaly={anomaly} onAcknowledge={acknowledgeAnomaly} />
+              <AnomalyRow
+                key={anomaly.id}
+                anomaly={anomaly}
+                onAcknowledge={acknowledgeAnomaly}
+                reducedMotion={reducedMotion}
+              />
             ))}
             {displayAnomalies.length === 0 && (
               <div className="flex h-32 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border/40 bg-secondary/10">

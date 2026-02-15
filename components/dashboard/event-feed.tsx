@@ -25,7 +25,6 @@ const EventRow = React.memo(function EventRow({
 }) {
   return (
     <div
-      key={ev.id}
       className={cn(
         "relative flex items-start gap-3 rounded-md px-2 py-2 transition-colors hover:bg-secondary/30",
         ev.type === "breaker:warning" && "bg-[hsl(25,95%,53%)]/5",

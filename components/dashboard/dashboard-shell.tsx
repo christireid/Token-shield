@@ -15,6 +15,7 @@ import { EventFeed } from "./event-feed"
 import { BudgetGauge } from "./budget-gauge"
 import { UserBudgetTable } from "./user-budget-table"
 import { useStaggeredReveal } from "@/hooks/use-staggered-reveal"
+import { useReducedMotion } from "@/hooks/use-reduced-motion"
 import { DashboardErrorBoundary } from "./error-boundary"
 
 const SectionHeader = React.memo(function SectionHeader({ title }: { title: string }) {
@@ -41,11 +42,12 @@ function RevealSection({
   ariaLabel?: string
 }) {
   const visible = useStaggeredReveal(order)
+  const reducedMotion = useReducedMotion()
   return (
     <section
       aria-label={ariaLabel}
-      className="transition-all duration-500 ease-out"
-      style={visible ? VISIBLE_STYLE : HIDDEN_STYLE}
+      className={reducedMotion ? undefined : "transition-all duration-500 ease-out"}
+      style={reducedMotion || visible ? VISIBLE_STYLE : HIDDEN_STYLE}
     >
       {children}
     </section>
