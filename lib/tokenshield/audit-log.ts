@@ -551,6 +551,11 @@ export class AuditLog {
     this.pruned = false
     this._integrityCache = null
     this._integrityCacheSeq = -1
+    // Cancel any pending debounced persist to avoid a redundant IDB write
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer)
+      this.persistTimer = null
+    }
     if (this.config.persist) {
       try {
         await set(this.config.storageKey, [])

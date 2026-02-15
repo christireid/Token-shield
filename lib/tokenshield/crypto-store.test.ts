@@ -272,4 +272,37 @@ describe("EncryptedStore", () => {
     const result = await store.getItem("to-remove")
     expect(result).toBeUndefined()
   })
+
+  it("calls onStorageError when decryption fails", async () => {
+    const errors: unknown[] = []
+    mockSubtle.decrypt.mockRejectedValueOnce(new Error("Decryption failed"))
+    const store = new EncryptedStore({
+      dbName: "test-db-decrypt-err",
+      storeName: "test",
+      encryption: { mode: "key", key: mockKey },
+      onStorageError: (err) => errors.push(err),
+    })
+    // Store something first (encrypt succeeds)
+    await store.setItem("key", "value")
+    // Now decrypt will fail on getItem
+    const result = await store.getItem("key")
+    expect(result).toBeUndefined()
+    expect(errors).toHaveLength(1)
+    expect((errors[0] as Error).message).toBe("Decryption failed")
+  })
+
+  it("calls onStorageError when passphrase key derivation fails", async () => {
+    const errors: unknown[] = []
+    mockSubtle.importKey.mockRejectedValueOnce(new Error("Key derivation failed"))
+    const store = new EncryptedStore({
+      dbName: "test-db-derive-err",
+      storeName: "test",
+      encryption: { mode: "passphrase", passphrase: "test" },
+      onStorageError: (err) => errors.push(err),
+    })
+    // Wait for async key derivation to complete
+    await new Promise((r) => setTimeout(r, 50))
+    expect(errors).toHaveLength(1)
+    expect((errors[0] as Error).message).toBe("Key derivation failed")
+  })
 })

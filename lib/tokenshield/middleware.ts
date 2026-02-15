@@ -269,6 +269,14 @@ export function tokenShieldMiddleware(
       const data = d as Record<string, unknown>
       auditLog.logBudgetExceeded(String(data.userId ?? ""), Number(data.limit ?? 0), Number(data.spent ?? 0))
     })
+    on("userBudget:warning", (d) => {
+      const data = d as Record<string, unknown>
+      auditLog.logBudgetWarning(
+        String(data.userId ?? ""),
+        String(data.limitType ?? ""),
+        Number(data.percentUsed ?? 0),
+      )
+    })
     on("anomaly:detected", (d) => {
       const data = d as unknown as Record<string, unknown>
       auditLog.logAnomalyDetected(

@@ -4,6 +4,37 @@ All notable changes to Token Shield will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-02-15
+
+### Added
+
+- **Audit log convenience methods**: New `logBudgetWarning()`, `logBreakerReset()`, `logLicenseActivated()`, and `logExportRequested()` methods on `AuditLog` covering all 14 audit event types.
+- **`subscribeToAnyEvent` export**: Dynamic event subscription helper now exported from the main entry point for plugin and integration use.
+- **`SavingsAttributionSection` export**: Dashboard attribution component now exported from the main entry point.
+- **Error observability callbacks**: New `onPersistError` on `AuditLogConfig`, `onStorageError` on `CacheConfig`, and `onStorageError` on `EncryptedStoreConfig` surface IndexedDB/crypto failures instead of silently swallowing them.
+- **Middleware `userBudget:warning` wiring**: Budget warning events now flow to the audit log via `logBudgetWarning()`.
+- **Dashboard sections tests**: 20 tests covering `formatDollars`, `formatPercent`, and all `summarizeEventData` branches including `anomaly:detected` and `router:holdback`.
+- **Compressor/delta event emission tests**: 6 tests verifying audit chain integrity, event payloads, dispose cleanup, and external listener support.
+- **Delta encoder re-export tests**: 4 tests verifying identity and functional correctness of the `delta-encoder.ts` alias.
+- **License activation module tests**: Export validation and type-level tests for the `LicenseActivation` component.
+
+### Changed
+
+- **Adapter type safety**: `createOpenAIAdapter` and `createAnthropicAdapter` now use `AdapterMessage[]` instead of `any[]` in generic constraints.
+- **Adapter param hygiene**: Generic and stream adapters now strip the internal AI-SDK `prompt` field before passing params to user callbacks.
+- **Plugin event wiring**: `middleware-plugin.ts` uses the type-safe `subscribeToAnyEvent` helper instead of raw `as any` casts.
+- **Persist timer cleanup**: `AuditLog.clear()` now cancels pending debounced persist timers to avoid redundant IDB writes.
+
+### Fixed
+
+- **`useEventLog` missing subscriptions**: Added `anomaly:detected` and `router:holdback` to the event type list in `useEventLog`.
+- **`summarizeEventData` missing cases**: Added `anomaly:detected` and `router:holdback` branches to the dashboard event summarizer.
+- **`EVENT_COLORS` missing entries**: Added `anomaly:detected` and `router:holdback` to the dashboard color map.
+
+### Documentation
+
+- **API client JSDoc**: Added `@throws` documentation to `callOpenAI`, `callAnthropic`, `callGoogle`, and `callLLM`.
+
 ## [0.4.0] - 2026-02-15
 
 ### Added

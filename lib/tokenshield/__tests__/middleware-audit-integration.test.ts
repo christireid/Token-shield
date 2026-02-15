@@ -176,6 +176,24 @@ describe("Middleware Audit Log Integration", () => {
     mw.dispose()
   })
 
+  it("audit log records userBudget:warning events", () => {
+    const mw = tokenShieldMiddleware({ auditLog })
+    mw.events.emit("userBudget:warning", {
+      userId: "user-42",
+      limitType: "daily",
+      currentSpend: 8.5,
+      limit: 10,
+      percentUsed: 85,
+    })
+    const entries = auditLog.getEntries({ eventType: "budget_warning" })
+    expect(entries).toHaveLength(1)
+    expect(entries[0].severity).toBe("warn")
+    expect(entries[0].userId).toBe("user-42")
+    expect(entries[0].data.limitType).toBe("daily")
+    expect(entries[0].data.percentUsed).toBe(85)
+    mw.dispose()
+  })
+
   it("multiple middleware instances have independent audit logs", () => {
     const log1 = new AuditLog()
     const log2 = new AuditLog()

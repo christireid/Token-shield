@@ -32,6 +32,12 @@ export interface EncryptedStoreConfig {
     | { mode: "session" }
     | { mode: "key"; key: CryptoKey }
     | { mode: "none" }
+  /**
+   * Called when a storage or crypto operation fails (e.g., key derivation,
+   * decryption, IDB unavailable). Without this callback, some errors are
+   * logged to `console.warn` and decryption failures silently return `undefined`.
+   */
+  onStorageError?: (error: unknown) => void
 }
 
 // -------------------------------------------------------
@@ -148,9 +154,10 @@ export class EncryptedStore {
         .then((k) => {
           this.cryptoKey = k
         })
-        .catch(() => {
+        .catch((err) => {
           // eslint-disable-next-line no-console
           console.warn("[TokenShield] Failed to derive encryption key from passphrase")
+          this.config.onStorageError?.(err)
         })
     } else if (config.encryption.mode === "session") {
       this.keyPromise = getSessionKey()
@@ -158,9 +165,10 @@ export class EncryptedStore {
         .then((k) => {
           this.cryptoKey = k
         })
-        .catch(() => {
+        .catch((err) => {
           // eslint-disable-next-line no-console
           console.warn("[TokenShield] Failed to generate session encryption key")
+          this.config.onStorageError?.(err)
         })
     }
   }
@@ -204,8 +212,9 @@ export class EncryptedStore {
     try {
       const json = await decrypt(encrypted, cryptoKey)
       return JSON.parse(json) as T
-    } catch {
+    } catch (err) {
       // Decryption failed (wrong key, corrupted data) — return undefined
+      this.config.onStorageError?.(err)
       return undefined
     }
   }
