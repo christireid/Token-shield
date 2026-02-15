@@ -80,6 +80,28 @@ describe("semantic-minhash", () => {
 
       expect(small.size).toBeLessThanOrEqual(5)
     })
+
+    it("should still find recent entries after eviction", () => {
+      // Regression: eviction used to rebuild all buckets on every eviction (O(n*bands)).
+      // Now uses swap-remove. Verify lookups still work after multiple evictions.
+      const small = new SemanticMinHashIndex<string>({
+        numHashes: 64,
+        bands: 8,
+        maxEntries: 3,
+      })
+
+      small.insert("alpha beta gamma delta epsilon zeta eta theta", "first")
+      small.insert("one two three four five six seven eight", "second")
+      small.insert("apple banana cherry dragonfruit elderberry fig grape", "third")
+      // This triggers eviction of "first"
+      small.insert("red green blue yellow orange purple violet indigo", "fourth")
+
+      expect(small.size).toBeLessThanOrEqual(3)
+      // The most recent entry should still be findable
+      const result = small.find("red green blue yellow orange purple violet indigo", 0.8)
+      expect(result).not.toBeNull()
+      expect(result!.entry.data).toBe("fourth")
+    })
   })
 
   describe("clear", () => {

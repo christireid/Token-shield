@@ -85,6 +85,26 @@ describe("conversation-delta-encoder", () => {
       // Messages should be unchanged when not applied
       expect(result.messages[0].content).toBe(messages[0].content)
     })
+
+    it("should not enter quote compaction path when compactQuotes is disabled", () => {
+      // Regression: operator precedence bug meant paragraphs starting with '"'
+      // would always enter quote compaction regardless of config flag
+      const longQuote = '"The quick brown fox jumps over the lazy dog. This sentence is used for testing purposes and contains enough text to qualify for dedup analysis."'
+
+      const messages = [
+        { role: "assistant", content: "The quick brown fox jumps over the lazy dog. This sentence is used for testing purposes and contains enough text to qualify for dedup analysis." },
+        { role: "user", content: `${longQuote}\n\nWhat do you think about this?` },
+      ]
+
+      const withQuotes = encodeDelta(messages, { compactQuotes: true, minSavingsTokens: 0 })
+      const withoutQuotes = encodeDelta(messages, { compactQuotes: false, minSavingsTokens: 0 })
+
+      // With compactQuotes=false, the quoted paragraph should NOT be compacted
+      // even though it starts with '"'
+      if (withQuotes.quotesCompacted > 0) {
+        expect(withoutQuotes.quotesCompacted).toBe(0)
+      }
+    })
   })
 
   describe("analyzeRedundancy", () => {

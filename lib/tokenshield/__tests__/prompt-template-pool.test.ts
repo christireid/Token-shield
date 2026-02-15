@@ -30,6 +30,16 @@ describe("prompt-template-pool", () => {
       expect(compiled.variables).toEqual(["first", "second"])
     })
 
+    it("should correctly render adjacent variables (no empty-segment confusion)", () => {
+      // Regression: previously, empty static segments between adjacent variables
+      // had tokens.length === 0 and were misidentified as variable segments
+      pool.register("adj", "{{a}}{{b}}")
+      const result = pool.render("adj", { a: "hello", b: "world" })
+      expect(result.rendered).toBe("helloworld")
+      expect(result.dynamicTokens).toBeGreaterThan(0)
+      expect(result.staticTokens).toBe(0)
+    })
+
     it("should handle whitespace in variable delimiters", () => {
       const compiled = pool.register("spaced", "Hello {{ name }}, welcome to {{ place }}!")
       expect(compiled.variables).toEqual(["name", "place"])

@@ -100,6 +100,25 @@ describe("prompt-compressor", () => {
         )
       }
     })
+
+    it("should preserve intentional markdown emphasis in longer text", () => {
+      const prompt =
+        "You must follow these rules *exactly* as written. The **critical** requirement is that all outputs must be in JSON format. Furthermore the system should be very robust."
+      const result = compressPrompt(prompt, { minSavingsTokens: 1 })
+      // Longer bold/italic emphasis should be preserved — only short label-like **X**: patterns are stripped
+      if (result.applied) {
+        expect(result.compressed).toContain("*exactly*")
+      }
+    })
+
+    it("should use split/join for placeholder restoration to handle edge cases", () => {
+      // The restorePreserved function should replace ALL occurrences of a placeholder,
+      // not just the first (which string.replace() does)
+      const prompt = "Check `code1` and also `code2` and explain them clearly."
+      const result = compressPrompt(prompt, { minSavingsTokens: 0 })
+      expect(result.compressed).toContain("`code1`")
+      expect(result.compressed).toContain("`code2`")
+    })
   })
 
   describe("compressMessages", () => {

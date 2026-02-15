@@ -306,22 +306,45 @@ export class SemanticMinHashIndex<T = unknown> {
       }
     }
 
-    // Remove the entry from the array
-    this.entries.splice(oldestIdx, 1)
+    const lastIdx = this.entries.length - 1
 
-    // Rebuild all buckets (simplest correct approach for splice-based eviction)
-    for (let b = 0; b < this.config.bands; b++) {
-      this.buckets.set(b, new Map())
-    }
-    for (let i = 0; i < this.entries.length; i++) {
+    // Remove the evicted entry from all its LSH buckets
+    this.removeBucketReferences(oldestIdx)
+
+    if (oldestIdx !== lastIdx) {
+      // Remove the last entry's bucket references before moving it
+      this.removeBucketReferences(lastIdx)
+
+      // Swap the evicted entry with the last entry (O(1) removal)
+      this.entries[oldestIdx] = this.entries[lastIdx]
+
+      // Re-index the swapped entry at its new position
       for (let b = 0; b < this.config.bands; b++) {
-        const bucketKey = this.hashBand(this.entries[i].signature, b)
+        const bucketKey = this.hashBand(this.entries[oldestIdx].signature, b)
         const bandBuckets = this.buckets.get(b)!
         const bucket = bandBuckets.get(bucketKey)
         if (bucket) {
-          bucket.push(i)
+          bucket.push(oldestIdx)
         } else {
-          bandBuckets.set(bucketKey, [i])
+          bandBuckets.set(bucketKey, [oldestIdx])
+        }
+      }
+    }
+
+    this.entries.length = lastIdx // truncate
+  }
+
+  /** Remove all bucket references to a specific entry index. */
+  private removeBucketReferences(idx: number): void {
+    for (let b = 0; b < this.config.bands; b++) {
+      const bucketKey = this.hashBand(this.entries[idx].signature, b)
+      const bandBuckets = this.buckets.get(b)!
+      const bucket = bandBuckets.get(bucketKey)
+      if (bucket) {
+        const pos = bucket.indexOf(idx)
+        if (pos !== -1) {
+          bucket.splice(pos, 1)
+          if (bucket.length === 0) bandBuckets.delete(bucketKey)
         }
       }
     }

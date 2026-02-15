@@ -38,7 +38,7 @@ export interface CompressorConfig {
   references?: boolean
   /** Minimum token savings to apply compression (skip if savings < this). Default: 5 */
   minSavingsTokens?: number
-  /** Maximum compression ratio allowed (0-1). Caps how much is removed. Default: 0.6 */
+  /** Minimum allowed ratio (compressed/original). Below this, compression is rejected as too aggressive. Default: 0.6 */
   maxCompressionRatio?: number
   /** Preserve these exact substrings verbatim (e.g., code blocks, URLs). */
   preservePatterns?: RegExp[]
@@ -215,9 +215,11 @@ function extractPreserved(
 /** Restore preserved blocks into the final text. */
 function restorePreserved(text: string, blocks: PreservedBlock[]): string {
   let result = text
-  // Restore in reverse order to handle nested replacements
+  // Restore in reverse order to handle nested replacements.
+  // Use split/join instead of replace() to ensure ALL occurrences are replaced
+  // (string.replace only replaces the first match).
   for (let i = blocks.length - 1; i >= 0; i--) {
-    result = result.replace(blocks[i].placeholder, blocks[i].original)
+    result = result.split(blocks[i].placeholder).join(blocks[i].original)
   }
   return result
 }
@@ -242,9 +244,11 @@ function compressStructural(text: string): string {
   // Remove leading whitespace on non-indented lines (keep code indentation in preserved blocks)
   result = result.replace(/^[ \t]+(?=[A-Z])/gm, "")
 
-  // Remove redundant markdown emphasis markers that don't add meaning
-  // e.g., **Note:** → Note: (the LLM doesn't need bold markers)
-  result = result.replace(/\*{1,2}([^*]+)\*{1,2}/g, "$1")
+  // Remove redundant markdown bold markers on short label-like patterns
+  // e.g., **Note:** → Note: (the LLM doesn't need bold markers for labels)
+  // Only strip bold on short phrases (≤5 words) that end with a colon — these are labels.
+  // Preserve longer bold/italic text since users may use it for emphasis that guides output.
+  result = result.replace(/\*\*(\S(?:[^*]{0,40}\S)?)\*\*(?=:)/g, "$1")
 
   // Remove horizontal rules
   result = result.replace(/^[-*_]{3,}\s*$/gm, "")
@@ -472,7 +476,7 @@ export function compressPrompt(
   // Check if compression meets minimum savings threshold
   const applied = savedTokens >= cfg.minSavingsTokens
 
-  // Check if compression exceeds max ratio (too aggressive)
+  // If the ratio dropped below the floor, compression was too aggressive — return original
   if (ratio < cfg.maxCompressionRatio) {
     return {
       compressed: prompt, // return original — too much was removed

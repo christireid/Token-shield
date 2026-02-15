@@ -42,11 +42,13 @@ export interface TemplateConfig {
 
 /** A pre-tokenized template segment (static text between variables) */
 interface TemplateSegment {
-  /** The static text */
+  /** Whether this segment is a variable placeholder */
+  isVariable: boolean
+  /** The static text (or variable placeholder text) */
   text: string
-  /** Pre-computed BPE token IDs for this segment */
+  /** Pre-computed BPE token IDs for this segment (empty for variables) */
   tokens: number[]
-  /** Pre-computed token count */
+  /** Pre-computed token count (0 for variables) */
   tokenCount: number
 }
 
@@ -143,6 +145,7 @@ export class PromptTemplatePool {
       if (staticText) {
         const tokens = encode(staticText)
         segments.push({
+          isVariable: false,
           text: staticText,
           tokens,
           tokenCount: tokens.length,
@@ -152,6 +155,7 @@ export class PromptTemplatePool {
       variables.push(match[1])
       // Add a placeholder segment for the variable
       segments.push({
+        isVariable: true,
         text: `${this.config.varStart}${match[1]}${this.config.varEnd}`,
         tokens: [], // dynamic — not pre-tokenized
         tokenCount: 0,
@@ -165,6 +169,7 @@ export class PromptTemplatePool {
     if (trailingText) {
       const tokens = encode(trailingText)
       segments.push({
+        isVariable: false,
         text: trailingText,
         tokens,
         tokenCount: tokens.length,
@@ -172,7 +177,7 @@ export class PromptTemplatePool {
     }
 
     const staticTokens = segments
-      .filter(s => s.tokens.length > 0)
+      .filter(s => !s.isVariable)
       .reduce((sum, s) => sum + s.tokenCount, 0)
 
     const compiled: CompiledTemplate = {
@@ -234,7 +239,7 @@ export class PromptTemplatePool {
     let varIdx = 0
 
     for (const segment of compiled.segments) {
-      if (segment.tokens.length > 0) {
+      if (!segment.isVariable) {
         // Static segment — use pre-tokenized text
         rendered += segment.text
       } else {

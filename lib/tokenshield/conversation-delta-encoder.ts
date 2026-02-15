@@ -232,7 +232,7 @@ export function encodeDelta(
       }
 
       // Check for assistant quote compaction
-      if (cfg.compactQuotes && para.startsWith(">") || para.startsWith('"')) {
+      if (cfg.compactQuotes && (para.startsWith(">") || para.startsWith('"'))) {
         const unquoted = para.replace(/^[>"]\s*/gm, "").trim()
         if (unquoted.length >= cfg.minParagraphLength) {
           const unquotedNorm = normalizeForComparison(unquoted)

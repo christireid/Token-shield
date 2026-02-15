@@ -409,10 +409,10 @@ export class TokenOptimizer {
     return {
       cache: this.responseCache?.stats() ?? null,
       minhash: this.minhashIndex ? this.minhashIndex.stats() : null,
-      adaptive: this.adaptiveOptimizer ? {
-        taskTypes: this.adaptiveOptimizer.summary().totalTaskTypes,
-        totalObservations: this.adaptiveOptimizer.summary().totalObservations,
-      } : null,
+      adaptive: this.adaptiveOptimizer ? (() => {
+        const s = this.adaptiveOptimizer!.summary()
+        return { taskTypes: s.totalTaskTypes, totalObservations: s.totalObservations }
+      })() : null,
       templates: this.templatePool ? this.templatePool.stats() : null,
     }
   }
