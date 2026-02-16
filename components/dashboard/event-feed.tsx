@@ -76,18 +76,20 @@ export function EventFeed() {
   const [paused, setPaused] = React.useState(false)
   const [frozenEvents, setFrozenEvents] = React.useState<DashboardEvent[]>([])
   const scrollRef = React.useRef<HTMLDivElement>(null)
-  const latestEventsRef = React.useRef(data.events)
-  latestEventsRef.current = data.events
-  const togglePause = React.useCallback(() => setPaused((p) => !p), [])
+  const eventsRef = React.useRef(data.events)
+  React.useEffect(() => {
+    eventsRef.current = data.events
+  }, [data.events])
+
+  const togglePause = React.useCallback(() => {
+    setPaused((prev) => {
+      if (!prev) setFrozenEvents(eventsRef.current)
+      return !prev
+    })
+  }, [])
 
   const events = paused ? frozenEvents : data.events
   const displayEvents = React.useMemo(() => [...events].reverse(), [events])
-
-  React.useEffect(() => {
-    if (paused) {
-      setFrozenEvents(latestEventsRef.current)
-    }
-  }, [paused])
 
   React.useEffect(() => {
     if (!paused && scrollRef.current) {

@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { DashboardProvider } from "./dashboard-provider"
+import { DashboardProvider, useDashboardData } from "./dashboard-provider"
 import { DashboardHeader } from "./dashboard-header"
 import { AlertBanner } from "./alert-banner"
 import { KpiCards } from "./kpi-cards"
@@ -82,6 +82,130 @@ const DASHBOARD_STYLES = `
   }
 `
 
+function DashboardSkeleton() {
+  return (
+    <div className="relative mx-auto flex max-w-[1400px] flex-col gap-6">
+      {/* KPI skeleton row */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div
+            key={i}
+            className="h-[120px] animate-pulse rounded-lg border border-border/20 bg-card/30"
+          />
+        ))}
+      </div>
+      {/* Chart skeleton */}
+      <div className="h-[380px] animate-pulse rounded-lg border border-border/20 bg-card/30" />
+      {/* Two-column skeleton */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="h-[340px] animate-pulse rounded-lg border border-border/20 bg-card/30" />
+        <div className="h-[340px] animate-pulse rounded-lg border border-border/20 bg-card/30" />
+      </div>
+    </div>
+  )
+}
+
+function DashboardContent() {
+  const data = useDashboardData()
+  const isLoading = data.timeSeries.length === 0
+
+  if (isLoading) return <DashboardSkeleton />
+
+  return (
+    <div className="relative mx-auto flex max-w-[1400px] flex-col gap-6">
+      {/* Alert banner - only renders when there are active alerts */}
+      <AlertBanner />
+
+      {/* KPI row */}
+      <RevealSection order={1} ariaLabel="Key performance indicators">
+        <KpiCards />
+      </RevealSection>
+
+      {/* --- Performance --- */}
+      <SectionHeader title="Performance" />
+
+      {/* Savings timeline - full width */}
+      <RevealSection order={2} ariaLabel="Savings over time">
+        <DashboardErrorBoundary name="Savings Timeline">
+          <SavingsTimelineChart />
+        </DashboardErrorBoundary>
+      </RevealSection>
+
+      {/* --- Cost Analytics --- */}
+      <SectionHeader title="Cost Analytics" />
+
+      {/* Two-column: Module breakdown + Model usage */}
+      <RevealSection order={3} ariaLabel="Cost analytics breakdown">
+        <div className="grid gap-6 lg:grid-cols-2">
+          <DashboardErrorBoundary name="Module Breakdown">
+            <section aria-label="Module savings breakdown">
+              <ModuleBreakdownChart />
+            </section>
+          </DashboardErrorBoundary>
+          <DashboardErrorBoundary name="Model Usage">
+            <section aria-label="Model usage distribution">
+              <ModelUsageChart />
+            </section>
+          </DashboardErrorBoundary>
+        </div>
+      </RevealSection>
+
+      {/* --- Infrastructure --- */}
+      <SectionHeader title="Infrastructure" />
+
+      {/* Two-column: Pipeline metrics + Provider health */}
+      <RevealSection order={4} ariaLabel="Infrastructure metrics">
+        <div className="grid gap-6 lg:grid-cols-2">
+          <DashboardErrorBoundary name="Pipeline Metrics">
+            <section aria-label="Pipeline performance">
+              <PipelineMetrics />
+            </section>
+          </DashboardErrorBoundary>
+          <DashboardErrorBoundary name="Provider Health">
+            <section aria-label="Provider health">
+              <ProviderHealth />
+            </section>
+          </DashboardErrorBoundary>
+        </div>
+      </RevealSection>
+
+      {/* --- Activity & Security --- */}
+      <SectionHeader title="Activity & Security" />
+
+      {/* Three-column: Event feed + Anomaly detection + Budget gauge */}
+      <RevealSection order={5} ariaLabel="Activity and security overview">
+        <div className="grid gap-6 lg:grid-cols-[1fr_1fr_380px]">
+          <DashboardErrorBoundary name="Event Feed">
+            <section aria-label="Live event feed">
+              <EventFeed />
+            </section>
+          </DashboardErrorBoundary>
+          <DashboardErrorBoundary name="Anomaly Detection">
+            <section aria-label="Anomaly detection">
+              <AnomalyPanel />
+            </section>
+          </DashboardErrorBoundary>
+          <DashboardErrorBoundary name="Budget Gauge">
+            <section aria-label="Budget utilization">
+              <BudgetGauge />
+            </section>
+          </DashboardErrorBoundary>
+        </div>
+      </RevealSection>
+
+      {/* --- User Management --- */}
+      <SectionHeader title="User Management" />
+
+      {/* User budget management - full width */}
+      <RevealSection order={6} ariaLabel="User budget management">
+        <DashboardErrorBoundary name="User Budget Table">
+          <UserBudgetTable />
+        </DashboardErrorBoundary>
+      </RevealSection>
+    </div>
+  )
+}
+
 export function DashboardShell() {
   return (
     <DashboardProvider>
@@ -96,98 +220,7 @@ export function DashboardShell() {
             className="pointer-events-none absolute inset-x-0 top-0 h-[600px]"
             style={RADIAL_BG_STYLE}
           />
-
-          <div className="relative mx-auto flex max-w-[1400px] flex-col gap-6">
-            {/* Alert banner - only renders when there are active alerts */}
-            <AlertBanner />
-
-            {/* KPI row */}
-            <RevealSection order={1} ariaLabel="Key performance indicators">
-              <KpiCards />
-            </RevealSection>
-
-            {/* --- Performance --- */}
-            <SectionHeader title="Performance" />
-
-            {/* Savings timeline - full width */}
-            <RevealSection order={2} ariaLabel="Savings over time">
-              <DashboardErrorBoundary name="Savings Timeline">
-                <SavingsTimelineChart />
-              </DashboardErrorBoundary>
-            </RevealSection>
-
-            {/* --- Cost Analytics --- */}
-            <SectionHeader title="Cost Analytics" />
-
-            {/* Two-column: Module breakdown + Model usage */}
-            <RevealSection order={3} ariaLabel="Cost analytics breakdown">
-              <div className="grid gap-6 lg:grid-cols-2">
-                <DashboardErrorBoundary name="Module Breakdown">
-                  <section aria-label="Module savings breakdown">
-                    <ModuleBreakdownChart />
-                  </section>
-                </DashboardErrorBoundary>
-                <DashboardErrorBoundary name="Model Usage">
-                  <section aria-label="Model usage distribution">
-                    <ModelUsageChart />
-                  </section>
-                </DashboardErrorBoundary>
-              </div>
-            </RevealSection>
-
-            {/* --- Infrastructure --- */}
-            <SectionHeader title="Infrastructure" />
-
-            {/* Two-column: Pipeline metrics + Provider health */}
-            <RevealSection order={4} ariaLabel="Infrastructure metrics">
-              <div className="grid gap-6 lg:grid-cols-2">
-                <DashboardErrorBoundary name="Pipeline Metrics">
-                  <section aria-label="Pipeline performance">
-                    <PipelineMetrics />
-                  </section>
-                </DashboardErrorBoundary>
-                <DashboardErrorBoundary name="Provider Health">
-                  <section aria-label="Provider health">
-                    <ProviderHealth />
-                  </section>
-                </DashboardErrorBoundary>
-              </div>
-            </RevealSection>
-
-            {/* --- Activity & Security --- */}
-            <SectionHeader title="Activity & Security" />
-
-            {/* Three-column: Event feed + Anomaly detection + Budget gauge */}
-            <RevealSection order={5} ariaLabel="Activity and security overview">
-              <div className="grid gap-6 lg:grid-cols-[1fr_1fr_380px]">
-                <DashboardErrorBoundary name="Event Feed">
-                  <section aria-label="Live event feed">
-                    <EventFeed />
-                  </section>
-                </DashboardErrorBoundary>
-                <DashboardErrorBoundary name="Anomaly Detection">
-                  <section aria-label="Anomaly detection">
-                    <AnomalyPanel />
-                  </section>
-                </DashboardErrorBoundary>
-                <DashboardErrorBoundary name="Budget Gauge">
-                  <section aria-label="Budget utilization">
-                    <BudgetGauge />
-                  </section>
-                </DashboardErrorBoundary>
-              </div>
-            </RevealSection>
-
-            {/* --- User Management --- */}
-            <SectionHeader title="User Management" />
-
-            {/* User budget management - full width */}
-            <RevealSection order={6} ariaLabel="User budget management">
-              <DashboardErrorBoundary name="User Budget Table">
-                <UserBudgetTable />
-              </DashboardErrorBoundary>
-            </RevealSection>
-          </div>
+          <DashboardContent />
         </main>
       </div>
       <Toaster />

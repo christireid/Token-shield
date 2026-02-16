@@ -99,14 +99,13 @@ export function ModelUsageChart() {
     [data.byModel],
   )
 
-  const sorted = useMemo(
-    () =>
-      [...entries].sort((a, b) => {
-        const diff = a[sortKey] - b[sortKey]
-        return sortDir === "desc" ? -diff : diff
-      }),
-    [entries, sortKey, sortDir],
-  )
+  const sorted = useMemo(() => {
+    const key = sortKey satisfies keyof (typeof entries)[number]
+    return [...entries].sort((a, b) => {
+      const diff = (a[key] as number) - (b[key] as number)
+      return sortDir === "desc" ? -diff : diff
+    })
+  }, [entries, sortKey, sortDir])
 
   const pieData = useMemo(
     () =>

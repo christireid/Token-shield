@@ -234,7 +234,11 @@ interface DashboardContextValue {
 /*  Consumer hooks                                                     */
 /* ------------------------------------------------------------------ */
 
-/** Full context (backward compatible) — re-renders on every tick */
+/**
+ * Full context (backward compatible) — re-renders on every tick.
+ * @deprecated Prefer useDashboardData(), useDashboardActions(), or useDashboardSettings()
+ * for fine-grained re-render control.
+ */
 export function useDashboard(): DashboardContextValue {
   const data = React.useContext(DashboardDataContext)
   const actions = React.useContext(DashboardActionsContext)
@@ -281,8 +285,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
   const [data, setData] = React.useState<DashboardData>(createEmptyState)
 
-  /* Resolve active scenario modifiers */
-  const modifiers: ScenarioModifiers = DEMO_SCENARIOS[scenario]?.modifiers ?? DEFAULT_MODIFIERS
+  /* Resolve active scenario modifiers (stable ref — only changes on scenario switch) */
+  const modifiers = React.useMemo<ScenarioModifiers>(
+    () => DEMO_SCENARIOS[scenario]?.modifiers ?? DEFAULT_MODIFIERS,
+    [scenario],
+  )
 
   /* Seed with initial history on first mount */
   React.useEffect(() => {
