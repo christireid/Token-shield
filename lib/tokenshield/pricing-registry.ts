@@ -531,6 +531,14 @@ let lastFetchTimestamp = 0
 /** Minimum interval between fetches (1 hour) */
 const MIN_FETCH_INTERVAL_MS = 60 * 60 * 1000
 
+/** In-flight fetch promise for deduplication */
+let inFlightFetch: Promise<{
+  updated: number
+  added: number
+  errors: string[]
+  fromCache: boolean
+}> | null = null
+
 /** Allowed hostnames for remote pricing fetch (SSRF prevention) */
 const ALLOWED_PRICING_HOSTS = new Set([
   "api.tokenshield.dev",
@@ -569,6 +577,34 @@ export async function fetchLatestPricing(
     timeoutMs?: number
     force?: boolean
     /** Additional allowed hostnames beyond the built-in allowlist */
+    allowedHosts?: string[]
+  } = {},
+): Promise<{
+  updated: number
+  added: number
+  errors: string[]
+  fromCache: boolean
+}> {
+  // Deduplicate concurrent calls — return the in-flight promise if one exists
+  if (inFlightFetch && !options.force) {
+    return inFlightFetch
+  }
+
+  const promise = fetchLatestPricingInternal(url, options)
+  inFlightFetch = promise
+
+  try {
+    return await promise
+  } finally {
+    inFlightFetch = null
+  }
+}
+
+async function fetchLatestPricingInternal(
+  url: string,
+  options: {
+    timeoutMs?: number
+    force?: boolean
     allowedHosts?: string[]
   } = {},
 ): Promise<{

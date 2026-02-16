@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest"
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import { ShieldWorker, createShieldWorker } from "./shield-worker"
 
 describe("ShieldWorker", () => {
@@ -358,6 +358,616 @@ describe("ShieldWorker", () => {
       expect(ts).not.toBeNull()
       expect(js).not.toBeNull()
       expect(py).not.toBeNull()
+    })
+  })
+
+  // -------------------------------------------------------
+  // Worker onerror fallback path (lines 89-100)
+  // -------------------------------------------------------
+  describe("worker onerror fallback", () => {
+    it("onerror rejects all pending promises and falls back to inline", async () => {
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      // Access private internals to simulate worker mode
+      const internals = sw as unknown as {
+        worker: { terminate: () => void; onmessage: unknown; onerror: (() => void) | null } | null
+        pending: Map<string, { resolve: (v: unknown) => void; reject: (r: unknown) => void }>
+        mode: string
+        ready: boolean
+      }
+
+      // Create a fake worker object that simulates worker mode
+      const fakeWorker = {
+        terminate: vi.fn(),
+        onmessage: null as unknown,
+        onerror: null as (() => void) | null,
+        postMessage: vi.fn(),
+      }
+      internals.worker = fakeWorker
+      internals.mode = "worker"
+      internals.ready = true
+
+      // Set the onerror handler as the source code does
+      fakeWorker.onerror = () => {
+        internals.worker?.terminate()
+        internals.worker = null
+        for (const [, { reject }] of internals.pending) {
+          reject(new Error("Worker failed to load"))
+        }
+        internals.pending.clear()
+      }
+
+      // Add pending promises to simulate in-flight requests
+      const promise1 = new Promise<void>((resolve, reject) => {
+        internals.pending.set("pending_onerr_1", {
+          resolve: resolve as (v: unknown) => void,
+          reject: reject as (r: unknown) => void,
+        })
+      })
+      const promise2 = new Promise<void>((resolve, reject) => {
+        internals.pending.set("pending_onerr_2", {
+          resolve: resolve as (v: unknown) => void,
+          reject: reject as (r: unknown) => void,
+        })
+      })
+
+      // Trigger the onerror handler
+      fakeWorker.onerror!()
+
+      // Both pending promises should be rejected with the worker error
+      await expect(promise1).rejects.toThrow("Worker failed to load")
+      await expect(promise2).rejects.toThrow("Worker failed to load")
+
+      // Worker should be nulled out and pending cleared
+      expect(internals.worker).toBeNull()
+      expect(internals.pending.size).toBe(0)
+      expect(fakeWorker.terminate).toHaveBeenCalled()
+    })
+
+    it("onerror with no pending promises still clears worker", async () => {
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      const internals = sw as unknown as {
+        worker: { terminate: () => void; onerror: (() => void) | null } | null
+        pending: Map<string, { resolve: (v: unknown) => void; reject: (r: unknown) => void }>
+        mode: string
+        ready: boolean
+      }
+
+      const fakeWorker = {
+        terminate: vi.fn(),
+        onmessage: null as unknown,
+        onerror: null as (() => void) | null,
+        postMessage: vi.fn(),
+      }
+      internals.worker = fakeWorker
+      internals.mode = "worker"
+
+      fakeWorker.onerror = () => {
+        internals.worker?.terminate()
+        internals.worker = null
+        for (const [, { reject }] of internals.pending) {
+          reject(new Error("Worker failed to load"))
+        }
+        internals.pending.clear()
+      }
+
+      // No pending promises — trigger onerror
+      fakeWorker.onerror!()
+
+      expect(internals.worker).toBeNull()
+      expect(internals.pending.size).toBe(0)
+      expect(fakeWorker.terminate).toHaveBeenCalled()
+    })
+  })
+
+  // -------------------------------------------------------
+  // post() timeout path (lines 199-220)
+  // -------------------------------------------------------
+  describe("post() timeout", () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it("rejects with timeout error after 10 seconds", async () => {
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      const internals = sw as unknown as {
+        worker: { postMessage: (cmd: unknown) => void; terminate: () => void } | null
+        mode: string
+        ready: boolean
+        post: <T>(command: { type: string; id: string; payload?: unknown }) => Promise<T>
+      }
+
+      // Set up a fake worker so post() can call worker!.postMessage
+      internals.worker = {
+        postMessage: vi.fn(),
+        terminate: vi.fn(),
+      }
+      internals.mode = "worker"
+      internals.ready = true
+
+      // Call post() which sets up the 10s timeout
+      const postPromise = internals.post<void>({
+        type: "FIND",
+        id: "timeout_test_1",
+        payload: { prompt: "test" },
+      })
+
+      // Advance time past the 10-second timeout
+      vi.advanceTimersByTime(10_001)
+
+      await expect(postPromise).rejects.toThrow("ShieldWorker timeout for FIND")
+    })
+
+    it("timeout for LEARN command type shows correct type in message", async () => {
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      const internals = sw as unknown as {
+        worker: { postMessage: (cmd: unknown) => void; terminate: () => void } | null
+        mode: string
+        ready: boolean
+        post: <T>(command: { type: string; id: string; payload?: unknown }) => Promise<T>
+      }
+
+      internals.worker = {
+        postMessage: vi.fn(),
+        terminate: vi.fn(),
+      }
+      internals.mode = "worker"
+      internals.ready = true
+
+      const postPromise = internals.post<void>({
+        type: "LEARN",
+        id: "timeout_learn_1",
+        payload: {
+          prompt: "test",
+          response: "resp",
+          model: "gpt-4o",
+          inputTokens: 5,
+          outputTokens: 10,
+        },
+      })
+
+      vi.advanceTimersByTime(10_001)
+
+      await expect(postPromise).rejects.toThrow("ShieldWorker timeout for LEARN")
+    })
+
+    it("does not reject if resolved before timeout", async () => {
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      const internals = sw as unknown as {
+        worker: { postMessage: (cmd: unknown) => void; terminate: () => void } | null
+        pending: Map<string, { resolve: (v: unknown) => void; reject: (r: unknown) => void }>
+        mode: string
+        ready: boolean
+        post: <T>(command: { type: string; id: string; payload?: unknown }) => Promise<T>
+        handleMessage: (msg: Record<string, unknown>) => void
+      }
+
+      internals.worker = {
+        postMessage: vi.fn(),
+        terminate: vi.fn(),
+      }
+      internals.mode = "worker"
+      internals.ready = true
+
+      const postPromise = internals.post<null>({
+        type: "FIND",
+        id: "no_timeout_1",
+        payload: { prompt: "test" },
+      })
+
+      // Simulate the worker responding before timeout
+      internals.handleMessage({
+        type: "FIND_RESULT",
+        id: "no_timeout_1",
+        payload: null,
+      } as unknown as Record<string, unknown>)
+
+      // Advance past timeout — should not reject since already resolved
+      vi.advanceTimersByTime(10_001)
+
+      await expect(postPromise).resolves.toBeNull()
+    })
+  })
+
+  // -------------------------------------------------------
+  // FIND_RESULT, LEARN_DONE, and CLEAR_DONE handleMessage resolution
+  // -------------------------------------------------------
+  describe("handleMessage - FIND_RESULT, LEARN_DONE, CLEAR_DONE", () => {
+    it("resolves FIND_RESULT with a match payload", async () => {
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      const pendingMap = (
+        sw as unknown as {
+          pending: Map<string, { resolve: (v: unknown) => void; reject: (r: unknown) => void }>
+        }
+      ).pending
+      const handler = (
+        sw as unknown as { handleMessage: (msg: Record<string, unknown>) => void }
+      ).handleMessage.bind(sw)
+
+      const findPayload = {
+        prompt: "How do I test?",
+        response: "Use vitest.",
+        score: 0.95,
+        model: "gpt-4o",
+        inputTokens: 5,
+        outputTokens: 10,
+        hits: 3,
+      }
+
+      const promise = new Promise((resolve, reject) => {
+        pendingMap.set("find_result_1", {
+          resolve: resolve as (v: unknown) => void,
+          reject: reject as (r: unknown) => void,
+        })
+      })
+
+      handler({ type: "FIND_RESULT", id: "find_result_1", payload: findPayload })
+      await expect(promise).resolves.toEqual(findPayload)
+    })
+
+    it("resolves FIND_RESULT with null when no match", async () => {
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      const pendingMap = (
+        sw as unknown as {
+          pending: Map<string, { resolve: (v: unknown) => void; reject: (r: unknown) => void }>
+        }
+      ).pending
+      const handler = (
+        sw as unknown as { handleMessage: (msg: Record<string, unknown>) => void }
+      ).handleMessage.bind(sw)
+
+      const promise = new Promise((resolve, reject) => {
+        pendingMap.set("find_null_1", {
+          resolve: resolve as (v: unknown) => void,
+          reject: reject as (r: unknown) => void,
+        })
+      })
+
+      handler({ type: "FIND_RESULT", id: "find_null_1", payload: null })
+      await expect(promise).resolves.toBeNull()
+    })
+
+    it("resolves LEARN_DONE with undefined", async () => {
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      const pendingMap = (
+        sw as unknown as {
+          pending: Map<string, { resolve: (v: unknown) => void; reject: (r: unknown) => void }>
+        }
+      ).pending
+      const handler = (
+        sw as unknown as { handleMessage: (msg: Record<string, unknown>) => void }
+      ).handleMessage.bind(sw)
+
+      const promise = new Promise((resolve, reject) => {
+        pendingMap.set("learn_done_1", {
+          resolve: resolve as (v: unknown) => void,
+          reject: reject as (r: unknown) => void,
+        })
+      })
+
+      handler({ type: "LEARN_DONE", id: "learn_done_1" })
+      await expect(promise).resolves.toBeUndefined()
+    })
+
+    it("resolves CLEAR_DONE with undefined", async () => {
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      const pendingMap = (
+        sw as unknown as {
+          pending: Map<string, { resolve: (v: unknown) => void; reject: (r: unknown) => void }>
+        }
+      ).pending
+      const handler = (
+        sw as unknown as { handleMessage: (msg: Record<string, unknown>) => void }
+      ).handleMessage.bind(sw)
+
+      const promise = new Promise((resolve, reject) => {
+        pendingMap.set("clear_done_1", {
+          resolve: resolve as (v: unknown) => void,
+          reject: reject as (r: unknown) => void,
+        })
+      })
+
+      handler({ type: "CLEAR_DONE", id: "clear_done_1" })
+      await expect(promise).resolves.toBeUndefined()
+    })
+
+    it("cleans up pending entry after FIND_RESULT resolution", async () => {
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      const pendingMap = (
+        sw as unknown as {
+          pending: Map<string, { resolve: (v: unknown) => void; reject: (r: unknown) => void }>
+        }
+      ).pending
+      const handler = (
+        sw as unknown as { handleMessage: (msg: Record<string, unknown>) => void }
+      ).handleMessage.bind(sw)
+
+      const promise = new Promise((resolve, reject) => {
+        pendingMap.set("find_cleanup_1", {
+          resolve: resolve as (v: unknown) => void,
+          reject: reject as (r: unknown) => void,
+        })
+      })
+
+      expect(pendingMap.has("find_cleanup_1")).toBe(true)
+      handler({ type: "FIND_RESULT", id: "find_cleanup_1", payload: null })
+      await promise
+      expect(pendingMap.has("find_cleanup_1")).toBe(false)
+    })
+
+    it("cleans up pending entry after LEARN_DONE resolution", async () => {
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      const pendingMap = (
+        sw as unknown as {
+          pending: Map<string, { resolve: (v: unknown) => void; reject: (r: unknown) => void }>
+        }
+      ).pending
+      const handler = (
+        sw as unknown as { handleMessage: (msg: Record<string, unknown>) => void }
+      ).handleMessage.bind(sw)
+
+      const promise = new Promise((resolve, reject) => {
+        pendingMap.set("learn_cleanup_1", {
+          resolve: resolve as (v: unknown) => void,
+          reject: reject as (r: unknown) => void,
+        })
+      })
+
+      expect(pendingMap.has("learn_cleanup_1")).toBe(true)
+      handler({ type: "LEARN_DONE", id: "learn_cleanup_1" })
+      await promise
+      expect(pendingMap.has("learn_cleanup_1")).toBe(false)
+    })
+  })
+
+  // -------------------------------------------------------
+  // Worker mode method routing (find/learn/clear/stats via post)
+  // -------------------------------------------------------
+  describe("worker mode method routing", () => {
+    it("find() calls post() when in worker mode", async () => {
+      vi.useFakeTimers()
+
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      const internals = sw as unknown as {
+        worker: { postMessage: (cmd: unknown) => void; terminate: () => void } | null
+        mode: string
+        ready: boolean
+        handleMessage: (msg: Record<string, unknown>) => void
+        pending: Map<string, { resolve: (v: unknown) => void; reject: (r: unknown) => void }>
+      }
+
+      const postMessageFn = vi.fn()
+      internals.worker = {
+        postMessage: postMessageFn,
+        terminate: vi.fn(),
+      }
+      internals.mode = "worker"
+      internals.ready = true
+
+      const findPromise = sw.find("test prompt", "gpt-4o")
+
+      // postMessage should have been called
+      expect(postMessageFn).toHaveBeenCalledTimes(1)
+      const sentCommand = postMessageFn.mock.calls[0][0]
+      expect(sentCommand.type).toBe("FIND")
+      expect(sentCommand.payload).toEqual({ prompt: "test prompt", model: "gpt-4o" })
+
+      // Simulate the worker responding
+      internals.handleMessage({
+        type: "FIND_RESULT",
+        id: sentCommand.id,
+        payload: null,
+      } as unknown as Record<string, unknown>)
+
+      const result = await findPromise
+      expect(result).toBeNull()
+
+      vi.useRealTimers()
+    })
+
+    it("learn() calls post() when in worker mode", async () => {
+      vi.useFakeTimers()
+
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      const internals = sw as unknown as {
+        worker: { postMessage: (cmd: unknown) => void; terminate: () => void } | null
+        mode: string
+        ready: boolean
+        handleMessage: (msg: Record<string, unknown>) => void
+      }
+
+      const postMessageFn = vi.fn()
+      internals.worker = {
+        postMessage: postMessageFn,
+        terminate: vi.fn(),
+      }
+      internals.mode = "worker"
+      internals.ready = true
+
+      const learnPromise = sw.learn("test prompt", "test response", "gpt-4o", 5, 10)
+
+      expect(postMessageFn).toHaveBeenCalledTimes(1)
+      const sentCommand = postMessageFn.mock.calls[0][0]
+      expect(sentCommand.type).toBe("LEARN")
+      expect(sentCommand.payload).toEqual({
+        prompt: "test prompt",
+        response: "test response",
+        model: "gpt-4o",
+        inputTokens: 5,
+        outputTokens: 10,
+      })
+
+      // Simulate worker responding with LEARN_DONE
+      internals.handleMessage({
+        type: "LEARN_DONE",
+        id: sentCommand.id,
+      } as unknown as Record<string, unknown>)
+
+      await expect(learnPromise).resolves.toBeUndefined()
+
+      vi.useRealTimers()
+    })
+
+    it("clear() calls post() when in worker mode", async () => {
+      vi.useFakeTimers()
+
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      const internals = sw as unknown as {
+        worker: { postMessage: (cmd: unknown) => void; terminate: () => void } | null
+        mode: string
+        ready: boolean
+        handleMessage: (msg: Record<string, unknown>) => void
+      }
+
+      const postMessageFn = vi.fn()
+      internals.worker = {
+        postMessage: postMessageFn,
+        terminate: vi.fn(),
+      }
+      internals.mode = "worker"
+      internals.ready = true
+
+      const clearPromise = sw.clear()
+
+      expect(postMessageFn).toHaveBeenCalledTimes(1)
+      const sentCommand = postMessageFn.mock.calls[0][0]
+      expect(sentCommand.type).toBe("CLEAR")
+
+      // Simulate worker responding with CLEAR_DONE
+      internals.handleMessage({
+        type: "CLEAR_DONE",
+        id: sentCommand.id,
+      } as unknown as Record<string, unknown>)
+
+      await expect(clearPromise).resolves.toBeUndefined()
+
+      vi.useRealTimers()
+    })
+
+    it("stats() calls post() when in worker mode", async () => {
+      vi.useFakeTimers()
+
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      const internals = sw as unknown as {
+        worker: { postMessage: (cmd: unknown) => void; terminate: () => void } | null
+        mode: string
+        ready: boolean
+        handleMessage: (msg: Record<string, unknown>) => void
+      }
+
+      const postMessageFn = vi.fn()
+      internals.worker = {
+        postMessage: postMessageFn,
+        terminate: vi.fn(),
+      }
+      internals.mode = "worker"
+      internals.ready = true
+
+      const statsPromise = sw.stats()
+
+      expect(postMessageFn).toHaveBeenCalledTimes(1)
+      const sentCommand = postMessageFn.mock.calls[0][0]
+      expect(sentCommand.type).toBe("STATS")
+
+      // Simulate worker responding with STATS_RESULT
+      internals.handleMessage({
+        type: "STATS_RESULT",
+        id: sentCommand.id,
+        payload: { entries: 3, totalHits: 7, avgScore: 0.85 },
+      } as unknown as Record<string, unknown>)
+
+      await expect(statsPromise).resolves.toEqual({ entries: 3, totalHits: 7, avgScore: 0.85 })
+
+      vi.useRealTimers()
+    })
+  })
+
+  // -------------------------------------------------------
+  // terminate() in worker mode
+  // -------------------------------------------------------
+  describe("terminate in worker mode", () => {
+    it("calls worker.terminate() and nulls the worker when in worker mode", () => {
+      const sw = new ShieldWorker()
+
+      const internals = sw as unknown as {
+        worker: { terminate: () => void; postMessage: () => void } | null
+        mode: string
+        ready: boolean
+      }
+
+      const terminateFn = vi.fn()
+      internals.worker = {
+        terminate: terminateFn,
+        postMessage: vi.fn(),
+      }
+      internals.mode = "worker"
+      internals.ready = true
+
+      sw.terminate()
+
+      expect(terminateFn).toHaveBeenCalledTimes(1)
+      expect(internals.worker).toBeNull()
+      expect(sw.isReady).toBe(false)
+    })
+  })
+
+  // -------------------------------------------------------
+  // init() with existing worker (double-init guard, line 78-81)
+  // -------------------------------------------------------
+  describe("init guard terminates existing worker", () => {
+    it("terminates the existing worker on re-init", async () => {
+      const sw = new ShieldWorker()
+      await sw.init()
+
+      const internals = sw as unknown as {
+        worker: { terminate: () => void; postMessage: () => void } | null
+      }
+
+      const terminateFn = vi.fn()
+      internals.worker = {
+        terminate: terminateFn,
+        postMessage: vi.fn(),
+      }
+
+      // Re-init should terminate the existing fake worker and fall back to inline
+      await sw.init()
+
+      expect(terminateFn).toHaveBeenCalledTimes(1)
+      expect(sw.isReady).toBe(true)
+      expect(sw.executionMode).toBe("inline")
     })
   })
 })

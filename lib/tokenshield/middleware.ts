@@ -43,6 +43,7 @@ import * as v from "valibot"
 import {
   shieldEvents,
   createEventBus,
+  subscribeToEvent,
   subscribeToAnyEvent,
   type TokenShieldEvents,
 } from "./event-bus"
@@ -127,7 +128,9 @@ export function tokenShieldMiddleware(
   const defaultOnStorageError = (module: string, operation: string) => (error: unknown) => {
     try {
       instanceEvents.emit("storage:error", { module, operation, error })
-    } catch { /* non-fatal */ }
+    } catch {
+      /* non-fatal */
+    }
   }
 
   const cache = modules.cache
@@ -155,7 +158,9 @@ export function tokenShieldMiddleware(
               limit: detail.limit,
               percentUsed: detail.percentUsed,
             })
-          } catch { /* non-fatal */ }
+          } catch {
+            /* non-fatal */
+          }
         },
         onTripped: (detail) => {
           config.breaker?.onTripped?.(detail)
@@ -166,7 +171,9 @@ export function tokenShieldMiddleware(
               limit: detail.limit,
               action: config.breaker?.action ?? "stop",
             })
-          } catch { /* non-fatal */ }
+          } catch {
+            /* non-fatal */
+          }
         },
         onReset: (window) => {
           config.breaker?.onReset?.(window)
@@ -273,82 +280,37 @@ export function tokenShieldMiddleware(
         ? new AuditLog(config.auditLog as AuditLogConfig)
         : null
 
-  // Wire audit log to event bus — maps pipeline events to audit entries
+  // Wire audit log to event bus — type-safe event handlers via subscribeToEvent
   const auditCleanups: Array<() => void> = []
   if (auditLog) {
-    const on = (
-      event: keyof import("./event-bus").TokenShieldEvents,
-      handler: (data: unknown) => void,
+    const wire = <K extends keyof TokenShieldEvents>(
+      event: K,
+      handler: (data: TokenShieldEvents[K]) => void,
     ) => {
-      const cleanup = subscribeToAnyEvent(instanceEvents, event, handler)
-      auditCleanups.push(cleanup)
+      auditCleanups.push(subscribeToEvent(instanceEvents, event, handler))
     }
-    on("ledger:entry", (d) => {
-      const data = d as Record<string, unknown>
-      auditLog.logApiCall(
-        String(data.model ?? ""),
-        Number(data.inputTokens ?? 0),
-        Number(data.outputTokens ?? 0),
-        Number(data.cost ?? 0),
-      )
-    })
-    on("cache:hit", (d) => {
-      const data = d as Record<string, unknown>
-      auditLog.logCacheHit(String(data.model ?? ""), String(data.prompt ?? ""))
-    })
-    on("request:blocked", (d) => {
-      const data = d as Record<string, unknown>
-      auditLog.logRequestBlocked(String(data.reason ?? ""), String(data.model ?? ""))
-    })
-    on("breaker:tripped", (d) => {
-      const data = d as Record<string, unknown>
-      auditLog.logBreakerTripped(String(data.limitType ?? ""), Number(data.threshold ?? 0), Number(data.actual ?? 0))
-    })
-    on("userBudget:exceeded", (d) => {
-      const data = d as Record<string, unknown>
-      auditLog.logBudgetExceeded(String(data.userId ?? ""), Number(data.limit ?? 0), Number(data.spent ?? 0))
-    })
-    on("userBudget:warning", (d) => {
-      const data = d as Record<string, unknown>
-      auditLog.logBudgetWarning(
-        String(data.userId ?? ""),
-        String(data.limitType ?? ""),
-        Number(data.percentUsed ?? 0),
-      )
-    })
-    on("anomaly:detected", (d) => {
-      const data = d as unknown as Record<string, unknown>
-      auditLog.logAnomalyDetected(
-        String(data.metric ?? ""),
-        Number(data.value ?? 0),
-        Number(data.zscore ?? 0),
-        data.model ? String(data.model) : undefined,
-      )
-    })
-    on("router:downgraded", (d) => {
-      const data = d as Record<string, unknown>
-      auditLog.logModelRouted(
-        String(data.originalModel ?? data.from ?? ""),
-        String(data.selectedModel ?? data.to ?? ""),
-        String(data.reason ?? "complexity"),
-      )
-    })
-    on("compressor:applied", (d) => {
-      const data = d as Record<string, unknown>
-      auditLog.logCompressorApplied(
-        Number(data.savedTokens ?? 0),
-        Number(data.originalTokens ?? 0),
-        Number(data.compressedTokens ?? 0),
-      )
-    })
-    on("delta:applied", (d) => {
-      const data = d as Record<string, unknown>
-      auditLog.logDeltaApplied(
-        Number(data.savedTokens ?? 0),
-        Number(data.originalTokens ?? 0),
-        Number(data.encodedTokens ?? 0),
-      )
-    })
+    wire("ledger:entry", (d) => auditLog.logApiCall(d.model, d.inputTokens, d.outputTokens, d.cost))
+    wire("cache:hit", (d) =>
+      auditLog.logCacheHit(String((d as Record<string, unknown>).model ?? ""), ""),
+    )
+    wire("request:blocked", (d) => auditLog.logRequestBlocked(d.reason, ""))
+    wire("breaker:tripped", (d) => auditLog.logBreakerTripped(d.limitType, d.limit, d.currentSpend))
+    wire("userBudget:exceeded", (d) =>
+      auditLog.logBudgetExceeded(d.userId, d.limit, d.currentSpend),
+    )
+    wire("userBudget:warning", (d) =>
+      auditLog.logBudgetWarning(d.userId, d.limitType, d.percentUsed),
+    )
+    wire("anomaly:detected", (d) => auditLog.logAnomalyDetected(d.type, d.value, d.zScore))
+    wire("router:downgraded", (d) =>
+      auditLog.logModelRouted(d.originalModel, d.selectedModel, "complexity"),
+    )
+    wire("compressor:applied", (d) =>
+      auditLog.logCompressorApplied(d.savedTokens, d.originalTokens, d.compressedTokens),
+    )
+    wire("delta:applied", (d) =>
+      auditLog.logDeltaApplied(d.savedTokens, d.originalTokens, d.encodedTokens),
+    )
   }
 
   // Auto-hydrate audit log from IndexedDB if persistence is enabled

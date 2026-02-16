@@ -274,7 +274,30 @@ export function useDashboardSettings(): DashboardSettings {
 /*  Provider                                                           */
 /* ------------------------------------------------------------------ */
 
-export function DashboardProvider({ children }: { children: React.ReactNode }) {
+export interface DashboardProviderProps {
+  children: React.ReactNode
+  /**
+   * Optional middleware instance for live mode. When provided and mode is "live",
+   * the dashboard subscribes to real-time events from the middleware's event bus
+   * instead of generating demo data.
+   *
+   * Usage:
+   * ```tsx
+   * const shield = tokenShieldMiddleware({ ... })
+   * <DashboardProvider middleware={shield}>
+   *   <DashboardShell />
+   * </DashboardProvider>
+   * ```
+   */
+  middleware?: {
+    events: import("@/lib/tokenshield/event-bus").EventBus
+    ledger?: { getSummary(): { totalSpent: number; totalSaved: number } } | null
+    cache?: { stats(): { hitRate: number; hits: number; misses: number } } | null
+    healthCheck?: () => { healthy: boolean; breakerTripped: boolean | null }
+  }
+}
+
+export function DashboardProvider({ children, middleware }: DashboardProviderProps) {
   const [mode, setMode] = React.useState<"demo" | "live">("demo")
   const [timeRange, setTimeRange] = React.useState<TimeRange>("24h")
   const [isPaused, setIsPaused] = React.useState(false)
@@ -307,6 +330,161 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
     return () => clearInterval(interval)
   }, [mode, isPaused, nextId, modifiers])
+
+  /* ---- Live mode: subscribe to real middleware events ---- */
+  React.useEffect(() => {
+    if (mode !== "live" || !middleware) return
+
+    const bus = middleware.events
+    const cleanups: Array<() => void> = []
+
+    const sub = <K extends keyof import("@/lib/tokenshield/event-bus").TokenShieldEvents>(
+      event: K,
+      handler: (data: import("@/lib/tokenshield/event-bus").TokenShieldEvents[K]) => void,
+    ) => {
+      bus.on(event, handler)
+      cleanups.push(() => bus.off(event, handler))
+    }
+
+    sub("ledger:entry", (d) => {
+      const now = Date.now()
+      setData((prev) => {
+        const newPoint = {
+          timestamp: now,
+          spent: d.cost,
+          saved: d.saved,
+          cumulativeSpent: prev.totalSpent + d.cost,
+          cumulativeSaved: prev.totalSaved + d.saved,
+        }
+        return {
+          ...prev,
+          totalSpent: prev.totalSpent + d.cost,
+          totalSaved: prev.totalSaved + d.saved,
+          totalRequests: prev.totalRequests + 1,
+          savingsRate:
+            prev.totalSpent + d.cost > 0
+              ? ((prev.totalSaved + d.saved) /
+                  (prev.totalSpent + d.cost + prev.totalSaved + d.saved)) *
+                100
+              : 0,
+          timeSeries: [...prev.timeSeries, newPoint],
+          byModel: {
+            ...prev.byModel,
+            [d.model]: {
+              calls: (prev.byModel[d.model]?.calls ?? 0) + 1,
+              cost: (prev.byModel[d.model]?.cost ?? 0) + d.cost,
+              tokens: (prev.byModel[d.model]?.tokens ?? 0) + d.inputTokens + d.outputTokens,
+            },
+          },
+          events: [
+            ...prev.events,
+            {
+              id: nextId(),
+              timestamp: now,
+              type: "ledger:entry" as const,
+              message: `${d.model}: ${d.inputTokens}→${d.outputTokens} tokens ($${d.cost.toFixed(4)})`,
+              savings: d.saved,
+              model: d.model,
+            },
+          ],
+        }
+      })
+    })
+
+    sub("cache:hit", (d) => {
+      setData((prev) => ({
+        ...prev,
+        cacheHitCount: prev.cacheHitCount + 1,
+        cacheHitRate: (prev.cacheHitCount + 1) / Math.max(1, prev.totalRequests),
+        events: [
+          ...prev.events,
+          {
+            id: nextId(),
+            timestamp: Date.now(),
+            type: "cache:hit" as const,
+            message: `Cache hit (${d.matchType}, ${(d.similarity * 100).toFixed(0)}% similarity)`,
+            savings: d.savedCost,
+          },
+        ],
+      }))
+    })
+
+    sub("request:blocked", (d) => {
+      setData((prev) => ({
+        ...prev,
+        requestsBlocked: prev.requestsBlocked + 1,
+        events: [
+          ...prev.events,
+          {
+            id: nextId(),
+            timestamp: Date.now(),
+            type: "request:blocked" as const,
+            message: `Blocked: ${d.reason}`,
+          },
+        ],
+      }))
+    })
+
+    sub("router:downgraded", (d) => {
+      setData((prev) => ({
+        ...prev,
+        events: [
+          ...prev.events,
+          {
+            id: nextId(),
+            timestamp: Date.now(),
+            type: "router:downgraded" as const,
+            message: `Routed ${d.originalModel} → ${d.selectedModel}`,
+            savings: d.savedCost,
+            model: d.selectedModel,
+          },
+        ],
+      }))
+    })
+
+    sub("context:trimmed", (d) => {
+      setData((prev) => ({
+        ...prev,
+        byModule: {
+          ...prev.byModule,
+          context: prev.byModule.context + d.savedTokens * 0.000003,
+        },
+        events: [
+          ...prev.events,
+          {
+            id: nextId(),
+            timestamp: Date.now(),
+            type: "context:trimmed" as const,
+            message: `Trimmed ${d.savedTokens} tokens (${d.originalTokens}→${d.trimmedTokens})`,
+          },
+        ],
+      }))
+    })
+
+    sub("breaker:warning", (d) => {
+      setData((prev) => ({
+        ...prev,
+        budget: {
+          ...prev.budget,
+          currentSpend: d.currentSpend,
+          percentUsed: d.percentUsed,
+        },
+        events: [
+          ...prev.events,
+          {
+            id: nextId(),
+            timestamp: Date.now(),
+            type: "breaker:warning" as const,
+            message: `${d.limitType} at ${d.percentUsed.toFixed(0)}% ($${d.currentSpend.toFixed(2)}/$${d.limit.toFixed(2)})`,
+          },
+        ],
+      }))
+    })
+
+    return () => {
+      for (const cleanup of cleanups) cleanup()
+    }
+  }, [mode, middleware, nextId])
 
   /* ---- Filtered view of data based on time range ---- */
   const filteredData = React.useMemo(

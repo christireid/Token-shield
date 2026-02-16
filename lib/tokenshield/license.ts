@@ -40,7 +40,7 @@ const MODULE_TIERS: Record<string, LicenseTier> = {
   "request-guard": "community",
   "cost-ledger": "community",
   "event-bus": "community",
-  "logger": "community",
+  logger: "community",
 
   // Pro
   "response-cache": "pro",
@@ -174,8 +174,7 @@ let _ecPrivateKey: CryptoKey | null = null
 
 function isSubtleAvailable(): boolean {
   return (
-    typeof globalThis !== "undefined" &&
-    typeof globalThis.crypto?.subtle?.importKey === "function"
+    typeof globalThis !== "undefined" && typeof globalThis.crypto?.subtle?.importKey === "function"
   )
 }
 
@@ -339,7 +338,7 @@ export async function activateLicense(key: string): Promise<LicenseInfo> {
     }
 
     const tier = (payload.tier ?? "community") as LicenseTier
-    if (!TIER_RANK.hasOwnProperty(tier)) {
+    if (!Object.prototype.hasOwnProperty.call(TIER_RANK, tier)) {
       throw new Error(`Unknown tier: ${tier}`)
     }
 
@@ -424,6 +423,7 @@ export function isModulePermitted(moduleName: string): boolean {
     if (!_warningShown && requiredTier !== "community") {
       _warningShown = true
       if (typeof console !== "undefined") {
+        // eslint-disable-next-line no-console
         console.warn(
           `[TokenShield] Using ${requiredTier}-tier features without a license key. ` +
             `All features are unlocked for development. ` +
@@ -506,7 +506,9 @@ export async function generateTestKey(
 
   // HMAC signing: explicit or auto-detect
   if (signingMode === "ecdsa") {
-    throw new Error("ECDSA signing requested but no private key is configured. Call setLicensePrivateKey() first.")
+    throw new Error(
+      "ECDSA signing requested but no private key is configured. Call setLicensePrivateKey() first.",
+    )
   }
 
   const signingKey = secret ?? _signingSecret
@@ -522,6 +524,11 @@ export async function generateTestKey(
 /**
  * Generate a signed key synchronously (for tests without async support).
  * Uses djb2-based HMAC which is NOT cryptographically secure.
+ *
+ * **Security notice:** Keys generated with this function use a non-cryptographic
+ * hash (djb2) and should NEVER be used in production. This function throws in
+ * production environments (NODE_ENV=production).
+ *
  * @deprecated Prefer `generateTestKey()` (async) which uses HMAC-SHA256 or ECDSA.
  */
 export function generateTestKeySync(
@@ -530,6 +537,13 @@ export function generateTestKeySync(
   expiresInDays: number = 365,
   secret?: string,
 ): string {
+  if (typeof process !== "undefined" && process.env?.NODE_ENV === "production") {
+    throw new Error(
+      "generateTestKeySync() is disabled in production. " +
+        "Use generateTestKey() (async) with HMAC-SHA256 or ECDSA instead.",
+    )
+  }
+
   const payload: LicenseKeyPayload = {
     tier,
     expiresAt: Date.now() + expiresInDays * 24 * 60 * 60 * 1000,
