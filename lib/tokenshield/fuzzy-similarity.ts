@@ -1,13 +1,13 @@
 /**
- * NeuroElasticEngine — Holographic encoding engine for fuzzy similarity matching.
- * Encodes prompts into 2048-bit holographic vectors using trigram FNV-1a hashing,
- * applies IDF-like contrastive inhibition to filter common noise bits, and uses
- * Jaccard resonance with dynamic thresholding for robust approximate matching.
+ * FuzzySimilarityEngine — Trigram-based fuzzy similarity matching for prompt caching.
+ * Encodes prompts into 2048-bit vectors using trigram FNV-1a hashing,
+ * applies IDF-like noise filtering to remove common bits, and uses
+ * Jaccard similarity with dynamic thresholding for approximate matching.
  */
 
 import { get, set } from "./storage-adapter"
 
-/** Encoding dimensions: 64 × 32 = 2048-bit hologram */
+/** Encoding dimensions: 64 × 32 = 2048-bit vector */
 const DIMENSIONS = 64
 
 /** IDB key for persisted memories */
@@ -15,7 +15,7 @@ const DB_KEY = "shield_memory_v2"
 
 // --- Types ---
 
-export interface NeuroElasticConfig {
+export interface FuzzySimilarityConfig {
   /** Base similarity threshold (0-1). Default: 0.88 */
   threshold?: number
   /** Domain-specific vocabulary seeds. Keys are terms, values are seed angles.
@@ -36,8 +36,8 @@ export interface NeuroElasticConfig {
 }
 
 export interface MemorySlot {
-  /** Holographic encoding as number array (serializable) */
-  hologram: number[]
+  /** Trigram fingerprint as number array (serializable) */
+  fingerprint: number[]
   /** The cached response text */
   response: string
   /** Cache hit counter (for reinforcement) */
@@ -66,16 +66,16 @@ export interface FindResult {
 /** Make all fields of T required except for keys K, which remain optional. */
 type RequiredExcept<T, K extends keyof T> = Required<Omit<T, K>> & Pick<T, K>
 
-export class NeuroElasticEngine {
+export class FuzzySimilarityEngine {
   private memory: MemorySlot[] = []
-  private config: RequiredExcept<NeuroElasticConfig, "seeds" | "onStorageError">
+  private config: RequiredExcept<FuzzySimilarityConfig, "seeds" | "onStorageError">
   private isHydrated = false
   /** Global noise vector — bits active in >50% of memories (IDF inhibition) */
   private noiseVector: Uint32Array = new Uint32Array(DIMENSIONS)
   /** Dirty flag for noise vector recalculation */
   private noiseDirty = true
 
-  constructor(config?: NeuroElasticConfig) {
+  constructor(config?: FuzzySimilarityConfig) {
     this.config = {
       threshold: config?.threshold ?? 0.88,
       seeds: config?.seeds,
@@ -106,7 +106,7 @@ export class NeuroElasticEngine {
 
   /** Find the best matching memory for a prompt. Returns null if no match above threshold. */
   find(prompt: string, model?: string): FindResult | null {
-    const inputHolo = this.encode(prompt)
+    const inputFp = this.encode(prompt)
     let bestScore = 0
     let bestMatch: MemorySlot | null = null
 
@@ -119,8 +119,8 @@ export class NeuroElasticEngine {
       // Model filter
       if (model && entry.model !== model) continue
 
-      const cachedHolo = new Uint32Array(entry.hologram)
-      const score = this.calculateResonance(inputHolo, cachedHolo)
+      const cachedFp = new Uint32Array(entry.fingerprint)
+      const score = this.calculateSimilarity(inputFp, cachedFp)
 
       if (score > bestScore) {
         bestScore = score
@@ -161,7 +161,7 @@ export class NeuroElasticEngine {
     inputTokens: number,
     outputTokens: number,
   ): Promise<void> {
-    const hologram = this.encode(prompt)
+    const fingerprint = this.encode(prompt)
 
     // LRU eviction if at capacity — O(n) linear scan for oldest
     if (this.memory.length >= this.config.maxMemories) {
@@ -175,7 +175,7 @@ export class NeuroElasticEngine {
     }
 
     this.memory.push({
-      hologram: Array.from(hologram),
+      fingerprint: Array.from(fingerprint),
       response,
       hits: 1,
       timestamp: Date.now(),
@@ -230,7 +230,7 @@ export class NeuroElasticEngine {
   // Private: Encoding kernel
   // -------------------------------------------------------
 
-  /** Encode text into a holographic bit vector (Uint32Array). */
+  /** Encode text into a trigram-based bit vector (Uint32Array). */
   private encode(input: string): Uint32Array {
     const vec = new Uint32Array(DIMENSIONS)
     const normalized = input
@@ -266,7 +266,7 @@ export class NeuroElasticEngine {
     return vec
   }
 
-  /** Superimpose a trigram onto the hologram using FNV-1a hash. */
+  /** Superimpose a trigram onto the fingerprint using FNV-1a hash. */
   private superimpose(vec: Uint32Array, key: string): void {
     // FNV-1a hash
     let h = 0x811c9dc5
@@ -290,10 +290,10 @@ export class NeuroElasticEngine {
   }
 
   /**
-   * Calculate resonance (similarity) between two holograms.
-   * Uses Jaccard similarity on bit populations, with optional contrastive inhibition.
+   * Calculate similarity between two fingerprints.
+   * Uses Jaccard similarity on bit populations, with optional noise filtering.
    */
-  private calculateResonance(a: Uint32Array, b: Uint32Array): number {
+  private calculateSimilarity(a: Uint32Array, b: Uint32Array): number {
     let intersection = 0
     let union = 0
 
@@ -342,7 +342,7 @@ export class NeuroElasticEngine {
     const threshold = Math.floor(this.memory.length * 0.5)
 
     for (const entry of this.memory) {
-      const holo = new Uint32Array(entry.hologram)
+      const holo = new Uint32Array(entry.fingerprint)
       for (let i = 0; i < DIMENSIONS; i++) {
         for (let bit = 0; bit < 32; bit++) {
           if (holo[i] & (1 << bit)) {
@@ -377,7 +377,7 @@ export class NeuroElasticEngine {
 
 // --- Exports ---
 
-/** Create a configured NeuroElasticEngine instance. */
-export function createNeuroElasticEngine(config?: NeuroElasticConfig): NeuroElasticEngine {
-  return new NeuroElasticEngine(config)
+/** Create a configured fuzzy similarity engine instance. */
+export function createFuzzySimilarityEngine(config?: FuzzySimilarityConfig): FuzzySimilarityEngine {
+  return new FuzzySimilarityEngine(config)
 }

@@ -91,11 +91,11 @@ export interface TokenShieldMiddlewareConfig {
     /**
      * Similarity matching strategy:
      * - "bigram" (default): Fast bigram Dice coefficient. Good for near-duplicate detection.
-     * - "holographic": Trigram-based holographic encoding with semantic seeding.
+     * - "trigram": Trigram-based fingerprint encoding with semantic seeding.
      *   Better for catching paraphrased prompts at the cost of slightly higher memory.
      */
-    encodingStrategy?: "bigram" | "holographic"
-    /** Semantic seeds for holographic encoding (maps domain terms to seed angles) */
+    encodingStrategy?: "bigram" | "trigram"
+    /** Semantic seeds for trigram encoding (maps domain terms to seed indices) */
     semanticSeeds?: Record<string, number>
     /**
      * Called when IndexedDB operations fail (e.g., quota exceeded, IDB disabled).

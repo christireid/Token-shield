@@ -277,10 +277,10 @@ describe("Full middleware pipeline", () => {
 })
 
 // ====================================================================
-// 2. NeuroElastic + ResponseCache integration
+// 2. FuzzySimilarity + ResponseCache integration
 // ====================================================================
 
-describe("NeuroElastic + ResponseCache integration", () => {
+describe("FuzzySimilarity + ResponseCache integration", () => {
   let cache: ResponseCache
 
   beforeEach(() => {
@@ -288,12 +288,12 @@ describe("NeuroElastic + ResponseCache integration", () => {
       maxEntries: 100,
       ttlMs: 60_000,
       similarityThreshold: 0.6,
-      encodingStrategy: "holographic",
+      encodingStrategy: "trigram",
       semanticSeeds: { cost: 10, price: 10, explain: 20, tell: 20 },
     })
   })
 
-  it("holographic fuzzy match: cost/price synonyms", async () => {
+  it("trigram encoding fuzzy match: cost/price synonyms", async () => {
     await cache.store(
       "What is the cost of GPT-4?",
       "GPT-4 costs $30 per million input tokens.",
@@ -303,14 +303,14 @@ describe("NeuroElastic + ResponseCache integration", () => {
     )
 
     const lookup = await cache.lookup("What is the price of GPT-4?", "gpt-4.1")
-    // With holographic encoding and semantic seeds mapping cost/price together,
+    // With trigram encoding and semantic seeds mapping cost/price together,
     // this should be a fuzzy match
     expect(lookup.hit).toBe(true)
     expect(lookup.matchType).toBe("fuzzy")
     expect(lookup.entry!.response).toBe("GPT-4 costs $30 per million input tokens.")
   })
 
-  it("holographic fuzzy match: explain/tell paraphrases", async () => {
+  it("trigram encoding fuzzy match: explain/tell paraphrases", async () => {
     await cache.store(
       "Explain React hooks in detail for beginners",
       "React hooks are functions that let you use state...",
@@ -329,7 +329,7 @@ describe("NeuroElastic + ResponseCache integration", () => {
     }
   })
 
-  it("stats work with holographic encoding", async () => {
+  it("stats work with trigram encoding", async () => {
     await cache.store("prompt A about tokens", "response A", "gpt-4.1", 10, 5)
     await cache.store("prompt B about tokens", "response B", "gpt-4.1", 20, 10)
 
@@ -743,63 +743,51 @@ describe("All index.ts exports are importable", () => {
 
     // Core modules
     const coreExports = [
-      // 1. Token Counter
+      // Token Counter
       "countExactTokens",
       "countChatTokens",
       "countFast",
       "fitsInBudget",
-      "encodeText",
-      "decodeTokens",
-      "truncateToTokenBudget",
       "countModelTokens",
-      // 2. Cost Estimator
+      // Cost Estimator
       "estimateCost",
       "compareCosts",
       "calculateSavings",
       "cheapestModelForBudget",
-      "projectMonthlyCost",
       "MODEL_PRICING",
-      // 3. Context Manager
+      // Context Manager
       "fitToBudget",
       "slidingWindow",
       "priorityFit",
       "smartFit",
-      "createSummaryMessage",
-      // 4. Response Cache
+      // Response Cache
       "ResponseCache",
       "normalizeText",
       "textSimilarity",
       "classifyContentType",
-      // 5. Model Router
+      // Model Router
       "analyzeComplexity",
       "routeToModel",
-      "rankModels",
-      // 6. Request Guard
+      // Request Guard
       "RequestGuard",
-      // 7. Prefix Optimizer
+      // Prefix Optimizer
       "optimizePrefix",
       "detectProvider",
-      "getCacheDiscountRate",
-      "projectPrefixSavings",
-      // 8. Cost Ledger
+      // Cost Ledger
       "CostLedger",
-      // 9. Tool Token Counter
-      "countToolTokens",
-      "optimizeToolDefinitions",
-      "countImageTokens",
-      "predictOutputTokens",
-      // 10. Stream Tracker
+      // Stream Tracker
       "StreamTokenTracker",
-      // 11. Circuit Breaker
+      // Circuit Breaker
       "CostCircuitBreaker",
-      // 12. User Budget Manager
+      // User Budget Manager
       "UserBudgetManager",
-      // 13. Anomaly Detector
+      // Anomaly Detector
       "AnomalyDetector",
       // Middleware
       "tokenShieldMiddleware",
       "getLedger",
-      // React (exported but may be undefined in non-React env -- we just check the key exists)
+      "createTokenShield",
+      // React (exported but may be undefined in non-React env)
       "TokenShieldProvider",
       "useSavings",
       "useTokenCount",
@@ -814,95 +802,47 @@ describe("All index.ts exports are importable", () => {
       "useFeatureCost",
       "useUserBudget",
       "useEventLog",
-      "useProviderHealth",
-      "usePipelineMetrics",
+      "useSessionSavings",
       "useShieldedCall",
       // Dashboard
       "TokenShieldDashboard",
-      // Pricing Registry
-      "PRICING_REGISTRY",
-      "registerModel",
-      "getModelPricing",
-      "getModelsByProvider",
       // Event Bus
       "shieldEvents",
-      "createEventBus",
       "subscribeToEvent",
+      "subscribeToAnyEvent",
       // Errors
       "TokenShieldError",
       "TokenShieldBlockedError",
       "TokenShieldConfigError",
       "TokenShieldBudgetError",
-      "TokenShieldCryptoError",
-      "TokenShieldAPIError",
       "ERROR_CODES",
-      // Config Schemas
+      // Config
       "validateConfig",
       "TokenShieldConfigSchema",
-      "GuardConfigSchema",
-      "CacheConfigSchema",
-      "ContextConfigSchema",
-      "RouterConfigSchema",
-      "BreakerConfigSchema",
-      "UserBudgetConfigSchema",
-      "UserBudgetLimitsSchema",
-      // Encrypted Storage
-      "EncryptedStore",
-      "createEncryptedStore",
-      // Pipeline
-      "Pipeline",
-      "createPipeline",
-      "createBreakerStage",
-      "createBudgetStage",
-      "createGuardStage",
-      "createCacheStage",
-      "createContextStage",
-      "createRouterStage",
-      "createPrefixStage",
-      // Logger
-      "TokenShieldLogger",
-      "logger",
-      "createLogger",
-      // Provider Adapter
-      "ProviderAdapter",
-      "createProviderAdapter",
-      "retryWithBackoff",
       // Framework Adapters
       "createGenericAdapter",
       "createOpenAIAdapter",
       "createAnthropicAdapter",
       "createStreamAdapter",
-      // NeuroElastic
-      "NeuroElasticEngine",
-      "createNeuroElasticEngine",
-      // Worker
-      "ShieldWorker",
-      "createShieldWorker",
-      // API Client
-      "callOpenAI",
-      "callAnthropic",
-      "callGoogle",
-      "callLLM",
-      "calculateRealCost",
-      "detectModelProvider",
-      // Savings Calculator
-      "estimateSavings",
-      "SavingsCalculator",
-      // Storage Adapter
+      // Advanced
+      "FuzzySimilarityEngine",
+      "createFuzzySimilarityEngine",
+      "SemanticMinHashIndex",
+      "compressPrompt",
+      "compressMessages",
+      "encodeDelta",
+      "analyzeRedundancy",
+      "countToolTokens",
+      "countImageTokens",
+      "predictOutputTokens",
+      // Storage
       "isPersistent",
-      // Benchmarks
-      "bench",
-      "benchAsync",
-      "runAllBenchmarks",
-      "formatResults",
-      // License Gating
+      // License
       "activateLicense",
       "getLicenseInfo",
       "isModulePermitted",
       "getModuleTier",
-      "getModulesForTier",
       "resetLicense",
-      "generateTestKey",
       // Audit Logging
       "AuditLog",
     ]

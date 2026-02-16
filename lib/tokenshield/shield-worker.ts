@@ -2,17 +2,21 @@
  * TokenShield - Worker Communication Layer
  *
  * Typed message protocol and promise-based API for offloading
- * NeuroElasticEngine operations to a Web Worker thread.
+ * FuzzySimilarityEngine operations to a Web Worker thread.
  * Falls back to inline (main-thread) execution when Workers
  * are unavailable (SSR, Node.js, test environments).
  */
 
-import { NeuroElasticEngine, type NeuroElasticConfig, type FindResult } from "./neuro-elastic"
+import {
+  FuzzySimilarityEngine,
+  type FuzzySimilarityConfig,
+  type FindResult,
+} from "./fuzzy-similarity"
 
 // --- Message Protocol ---
 
 export type WorkerCommand =
-  | { type: "INIT"; id: string; payload: NeuroElasticConfig }
+  | { type: "INIT"; id: string; payload: FuzzySimilarityConfig }
   | { type: "FIND"; id: string; payload: { prompt: string; model?: string } }
   | {
       type: "LEARN"
@@ -50,7 +54,7 @@ function nextId(): string {
 // --- ShieldWorker class ---
 
 /**
- * Promise-based wrapper around NeuroElasticEngine.
+ * Promise-based wrapper around FuzzySimilarityEngine.
  *
  * In environments without Web Workers (SSR, Node.js, tests), all operations
  * execute synchronously on the main thread via an inline engine instance.
@@ -59,7 +63,7 @@ function nextId(): string {
  * and results are returned via promises.
  */
 export class ShieldWorker {
-  private engine: NeuroElasticEngine | null = null
+  private engine: FuzzySimilarityEngine | null = null
   private worker: Worker | null = null
   private pending = new Map<
     string,
@@ -70,10 +74,10 @@ export class ShieldWorker {
 
   /**
    * Initialize the engine.
-   * @param config - NeuroElasticEngine configuration
+   * @param config - FuzzySimilarityEngine configuration
    * @param workerUrl - Optional URL to the worker script. If provided and Workers are available, uses worker mode.
    */
-  async init(config: NeuroElasticConfig = {}, workerUrl?: string | URL): Promise<void> {
+  async init(config: FuzzySimilarityConfig = {}, workerUrl?: string | URL): Promise<void> {
     // Guard against double-init: terminate old worker first
     if (this.worker) {
       this.worker.terminate()
@@ -112,9 +116,9 @@ export class ShieldWorker {
     await this.initInline(config)
   }
 
-  private async initInline(config: NeuroElasticConfig): Promise<void> {
+  private async initInline(config: FuzzySimilarityConfig): Promise<void> {
     this.mode = "inline"
-    this.engine = new NeuroElasticEngine(config)
+    this.engine = new FuzzySimilarityEngine(config)
     if (config.persist) {
       await this.engine.hydrate()
     }

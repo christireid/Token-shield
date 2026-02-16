@@ -13,7 +13,6 @@ import {
   setLicensePrivateKey,
   generateLicenseKeyPair,
   configureLicenseKeys,
-  type LicenseTier,
 } from "../license"
 
 describe("license", () => {
@@ -29,15 +28,15 @@ describe("license", () => {
       expect(getModuleTier("cost-ledger")).toBe("community")
     })
 
-    it("pro tier includes caching and routing modules", () => {
-      expect(getModuleTier("response-cache")).toBe("pro")
-      expect(getModuleTier("model-router")).toBe("pro")
-      expect(getModuleTier("prefix-optimizer")).toBe("pro")
-      expect(getModuleTier("context-manager")).toBe("pro")
+    it("community tier includes caching and routing modules", () => {
+      expect(getModuleTier("response-cache")).toBe("community")
+      expect(getModuleTier("model-router")).toBe("community")
+      expect(getModuleTier("prefix-optimizer")).toBe("community")
+      expect(getModuleTier("context-manager")).toBe("community")
     })
 
     it("team tier includes budget and monitoring modules", () => {
-      expect(getModuleTier("circuit-breaker")).toBe("team")
+      expect(getModuleTier("circuit-breaker")).toBe("community")
       expect(getModuleTier("user-budget-manager")).toBe("team")
       expect(getModuleTier("anomaly-detector")).toBe("team")
     })
@@ -57,8 +56,14 @@ describe("license", () => {
       const mods = getModulesForTier("community")
       expect(mods).toContain("token-counter")
       expect(mods).toContain("cost-estimator")
-      expect(mods).not.toContain("response-cache")
-      expect(mods).not.toContain("circuit-breaker")
+      expect(mods).toContain("response-cache")
+      expect(mods).toContain("model-router")
+      expect(mods).toContain("prefix-optimizer")
+      expect(mods).toContain("context-manager")
+      expect(mods).toContain("fuzzy-similarity")
+      expect(mods).toContain("circuit-breaker")
+      expect(mods).toContain("stream-tracker")
+      expect(mods).not.toContain("user-budget-manager")
       expect(mods).not.toContain("audit-log")
     })
 
@@ -67,7 +72,8 @@ describe("license", () => {
       expect(mods).toContain("token-counter")
       expect(mods).toContain("response-cache")
       expect(mods).toContain("model-router")
-      expect(mods).not.toContain("circuit-breaker")
+      expect(mods).toContain("circuit-breaker")
+      expect(mods).not.toContain("user-budget-manager")
       expect(mods).not.toContain("audit-log")
     })
 
@@ -307,8 +313,8 @@ describe("license", () => {
       const key = generateTestKeySync("pro", "holder")
       await activateLicense(key)
       // After activation, isModulePermitted should check tier
-      expect(isModulePermitted("response-cache")).toBe(true) // pro module, pro tier = OK
-      expect(isModulePermitted("circuit-breaker")).toBe(false) // team module, pro tier = blocked
+      expect(isModulePermitted("response-cache")).toBe(true) // community module, pro tier = OK
+      expect(isModulePermitted("user-budget-manager")).toBe(false) // team module, pro tier = blocked
     })
   })
 
@@ -362,16 +368,18 @@ describe("license", () => {
       const key = generateTestKeySync("pro", "holder")
       await activateLicense(key)
       expect(isModulePermitted("token-counter")).toBe(true) // community
-      expect(isModulePermitted("response-cache")).toBe(true) // pro
-      expect(isModulePermitted("circuit-breaker")).toBe(false) // team
+      expect(isModulePermitted("response-cache")).toBe(true) // community
+      expect(isModulePermitted("circuit-breaker")).toBe(true) // community
+      expect(isModulePermitted("user-budget-manager")).toBe(false) // team
       expect(isModulePermitted("audit-log")).toBe(false) // enterprise
     })
 
     it("team license allows team modules but not enterprise", async () => {
       const key = generateTestKeySync("team", "holder")
       await activateLicense(key)
-      expect(isModulePermitted("response-cache")).toBe(true) // pro
-      expect(isModulePermitted("circuit-breaker")).toBe(true) // team
+      expect(isModulePermitted("response-cache")).toBe(true) // community
+      expect(isModulePermitted("circuit-breaker")).toBe(true) // community
+      expect(isModulePermitted("user-budget-manager")).toBe(true) // team
       expect(isModulePermitted("audit-log")).toBe(false) // enterprise
     })
 
@@ -384,13 +392,14 @@ describe("license", () => {
       expect(isModulePermitted("audit-log")).toBe(true)
     })
 
-    it("community license only allows community modules", async () => {
+    it("community license allows all core optimization modules", async () => {
       const key = generateTestKeySync("community", "holder")
       await activateLicense(key)
-      expect(isModulePermitted("token-counter")).toBe(true)
-      expect(isModulePermitted("response-cache")).toBe(false)
-      expect(isModulePermitted("circuit-breaker")).toBe(false)
-      expect(isModulePermitted("audit-log")).toBe(false)
+      expect(isModulePermitted("token-counter")).toBe(true) // community
+      expect(isModulePermitted("response-cache")).toBe(true) // community
+      expect(isModulePermitted("circuit-breaker")).toBe(true) // community
+      expect(isModulePermitted("user-budget-manager")).toBe(false) // team
+      expect(isModulePermitted("audit-log")).toBe(false) // enterprise
     })
 
     it("invalid license falls back to community with invalid flag", async () => {
@@ -405,8 +414,9 @@ describe("license", () => {
       expect(info.valid).toBe(false)
       expect(info.tier).toBe("community")
       // With devMode=false and valid=false, only community modules allowed
-      expect(isModulePermitted("token-counter")).toBe(true)
-      expect(isModulePermitted("response-cache")).toBe(false)
+      expect(isModulePermitted("token-counter")).toBe(true) // community
+      expect(isModulePermitted("response-cache")).toBe(true) // community
+      expect(isModulePermitted("user-budget-manager")).toBe(false) // team
     })
   })
 
@@ -510,7 +520,9 @@ describe("license", () => {
 
       // Without private key, generateTestKey falls back to HMAC/unsigned
       // but setLicensePublicKey is set for verification
-      const unsigned = btoa(JSON.stringify({ tier: "pro", expiresAt: Date.now() + 86400000, holder: "test" }))
+      const unsigned = btoa(
+        JSON.stringify({ tier: "pro", expiresAt: Date.now() + 86400000, holder: "test" }),
+      )
       const info = await activateLicense(unsigned)
       // Should fail because public key is set but key has no signature
       expect(info.valid).toBe(false)
@@ -520,7 +532,7 @@ describe("license", () => {
   describe("generateTestKey signing option", () => {
     it("explicit ecdsa signing throws without private key", async () => {
       await expect(
-        generateTestKey("pro", "test", 365, undefined, { signing: "ecdsa" })
+        generateTestKey("pro", "test", 365, undefined, { signing: "ecdsa" }),
       ).rejects.toThrow("ECDSA signing requested")
     })
 

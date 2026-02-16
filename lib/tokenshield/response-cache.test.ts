@@ -253,13 +253,13 @@ describe("response-cache", () => {
     })
   })
 
-  describe("ResponseCache (holographic encoding)", () => {
-    it("uses holographic engine for fuzzy matching when configured", async () => {
+  describe("ResponseCache (trigram encoding)", () => {
+    it("uses trigram encoding engine for fuzzy matching when configured", async () => {
       const cache = new ResponseCache({
         maxEntries: 10,
         ttlMs: 60_000,
         similarityThreshold: 0.7,
-        encodingStrategy: "holographic",
+        encodingStrategy: "trigram",
       })
       await cache.store(
         "How do I configure a database connection in PostgreSQL?",
@@ -268,7 +268,7 @@ describe("response-cache", () => {
         20,
         30,
       )
-      // Slightly different wording — holographic should detect similarity
+      // Slightly different wording — trigram encoding should detect similarity
       const result = await cache.lookup(
         "How do I set up a database connection in PostgreSQL?",
         "gpt-4o-mini",
@@ -278,12 +278,12 @@ describe("response-cache", () => {
       expect(typeof result.hit).toBe("boolean")
     })
 
-    it("holographic engine respects model filter", async () => {
+    it("trigram encoding engine respects model filter", async () => {
       const cache = new ResponseCache({
         maxEntries: 10,
         ttlMs: 60_000,
         similarityThreshold: 0.7,
-        encodingStrategy: "holographic",
+        encodingStrategy: "trigram",
       })
       await cache.store(
         "Explain machine learning algorithms for beginners",
@@ -292,12 +292,12 @@ describe("response-cache", () => {
         20,
         30,
       )
-      // Different model should not match in holographic engine
+      // Different model should not match in trigram encoding engine
       const result = await cache.lookup(
         "Explain machine learning algorithms for beginners",
         "gpt-4o-mini",
       )
-      // This may hit via bigram fallback but holographic won't match different model
+      // This may hit via bigram fallback but trigram encoding won't match different model
       // The important thing is it completes without error
       expect(typeof result.hit).toBe("boolean")
     })

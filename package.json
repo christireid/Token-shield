@@ -1,7 +1,7 @@
 {
   "name": "@tokenshield/ai-sdk",
   "version": "0.5.0",
-  "description": "Cut LLM API costs 30-60% with 3 lines of code. TypeScript middleware for caching, routing, budget enforcement, and token optimization.",
+  "description": "Reduce LLM API costs with client-side caching, model routing, and budget enforcement. TypeScript middleware for Vercel AI SDK, OpenAI, and Anthropic.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -56,9 +56,6 @@
   },
   "scripts": {
     "dev": "next dev",
-    "sync-pricing": "tsx scripts/sync-pricing.ts",
-    "validate-pricing": "tsx scripts/validate-pricing.ts",
-    "prebuild": "tsx scripts/sync-pricing.ts",
     "build": "tsup",
     "start": "next start",
     "lint": "eslint lib/tokenshield/",

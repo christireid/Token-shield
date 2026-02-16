@@ -12,7 +12,7 @@
  */
 
 import { get, set, del, keys, createStore } from "./storage-adapter"
-import { NeuroElasticEngine } from "./neuro-elastic"
+import { FuzzySimilarityEngine } from "./fuzzy-similarity"
 
 /**
  * Content type classification for TTL-aware caching.
@@ -58,13 +58,13 @@ export interface CacheConfig {
   /**
    * Similarity encoding strategy:
    * - "bigram" (default): Fast bigram Dice coefficient — good for near-duplicates
-   * - "holographic": Trigram-based holographic encoding with semantic seeding — better for paraphrases
+   * - "trigram": Trigram-based fingerprint encoding with semantic seeding — better for paraphrases
    */
-  encodingStrategy?: "bigram" | "holographic"
+  encodingStrategy?: "bigram" | "trigram"
   /**
-   * Semantic seeds for holographic encoding. Maps domain terms to seed angles.
+   * Semantic seeds for trigram encoding. Maps domain terms to seed angles.
    * Terms sharing the same seed value will be encoded closer together.
-   * Only used when encodingStrategy is "holographic".
+   * Only used when encodingStrategy is "trigram".
    * @example { cost: 10, price: 10, billing: 10, budget: 10 }
    */
   semanticSeeds?: Record<string, number>
@@ -206,8 +206,8 @@ export class ResponseCache {
   private memoryCache = new Map<string, CacheEntry>()
   /** Per-instance IDB store (lazy-initialized on first access) */
   private idbStore: ReturnType<typeof createStore> | null = null
-  /** Optional holographic encoding engine for enhanced fuzzy matching */
-  private holoEngine: NeuroElasticEngine | null = null
+  /** Optional trigram encoding engine for enhanced fuzzy matching */
+  private fuzzyEngine: FuzzySimilarityEngine | null = null
   /** Total lookup() calls (hits + misses) for accurate hit rate calculation */
   private totalLookups = 0
   /** Total cache hits across all lookup() calls */
@@ -216,9 +216,9 @@ export class ResponseCache {
   constructor(config: Partial<CacheConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
 
-    // Initialize holographic engine if strategy is set
-    if (this.config.encodingStrategy === "holographic") {
-      this.holoEngine = new NeuroElasticEngine({
+    // Initialize fuzzy similarity engine if strategy is set
+    if (this.config.encodingStrategy === "trigram") {
+      this.fuzzyEngine = new FuzzySimilarityEngine({
         threshold: this.config.similarityThreshold,
         seeds: this.config.semanticSeeds,
         maxMemories: this.config.maxEntries,
@@ -374,13 +374,13 @@ export class ResponseCache {
 
     // 3. Fuzzy match against memory cache
     if (this.config.similarityThreshold < 1) {
-      // 3a. Holographic encoding (enhanced paraphrase detection)
-      if (this.holoEngine) {
-        const holoResult = this.holoEngine.find(prompt, model)
-        if (holoResult) {
+      // 3a. Trigram-based fuzzy matching (enhanced paraphrase detection)
+      if (this.fuzzyEngine) {
+        const fuzzyResult = this.fuzzyEngine.find(prompt, model)
+        if (fuzzyResult) {
           // Find the corresponding cache entry by prompt, with TTL check
           for (const [entryKey, entry] of this.memoryCache.entries()) {
-            if (entry.prompt === holoResult.prompt && (!model || entry.model === model)) {
+            if (entry.prompt === fuzzyResult.prompt && (!model || entry.model === model)) {
               if (this.isExpired(entry)) continue
               const updated = this.touchEntry(entry)
               this.memoryCache.set(entryKey, updated)
@@ -389,7 +389,7 @@ export class ResponseCache {
                 hit: true,
                 entry: updated,
                 matchType: "fuzzy",
-                similarity: holoResult.score,
+                similarity: fuzzyResult.score,
               }
             }
           }
@@ -454,9 +454,11 @@ export class ResponseCache {
 
     this.memoryCache.set(key, entry)
 
-    // Teach the holographic engine about this entry
-    if (this.holoEngine) {
-      this.holoEngine.learn(prompt, response, model, inputTokens, outputTokens).catch((err) => { this.config.onStorageError?.(err) })
+    // Teach the fuzzy similarity engine about this entry
+    if (this.fuzzyEngine) {
+      this.fuzzyEngine.learn(prompt, response, model, inputTokens, outputTokens).catch((err) => {
+        this.config.onStorageError?.(err)
+      })
     }
 
     // Evict LRU if over capacity
@@ -474,7 +476,10 @@ export class ResponseCache {
         // Evict from IDB to keep stores coherent
         try {
           const store = this.getStore()
-          if (store) del(oldestKey, store).catch((err) => { this.config.onStorageError?.(err) })
+          if (store)
+            del(oldestKey, store).catch((err) => {
+              this.config.onStorageError?.(err)
+            })
         } catch {
           /* IDB not available */
         }
@@ -511,9 +516,9 @@ export class ResponseCache {
         }
         if (entry && !this.isExpired(entry)) {
           this.memoryCache.set(key, entry)
-          // Populate holographic engine so fuzzy matching works after reload
-          if (this.holoEngine) {
-            this.holoEngine
+          // Populate fuzzy similarity engine so fuzzy matching works after reload
+          if (this.fuzzyEngine) {
+            this.fuzzyEngine
               .learn(
                 entry.prompt,
                 entry.response,
@@ -521,7 +526,9 @@ export class ResponseCache {
                 entry.inputTokens,
                 entry.outputTokens,
               )
-              .catch((err) => { this.config.onStorageError?.(err) })
+              .catch((err) => {
+                this.config.onStorageError?.(err)
+              })
           }
           loaded++
         } else if (entry) {
@@ -563,7 +570,7 @@ export class ResponseCache {
    */
   dispose(): void {
     this.memoryCache.clear()
-    this.holoEngine = null
+    this.fuzzyEngine = null
     this.totalLookups = 0
     this.totalHits = 0
   }
@@ -575,8 +582,8 @@ export class ResponseCache {
     this.memoryCache.clear()
     this.totalLookups = 0
     this.totalHits = 0
-    if (this.holoEngine) {
-      await this.holoEngine.clear()
+    if (this.fuzzyEngine) {
+      await this.fuzzyEngine.clear()
     }
     try {
       const store = this.getStore()

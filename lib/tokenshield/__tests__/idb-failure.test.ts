@@ -24,7 +24,7 @@ vi.mock("../storage-adapter", () => ({
 }))
 
 import { AdaptiveOutputOptimizer } from "../adaptive-output-optimizer"
-import { NeuroElasticEngine } from "../neuro-elastic"
+import { FuzzySimilarityEngine } from "../fuzzy-similarity"
 import { AuditLog } from "../audit-log"
 import { ResponseCache } from "../response-cache"
 
@@ -112,16 +112,16 @@ describe("AdaptiveOutputOptimizer IDB failures", () => {
 })
 
 // -------------------------------------------------------
-// NeuroElasticEngine
+// FuzzySimilarityEngine
 // -------------------------------------------------------
 
-describe("NeuroElasticEngine IDB failures", () => {
+describe("FuzzySimilarityEngine IDB failures", () => {
   it("calls onStorageError when hydrate() IDB get fails", async () => {
     const errors: unknown[] = []
     const idbError = new Error("IDB hydrate failed")
     mockGet.mockRejectedValueOnce(idbError)
 
-    const engine = new NeuroElasticEngine({
+    const engine = new FuzzySimilarityEngine({
       persist: true,
       onStorageError: (err) => errors.push(err),
     })
@@ -137,7 +137,7 @@ describe("NeuroElasticEngine IDB failures", () => {
     const idbError = new Error("IDB clear failed")
     mockSet.mockRejectedValueOnce(idbError)
 
-    const engine = new NeuroElasticEngine({
+    const engine = new FuzzySimilarityEngine({
       persist: true,
       onStorageError: (err) => errors.push(err),
     })
@@ -151,7 +151,7 @@ describe("NeuroElasticEngine IDB failures", () => {
     const errors: unknown[] = []
     const idbError = new Error("IDB persist failed")
 
-    const engine = new NeuroElasticEngine({
+    const engine = new FuzzySimilarityEngine({
       persist: true,
       onStorageError: (err) => errors.push(err),
     })
@@ -168,7 +168,7 @@ describe("NeuroElasticEngine IDB failures", () => {
 
   it("does not fire callback when persist is disabled", async () => {
     const errors: unknown[] = []
-    const engine = new NeuroElasticEngine({
+    const engine = new FuzzySimilarityEngine({
       persist: false,
       onStorageError: (err) => errors.push(err),
     })
@@ -303,16 +303,16 @@ describe("ResponseCache IDB failures", () => {
     expect(errors[0]).toBe(idbError)
   })
 
-  it("forwards onStorageError to holographic engine", () => {
+  it("forwards onStorageError to trigram encoding engine", () => {
     const errors: unknown[] = []
     const cache = new ResponseCache({
       maxEntries: 10,
       ttlMs: 60_000,
       similarityThreshold: 0.8,
-      encodingStrategy: "holographic",
+      encodingStrategy: "trigram",
       onStorageError: (err) => errors.push(err),
     })
-    // The cache should have been created with a holographic engine
+    // The cache should have been created with a trigram encoding engine
     expect(cache).toBeTruthy()
   })
 })

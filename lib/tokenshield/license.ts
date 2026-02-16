@@ -1,16 +1,16 @@
 /**
  * TokenShield - License Gating
  *
- * Open-core license system for gating Pro/Team/Enterprise features.
+ * Open-core license system for gating Team/Enterprise features.
+ * All core optimization modules are free and MIT-licensed.
  *
- * Free (MIT):
- *   - Token Counter, Cost Estimator, Request Guard, Cost Ledger (basic)
- *
- * Pro ($29/mo):
- *   - Response Cache (semantic), Model Router, Prefix Optimizer, Context Manager
+ * Community (Free/MIT):
+ *   - All core optimization: Token Counter, Cost Estimator, Response Cache,
+ *     Model Router, Context Manager, Prefix Optimizer, Request Guard,
+ *     Cost Ledger, Circuit Breaker, Stream Tracker, Fuzzy Similarity
  *
  * Team ($99/mo):
- *   - Circuit Breaker, User Budget Manager, Anomaly Detector, Data Export
+ *   - User Budget Manager, Anomaly Detector, Data Export
  *
  * Enterprise (Custom):
  *   - Audit Logging, Custom Routing Rules, Priority Support
@@ -34,29 +34,27 @@ export interface LicenseInfo {
 
 // Module-to-tier mapping
 const MODULE_TIERS: Record<string, LicenseTier> = {
-  // Community (free)
+  // Community (free) — all core optimization modules
   "token-counter": "community",
   "cost-estimator": "community",
   "request-guard": "community",
   "cost-ledger": "community",
   "event-bus": "community",
-  "logger": "community",
+  logger: "community",
+  "response-cache": "community",
+  "model-router": "community",
+  "prefix-optimizer": "community",
+  "context-manager": "community",
+  "fuzzy-similarity": "community",
+  "circuit-breaker": "community",
+  "stream-tracker": "community",
 
-  // Pro
-  "response-cache": "pro",
-  "model-router": "pro",
-  "prefix-optimizer": "pro",
-  "context-manager": "pro",
-  "neuro-elastic": "pro",
-
-  // Team
-  "circuit-breaker": "team",
+  // Team — multi-user management features
   "user-budget-manager": "team",
   "anomaly-detector": "team",
   "data-export": "team",
-  "stream-tracker": "team",
 
-  // Enterprise
+  // Enterprise — compliance and custom routing
   "audit-log": "enterprise",
   "custom-routing": "enterprise",
   "provider-adapter": "enterprise",
@@ -174,8 +172,7 @@ let _ecPrivateKey: CryptoKey | null = null
 
 function isSubtleAvailable(): boolean {
   return (
-    typeof globalThis !== "undefined" &&
-    typeof globalThis.crypto?.subtle?.importKey === "function"
+    typeof globalThis !== "undefined" && typeof globalThis.crypto?.subtle?.importKey === "function"
   )
 }
 
@@ -339,7 +336,7 @@ export async function activateLicense(key: string): Promise<LicenseInfo> {
     }
 
     const tier = (payload.tier ?? "community") as LicenseTier
-    if (!TIER_RANK.hasOwnProperty(tier)) {
+    if (!Object.prototype.hasOwnProperty.call(TIER_RANK, tier)) {
       throw new Error(`Unknown tier: ${tier}`)
     }
 
@@ -424,6 +421,7 @@ export function isModulePermitted(moduleName: string): boolean {
     if (!_warningShown && requiredTier !== "community") {
       _warningShown = true
       if (typeof console !== "undefined") {
+        // eslint-disable-next-line no-console
         console.warn(
           `[TokenShield] Using ${requiredTier}-tier features without a license key. ` +
             `All features are unlocked for development. ` +
@@ -506,7 +504,9 @@ export async function generateTestKey(
 
   // HMAC signing: explicit or auto-detect
   if (signingMode === "ecdsa") {
-    throw new Error("ECDSA signing requested but no private key is configured. Call setLicensePrivateKey() first.")
+    throw new Error(
+      "ECDSA signing requested but no private key is configured. Call setLicensePrivateKey() first.",
+    )
   }
 
   const signingKey = secret ?? _signingSecret

@@ -133,7 +133,7 @@ export interface ShieldedCallMetrics {
 
 /**
  * High-level hook that wraps any API call with the full TokenShield pipeline.
- * Checks the response cache first (bigram or holographic), calls the API on miss,
+ * Checks the response cache first (bigram or trigram encoding), calls the API on miss,
  * and teaches the cache on new responses. Exposes source/confidence/latency metrics.
  */
 export function useShieldedCall(): {

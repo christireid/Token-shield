@@ -31,8 +31,8 @@ describe("LicenseActivation module", () => {
     expect(props).toBeDefined()
   })
 
-  it("re-exported from index.ts", async () => {
+  it("is not re-exported from index.ts", async () => {
     const index = await import("../index")
-    expect(index.LicenseActivation).toBe(LicenseActivation)
+    expect((index as Record<string, unknown>).LicenseActivation).toBeUndefined()
   })
 })

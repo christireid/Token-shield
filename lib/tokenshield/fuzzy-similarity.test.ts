@@ -1,20 +1,20 @@
 import { describe, it, expect, beforeEach } from "vitest"
-import { NeuroElasticEngine, createNeuroElasticEngine } from "./neuro-elastic"
+import { FuzzySimilarityEngine, createFuzzySimilarityEngine } from "./fuzzy-similarity"
 
-describe("NeuroElasticEngine", () => {
+describe("FuzzySimilarityEngine", () => {
   // -------------------------------------------------------
   // Constructor & Config
   // -------------------------------------------------------
   describe("Constructor & Config", () => {
     it("creates engine with default config", () => {
-      const engine = new NeuroElasticEngine()
+      const engine = new FuzzySimilarityEngine()
       // Defaults: threshold=0.88, maxMemories=500, enableInhibition=true, persist=false
       expect(engine.size).toBe(0)
       expect(engine.hydrated).toBe(false)
     })
 
     it("accepts custom config values", () => {
-      const engine = new NeuroElasticEngine({
+      const engine = new FuzzySimilarityEngine({
         threshold: 0.75,
         maxMemories: 100,
         enableInhibition: false,
@@ -29,10 +29,10 @@ describe("NeuroElasticEngine", () => {
   // Encoding (tested via find/learn)
   // -------------------------------------------------------
   describe("encode (tested via find/learn)", () => {
-    let engine: NeuroElasticEngine
+    let engine: FuzzySimilarityEngine
 
     beforeEach(() => {
-      engine = new NeuroElasticEngine({ threshold: 0.5, persist: false })
+      engine = new FuzzySimilarityEngine({ threshold: 0.5, persist: false })
     })
 
     it("same text produces same encoding (find matches after learn)", async () => {
@@ -78,7 +78,7 @@ describe("NeuroElasticEngine", () => {
 
     it("short prompts (<10 chars) get stricter threshold (dynamic thresholding)", async () => {
       // Use a high threshold so +0.05 makes it fail for short prompts
-      const strict = new NeuroElasticEngine({ threshold: 0.92, persist: false })
+      const strict = new FuzzySimilarityEngine({ threshold: 0.92, persist: false })
       const longPrompt = "Calculate the total cost"
       await strict.learn(longPrompt, "Sum them up.", "gpt-4o", 5, 10)
 
@@ -93,7 +93,7 @@ describe("NeuroElasticEngine", () => {
     })
 
     it("word order matters (temporal encoding)", async () => {
-      const engineA = new NeuroElasticEngine({ threshold: 0.3, persist: false })
+      const engineA = new FuzzySimilarityEngine({ threshold: 0.3, persist: false })
       await engineA.learn("the dog bites the man", "A bites B.", "gpt-4o", 5, 5)
 
       // Same words different order — rotation makes them encode differently
@@ -111,7 +111,7 @@ describe("NeuroElasticEngine", () => {
   // -------------------------------------------------------
   describe("Semantic Seeding", () => {
     it("without seeds: 'cost' and 'price' have lower similarity", async () => {
-      const noSeeds = new NeuroElasticEngine({ threshold: 0.1, persist: false })
+      const noSeeds = new FuzzySimilarityEngine({ threshold: 0.1, persist: false })
       await noSeeds.learn("What is the total cost of this service?", "Ten dollars.", "gpt-4o", 5, 5)
       const result = noSeeds.find("What is the total price of this service?")
       // Without seeds, "cost" and "price" have completely different trigrams
@@ -119,7 +119,7 @@ describe("NeuroElasticEngine", () => {
       expect(scoreWithout).toBeGreaterThan(0) // still share other words
 
       // With seeds linking cost and price
-      const withSeeds = new NeuroElasticEngine({
+      const withSeeds = new FuzzySimilarityEngine({
         threshold: 0.1,
         persist: false,
         seeds: { cost: 10, price: 10 },
@@ -139,7 +139,7 @@ describe("NeuroElasticEngine", () => {
     })
 
     it("seeds don't affect unrelated terms", async () => {
-      const withSeeds = new NeuroElasticEngine({
+      const withSeeds = new FuzzySimilarityEngine({
         threshold: 0.1,
         persist: false,
         seeds: { cost: 10, price: 10 },
@@ -157,7 +157,7 @@ describe("NeuroElasticEngine", () => {
   // -------------------------------------------------------
   describe("Contrastive Inhibition", () => {
     it("with many similar memories, common terms get downweighted", async () => {
-      const engine = new NeuroElasticEngine({
+      const engine = new FuzzySimilarityEngine({
         threshold: 0.1,
         enableInhibition: true,
         persist: false,
@@ -181,7 +181,7 @@ describe("NeuroElasticEngine", () => {
     })
 
     it("with enableInhibition=false, no filtering occurs", async () => {
-      const noInhibit = new NeuroElasticEngine({
+      const noInhibit = new FuzzySimilarityEngine({
         threshold: 0.1,
         enableInhibition: false,
         persist: false,
@@ -206,10 +206,10 @@ describe("NeuroElasticEngine", () => {
   // find()
   // -------------------------------------------------------
   describe("find()", () => {
-    let engine: NeuroElasticEngine
+    let engine: FuzzySimilarityEngine
 
     beforeEach(() => {
-      engine = new NeuroElasticEngine({ threshold: 0.88, persist: false })
+      engine = new FuzzySimilarityEngine({ threshold: 0.88, persist: false })
     })
 
     it("returns null when memory is empty", () => {
@@ -273,7 +273,7 @@ describe("NeuroElasticEngine", () => {
     })
 
     it("dynamic threshold: short prompts need higher score", async () => {
-      const engine = new NeuroElasticEngine({ threshold: 0.93, persist: false })
+      const engine = new FuzzySimilarityEngine({ threshold: 0.93, persist: false })
       await engine.learn(
         "How do I configure my database connection properly?",
         "Check the config.",
@@ -297,14 +297,14 @@ describe("NeuroElasticEngine", () => {
   // -------------------------------------------------------
   describe("learn()", () => {
     it("adds entry to memory (size increases)", async () => {
-      const engine = new NeuroElasticEngine({ persist: false })
+      const engine = new FuzzySimilarityEngine({ persist: false })
       expect(engine.size).toBe(0)
       await engine.learn("Test prompt", "Test response", "gpt-4o", 5, 10)
       expect(engine.size).toBe(1)
     })
 
     it("LRU eviction when at maxMemories capacity", async () => {
-      const engine = new NeuroElasticEngine({
+      const engine = new FuzzySimilarityEngine({
         maxMemories: 3,
         persist: false,
       })
@@ -319,7 +319,7 @@ describe("NeuroElasticEngine", () => {
     })
 
     it("after learn, find can retrieve the entry", async () => {
-      const engine = new NeuroElasticEngine({ threshold: 0.5, persist: false })
+      const engine = new FuzzySimilarityEngine({ threshold: 0.5, persist: false })
       await engine.learn("What is the capital of France?", "Paris.", "gpt-4o", 5, 5)
       const result = engine.find("What is the capital of France?")
       expect(result).not.toBeNull()
@@ -332,13 +332,13 @@ describe("NeuroElasticEngine", () => {
   // -------------------------------------------------------
   describe("hydrate()", () => {
     it("returns 0 when persist is false", async () => {
-      const engine = new NeuroElasticEngine({ persist: false })
+      const engine = new FuzzySimilarityEngine({ persist: false })
       const count = await engine.hydrate()
       expect(count).toBe(0)
     })
 
     it("does not throw when persist is false", async () => {
-      const engine = new NeuroElasticEngine({ persist: false })
+      const engine = new FuzzySimilarityEngine({ persist: false })
       await expect(engine.hydrate()).resolves.toBe(0)
     })
   })
@@ -348,7 +348,7 @@ describe("NeuroElasticEngine", () => {
   // -------------------------------------------------------
   describe("clear()", () => {
     it("removes all memories (size becomes 0)", async () => {
-      const engine = new NeuroElasticEngine({ persist: false })
+      const engine = new FuzzySimilarityEngine({ persist: false })
       await engine.learn("Some prompt for testing", "Some response", "gpt-4o", 5, 10)
       await engine.learn("Another prompt for testing", "Another response", "gpt-4o", 5, 10)
       expect(engine.size).toBe(2)
@@ -357,7 +357,7 @@ describe("NeuroElasticEngine", () => {
     })
 
     it("after clear, find returns null", async () => {
-      const engine = new NeuroElasticEngine({ threshold: 0.5, persist: false })
+      const engine = new FuzzySimilarityEngine({ threshold: 0.5, persist: false })
       await engine.learn(
         "How do I configure my database?",
         "Use a connection string.",
@@ -376,7 +376,7 @@ describe("NeuroElasticEngine", () => {
   // -------------------------------------------------------
   describe("stats()", () => {
     it("returns correct entries count", async () => {
-      const engine = new NeuroElasticEngine({ persist: false })
+      const engine = new FuzzySimilarityEngine({ persist: false })
       await engine.learn("First prompt for testing", "First", "gpt-4o", 5, 5)
       await engine.learn("Second prompt for testing", "Second", "gpt-4o", 5, 5)
       const stats = engine.stats()
@@ -384,7 +384,7 @@ describe("NeuroElasticEngine", () => {
     })
 
     it("returns correct totalHits after find matches", async () => {
-      const engine = new NeuroElasticEngine({ threshold: 0.5, persist: false })
+      const engine = new FuzzySimilarityEngine({ threshold: 0.5, persist: false })
       await engine.learn("Explain quantum computing concepts", "Qubits.", "gpt-4o", 5, 5)
       // Each learn starts at hits=1
       expect(engine.stats().totalHits).toBe(1)
@@ -396,12 +396,12 @@ describe("NeuroElasticEngine", () => {
   })
 
   // -------------------------------------------------------
-  // createNeuroElasticEngine factory
+  // createFuzzySimilarityEngine factory
   // -------------------------------------------------------
-  describe("createNeuroElasticEngine factory", () => {
-    it("returns a NeuroElasticEngine instance", () => {
-      const engine = createNeuroElasticEngine({ persist: false })
-      expect(engine).toBeInstanceOf(NeuroElasticEngine)
+  describe("createFuzzySimilarityEngine factory", () => {
+    it("returns a FuzzySimilarityEngine instance", () => {
+      const engine = createFuzzySimilarityEngine({ persist: false })
+      expect(engine).toBeInstanceOf(FuzzySimilarityEngine)
     })
   })
 })

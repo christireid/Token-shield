@@ -1,101 +1,82 @@
 # TokenShield AI SDK
 
-**Companies using LLM APIs waste 30-60% of their spend on redundant calls, expensive models for simple queries, and missed caching opportunities.** TokenShield recovers that money with 3 lines of code.
+Client-side TypeScript middleware that reduces LLM API costs through caching, model routing, and budget enforcement. Works with Vercel AI SDK, OpenAI, and Anthropic.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![npm version](https://img.shields.io/npm/v/@tokenshield/ai-sdk.svg)](https://www.npmjs.com/package/@tokenshield/ai-sdk)
-[![Tests](https://img.shields.io/badge/tests-822%20passed-brightgreen)](./lib/tokenshield)
+
+> **Status: v0.5.0 (pre-release)** — API may change before v1.0. Not yet published to npm.
 
 ---
 
-## How Much Are You Wasting?
+## What It Does
 
-| Monthly LLM Spend | Estimated Waste | TokenShield Savings | ROI at $29/mo |
-| :--- | :--- | :--- | :--- |
-| $5,000 | $1,500 - $3,000 | $1,200 - $2,400/mo | **41x - 83x** |
-| $25,000 | $7,500 - $15,000 | $6,000 - $12,000/mo | **207x - 414x** |
-| $100,000 | $30,000 - $60,000 | $24,000 - $48,000/mo | **828x - 1,655x** |
+TokenShield runs **inside your application** as middleware — not as a proxy or gateway. It intercepts LLM calls and applies cost optimizations before they reach the provider.
 
-*Based on measured savings from response caching (10-15%), model routing (20-30%), prefix optimization (15-25%), context trimming (10-15%), and request deduplication (3-5%).*
+| Module               | What It Does                                                                                      | Typical Impact                                                  |
+| :------------------- | :------------------------------------------------------------------------------------------------ | :-------------------------------------------------------------- |
+| **Response Cache**   | Caches responses by prompt similarity. Identical or near-identical prompts skip the API entirely. | High for repetitive workloads, near-zero for unique prompts     |
+| **Model Router**     | Routes simple prompts to cheaper models based on complexity scoring.                              | Depends on prompt mix — helps most when many prompts are simple |
+| **Prefix Optimizer** | Reorders messages to maximize provider-side prompt cache hits (OpenAI, Anthropic).                | Varies by provider and conversation structure                   |
+| **Context Manager**  | Trims conversation history to fit token budgets.                                                  | Prevents over-budget calls on long conversations                |
+| **Request Guard**    | Debounces, deduplicates, and rate-limits requests.                                                | Prevents accidental duplicate API calls                         |
+| **Cost Ledger**      | Tracks every dollar spent vs. saved with per-module attribution.                                  | Visibility (no direct savings)                                  |
+| **Circuit Breaker**  | Hard spending limits (per-hour, per-day, per-month).                                              | Bill shock prevention                                           |
+
+**Honest expectations:** Actual savings depend entirely on your workload. Cache-heavy applications (customer support, FAQ bots) may see 20-40% savings. Applications with mostly unique prompts (creative writing, code generation) will see minimal cache benefit. Model routing helps only if a significant portion of your prompts are simple enough for cheaper models.
+
+We don't publish ROI projections because they're impossible to predict without knowing your specific usage patterns. Install it, enable the cost ledger, and measure your own savings.
 
 ---
 
 ## 3-Line Integration
 
-TokenShield runs **inside your application** as middleware. No proxy servers, no URL changes, no vendor lock-in.
-
 ### With Vercel AI SDK
 
 ```typescript
-import { openai } from "@ai-sdk/openai";
-import { wrapLanguageModel } from "ai";
-import { tokenShieldMiddleware } from "@tokenshield/ai-sdk";
+import { openai } from "@ai-sdk/openai"
+import { wrapLanguageModel } from "ai"
+import { tokenShieldMiddleware } from "@tokenshield/ai-sdk"
 
 const model = wrapLanguageModel({
   model: openai("gpt-4o"),
-  middleware: tokenShieldMiddleware(), // All optimizations active
-});
+  middleware: tokenShieldMiddleware(),
+})
 ```
 
 ### With OpenAI SDK
 
 ```typescript
-import OpenAI from "openai";
-import { tokenShieldMiddleware, createOpenAIAdapter } from "@tokenshield/ai-sdk";
+import OpenAI from "openai"
+import { tokenShieldMiddleware, createOpenAIAdapter } from "@tokenshield/ai-sdk"
 
-const shield = tokenShieldMiddleware();
-const client = createOpenAIAdapter(shield, (p) => new OpenAI().chat.completions.create(p as any));
-
-const response = await client({
-  messages: [{ role: "user", content: "Hello world" }],
-  model: "gpt-4o",
-});
+const shield = tokenShieldMiddleware()
+const client = createOpenAIAdapter(shield, (p) => new OpenAI().chat.completions.create(p as any))
 ```
 
 ### With Anthropic SDK
 
 ```typescript
-import Anthropic from "@anthropic-ai/sdk";
-import { tokenShieldMiddleware, createAnthropicAdapter } from "@tokenshield/ai-sdk";
+import Anthropic from "@anthropic-ai/sdk"
+import { tokenShieldMiddleware, createAnthropicAdapter } from "@tokenshield/ai-sdk"
 
-const shield = tokenShieldMiddleware();
-const client = createAnthropicAdapter(shield, (p) => new Anthropic().messages.create(p as any));
+const shield = tokenShieldMiddleware()
+const client = createAnthropicAdapter(shield, (p) => new Anthropic().messages.create(p as any))
 ```
 
 ---
 
-## What It Does (and How Much Each Module Saves)
+## Why Middleware Instead of a Gateway?
 
-| Module | What It Does | Savings |
-| :--- | :--- | :--- |
-| **Response Cache** | Semantic similarity matching catches rephrased duplicates. No API call = no cost. | 10-15% |
-| **Model Router** | Routes "What is 2+2?" to GPT-4.1-Nano instead of GPT-4o. Same answer, 25x cheaper. | 20-30% |
-| **Prefix Optimizer** | Reorders messages so providers cache your system prompt automatically. | 15-25% |
-| **Context Manager** | Trims conversations to fit token budgets without losing critical context. | 10-15% |
-| **Request Guard** | Blocks duplicate requests, rate limits, and cost-gates before API calls. | 3-5% |
-| **Cost Ledger** | Tracks every dollar spent vs. saved with per-module attribution. Export to JSON/CSV. | Visibility |
-| **Circuit Breaker** | Hard spending limits (per-hour, per-day, per-month) to prevent bill shock. | Protection |
-| **User Budget Manager** | Per-user daily/monthly quotas for SaaS applications. | Governance |
-| **Anomaly Detector** | Statistical outlier detection for cost and token spikes. | Early warning |
+Most LLM cost tools (Helicone, Portkey) are API gateways — you route traffic through their servers.
 
----
+|                  | TokenShield              | Gateway (Helicone, etc.)     |
+| :--------------- | :----------------------- | :--------------------------- |
+| **Architecture** | In-process middleware    | Network proxy                |
+| **Latency**      | < 5ms overhead           | 50-200ms per request         |
+| **Lock-In**      | Delete 3 lines to remove | Redeploy infrastructure      |
+| **Data Privacy** | Data stays in your infra | Data flows through 3rd party |
 
-## Why Not a Gateway?
-
-Most LLM cost tools (Helicone, Portkey, Edgee) are **API gateways**: you change your base URL to route traffic through their servers.
-
-| | TokenShield SDK | Gateway (Helicone, Edgee, etc.) |
-| :--- | :--- | :--- |
-| **Architecture** | In-process middleware | Network proxy |
-| **Latency** | **< 5ms** | 50-200ms per request |
-| **Vendor Lock-In** | **None** (delete 3 lines to remove) | High (infrastructure dependency) |
-| **Data Privacy** | **Your infra only** | Data flows through 3rd party |
-| **Per-User Budgets** | **Built-in** | Limited or unavailable |
-| **Prefix Optimization** | **Automatic** | Not available |
-| **Pricing** | **MIT core / $29 Pro** | $20-800/mo |
-| **Remove It** | Delete import | Redeploy infrastructure |
-
-[Full competitive analysis vs. Edgee](docs/tokenshield-vs-edgee.md)
+**What gateways do better:** Server-side observability, team dashboards, managed infrastructure. TokenShield is client-side only — it can't provide centralized logging or dashboards across a team without additional infrastructure.
 
 ---
 
@@ -104,24 +85,22 @@ Most LLM cost tools (Helicone, Portkey, Edgee) are **API gateways**: you change 
 ```typescript
 tokenShieldMiddleware({
   modules: {
-    guard: true,      // Rate limiting, dedup, cost gate
-    cache: true,      // Semantic response caching
-    context: true,    // Conversation trimming
-    router: true,     // Complexity-based model routing
-    prefix: true,     // Provider cache optimization
-    ledger: true,     // Cost tracking
+    guard: true, // Rate limiting, dedup, cost gate
+    cache: true, // Semantic response caching
+    context: true, // Conversation trimming
+    router: true, // Complexity-based model routing
+    prefix: true, // Provider cache optimization
+    ledger: true, // Cost tracking
   },
   guard: {
     debounceMs: 300,
     maxRequestsPerMinute: 60,
     maxCostPerHour: 10,
-    deduplicateWindow: 5000, // 5s window for identical prompts
   },
   cache: {
     maxEntries: 500,
     ttlMs: 3_600_000,
     similarityThreshold: 0.85,
-    encodingStrategy: "holographic", // Better paraphrase detection
   },
   router: {
     tiers: [
@@ -134,8 +113,12 @@ tokenShieldMiddleware({
     limits: { perHour: 5, perDay: 50, perMonth: 500 },
     action: "stop",
   },
-  onUsage: (entry) => console.log(`$${entry.cost.toFixed(4)} spent, $${entry.saved.toFixed(4)} saved`),
-});
+  // Dry-run mode: see what TokenShield would do without affecting behavior
+  dryRun: false,
+  onDryRun: (action) => console.log(`[dry-run] ${action.module}: ${action.description}`),
+  onUsage: (entry) =>
+    console.log(`$${entry.cost.toFixed(4)} spent, $${entry.saved.toFixed(4)} saved`),
+})
 ```
 
 See [QUICKSTART.md](QUICKSTART.md) for the full configuration reference.
@@ -143,8 +126,6 @@ See [QUICKSTART.md](QUICKSTART.md) for the full configuration reference.
 ---
 
 ## React Integration
-
-17 hooks for real-time cost visibility:
 
 ```typescript
 import { TokenShieldProvider, useSavings, useBudgetAlert } from "@tokenshield/ai-sdk";
@@ -172,27 +153,32 @@ function Dashboard() {
 
 ---
 
-## Pricing
+## Runtime Compatibility
 
-| Tier | Price | Includes |
-| :--- | :--- | :--- |
-| **Community** | Free (MIT) | Token Counter, Cost Estimator, Request Guard, Cost Ledger |
-| **Pro** | $29/mo | + Response Cache, Model Router, Prefix Optimizer, Context Manager |
-| **Team** | $99/mo | + Circuit Breaker, User Budgets, Anomaly Detection, Data Export |
-| **Enterprise** | Custom | + Audit Logging, Custom Routing, Priority Support, SLA |
+| Environment            | Caching                    | All Features                 |
+| :--------------------- | :------------------------- | :--------------------------- |
+| **Browser**            | IndexedDB (persistent)     | Full support                 |
+| **Node.js**            | In-memory (per-process)    | Full support                 |
+| **Vercel Edge**        | In-memory (per-invocation) | Full support, no persistence |
+| **Cloudflare Workers** | In-memory (per-invocation) | Full support, no persistence |
 
-All features are unlocked in development. License keys are required for production use of Pro/Team/Enterprise features.
+TokenShield automatically falls back to in-memory storage when IndexedDB is unavailable. No configuration needed.
 
-```typescript
-import { activateLicense } from "@tokenshield/ai-sdk";
-activateLicense("your-license-key");
-```
+---
+
+## Known Limitations
+
+- **Not yet on npm** — install from source or git until published
+- **Client-side only** — no centralized team dashboards or cross-instance cache sharing
+- **Model routing quality is unvalidated** — complexity scoring uses heuristics, not ML. Use the `dryRun` mode or `abTestHoldback` option to compare routed vs. unrouted quality before relying on it
+- **Cache only helps with repetitive prompts** — unique prompts get no cache benefit
+- **Single maintainer** — bus factor of 1
 
 ---
 
 ## Security
 
-TokenShield is a **client-side SDK**. Your API keys and data never leave your infrastructure. No telemetry, no phone-home, no third-party data sharing.
+TokenShield is a client-side SDK. Your API keys and data never leave your infrastructure. No telemetry, no phone-home, no third-party data sharing.
 
 See [SECURITY.md](SECURITY.md) for the full trust model.
 
@@ -200,11 +186,16 @@ See [SECURITY.md](SECURITY.md) for the full trust model.
 
 ## Installation
 
+> **Note:** Not yet published to npm. Clone the repo and build from source.
+
 ```bash
-npm install @tokenshield/ai-sdk
+git clone https://github.com/tokenshield/ai-sdk.git
+cd ai-sdk
+npm install && npm run build
 ```
 
 **Peer dependencies** (optional):
+
 - `ai >= 3.0.0` — For Vercel AI SDK middleware
 - `react >= 18.0.0` — For React hooks and dashboard
 
@@ -214,10 +205,7 @@ npm install @tokenshield/ai-sdk
 
 - [Quick Start Guide](QUICKSTART.md) — Full configuration reference
 - [Security & Trust Model](SECURITY.md) — How data flows
-- [Competitive Analysis](docs/tokenshield-vs-edgee.md) — vs. Edgee, Helicone, Portkey
-- [Technical Specification](SPEC.md) — Architecture deep-dive
 - [Changelog](CHANGELOG.md) — Version history
-- [Contributing](CONTRIBUTING.md) — How to contribute
 
 ---
 

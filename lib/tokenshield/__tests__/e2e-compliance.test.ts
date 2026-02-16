@@ -135,8 +135,9 @@ describe("E2E License + Audit Compliance", () => {
     const key = generateTestKeySync("pro", "Pro User")
     await activateLicense(key)
 
-    expect(isModulePermitted("response-cache")).toBe(true) // pro
-    expect(isModulePermitted("circuit-breaker")).toBe(false) // team
+    expect(isModulePermitted("response-cache")).toBe(true) // community
+    expect(isModulePermitted("circuit-breaker")).toBe(true) // community
+    expect(isModulePermitted("user-budget-manager")).toBe(false) // team
     expect(isModulePermitted("audit-log")).toBe(false) // enterprise
   })
 
@@ -163,8 +164,9 @@ describe("E2E License + Audit Compliance", () => {
     expect(info.tier).toBe("community")
 
     // With dev mode disabled, only community modules allowed
-    expect(isModulePermitted("token-counter")).toBe(true)
-    expect(isModulePermitted("response-cache")).toBe(false)
+    expect(isModulePermitted("token-counter")).toBe(true) // community
+    expect(isModulePermitted("response-cache")).toBe(true) // community
+    expect(isModulePermitted("user-budget-manager")).toBe(false) // team
   })
 
   it("audit log survives many events without integrity loss", () => {
