@@ -1,9 +1,37 @@
+"use client"
+
+import Link from "next/link"
+import { ArrowRight, Github, Copy, Check } from "lucide-react"
+import { useState, useCallback } from "react"
+
 export function Hero() {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText("npm install tokenshield")
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }, [])
+
   return (
-    <section className="border-b border-border bg-card">
-      <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-20">
+    <section className="relative overflow-hidden bg-card">
+      {/* Grid background pattern */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage: [
+            "radial-gradient(ellipse 60% 50% at 20% 0%, hsl(152 60% 52% / 0.06), transparent)",
+            "linear-gradient(hsl(215 20% 15% / 0.5) 1px, transparent 1px)",
+            "linear-gradient(90deg, hsl(215 20% 15% / 0.5) 1px, transparent 1px)",
+          ].join(", "),
+          backgroundSize: "100% 100%, 48px 48px, 48px 48px",
+        }}
+      />
+
+      <div className="relative mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-20">
+        {/* Brand */}
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary shadow-[0_0_20px_hsl(152,60%,52%,0.3)]">
             <svg
               className="h-5 w-5 text-primary-foreground"
               fill="none"
@@ -18,43 +46,101 @@ export function Hero() {
               />
             </svg>
           </div>
-          <span className="font-mono text-lg font-bold text-foreground">TokenShield</span>
+          <span className="font-mono text-lg font-bold text-foreground">
+            <span className="text-primary">Token</span>Shield
+          </span>
         </div>
 
+        {/* Headline */}
         <h1 className="mt-6 text-balance text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-5xl sm:leading-tight">
-          Cut your LLM costs by 60-80%.
+          Cut your LLM costs by{" "}
+          <span className="inline bg-gradient-to-r from-primary to-[hsl(190,70%,50%)] bg-clip-text text-transparent">
+            60-80%
+          </span>
+          .
           <br />
-          <span className="text-primary">No backend required.</span>
+          <span className="text-primary drop-shadow-[0_0_20px_hsl(152,60%,52%,0.3)]">
+            No backend required.
+          </span>
         </h1>
 
+        {/* Description */}
         <p className="mt-4 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg sm:leading-relaxed">
           11 TypeScript modules that reduce token waste through exact BPE counting, semantic
           caching, context trimming, smart model routing, tool overhead analysis, streaming abort
           tracking, and hard spending limits. Works entirely client-side.
         </p>
 
+        {/* npm install command */}
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-          <code className="rounded-lg bg-background px-4 py-2.5 font-mono text-sm text-muted-foreground">
-            npm install tokenshield
-          </code>
+          <div className="group relative flex items-center gap-3 rounded-lg border-l-2 border-l-primary/50 bg-background px-4 py-2.5 shadow-[inset_0_0_0_1px_hsl(215,20%,20%)]">
+            <code className="font-mono text-sm text-muted-foreground">
+              npm install tokenshield
+            </code>
+            <button
+              onClick={handleCopy}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Copy to clipboard"
+            >
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-primary" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
           <span className="text-xs text-muted-foreground">2 deps: gpt-tokenizer + idb-keyval</span>
+        </div>
+
+        {/* CTA buttons */}
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-[0_0_20px_hsl(152,60%,52%,0.3)]"
+          >
+            View Live Dashboard
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+          <Link
+            href="https://github.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-5 py-2.5 text-sm font-medium text-foreground transition-all hover:border-primary/50 hover:text-primary hover:shadow-[0_0_20px_hsl(152,60%,52%,0.1)]"
+          >
+            <Github className="h-4 w-4" />
+            View on GitHub
+          </Link>
         </div>
 
         {/* Key stats */}
         <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-6">
           {[
-            { value: "11", label: "Modules" },
-            { value: "0", label: "Backend needed" },
-            { value: "BPE", label: "Exact token encoding" },
-            { value: "3", label: "Providers supported" },
+            { value: "11", label: "Modules", gradient: true },
+            { value: "0", label: "Backend needed", gradient: false },
+            { value: "BPE", label: "Exact token encoding", gradient: false },
+            { value: "3", label: "Providers supported", gradient: false },
           ].map((stat) => (
-            <div key={stat.label} className="rounded-lg bg-background p-3 sm:p-4">
-              <p className="font-mono text-xl font-bold text-primary sm:text-2xl">{stat.value}</p>
+            <div
+              key={stat.label}
+              className="rounded-lg border-l-2 border-l-primary/30 bg-background p-3 transition-all hover:border-l-primary hover:shadow-[0_0_15px_hsl(152,60%,52%,0.1)] sm:p-4"
+            >
+              <p
+                className={`font-mono text-xl font-black sm:text-2xl ${
+                  stat.gradient
+                    ? "inline bg-gradient-to-r from-primary to-[hsl(190,70%,50%)] bg-clip-text text-transparent"
+                    : "text-primary"
+                }`}
+              >
+                {stat.value}
+              </p>
               <p className="mt-0.5 text-xs text-muted-foreground sm:text-sm">{stat.label}</p>
             </div>
           ))}
         </div>
       </div>
+
+      {/* Decorative gradient line at bottom */}
+      <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
     </section>
   )
 }
