@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
-import { AuditLog, type AuditEntry, type AuditLogConfig } from "../audit-log"
+import { AuditLog, type AuditEntry } from "../audit-log"
+
+// We need access to storage-adapter for mocking hydrate/persist flows
+import * as storageAdapter from "../storage-adapter"
 
 describe("AuditLog", () => {
   let log: AuditLog
@@ -230,7 +233,11 @@ describe("AuditLog", () => {
     it("logModelRouted records model_routed event", () => {
       const entry = log.logModelRouted("gpt-4o", "gpt-4o-mini", "complexity")
       expect(entry.eventType).toBe("model_routed")
-      expect(entry.data).toEqual({ fromModel: "gpt-4o", toModel: "gpt-4o-mini", reason: "complexity" })
+      expect(entry.data).toEqual({
+        fromModel: "gpt-4o",
+        toModel: "gpt-4o-mini",
+        reason: "complexity",
+      })
     })
 
     it("logConfigChanged records config_changed event", () => {
@@ -351,12 +358,16 @@ describe("AuditLog", () => {
       log.logApiCall("gpt-4o", 1000, 500, 0.01)
       const csv = log.exportCSV()
       const lines = csv.split("\n")
-      expect(lines[0]).toBe("seq,timestamp,eventType,severity,module,userId,model,description,data,hash")
+      expect(lines[0]).toBe(
+        "seq,timestamp,eventType,severity,module,userId,model,description,data,hash",
+      )
       expect(lines).toHaveLength(2) // header + 1 entry
     })
 
     it("handles commas and quotes in data", () => {
-      log.record("api_call", "info", "test", 'Description with "quotes" and, commas', { key: "value" })
+      log.record("api_call", "info", "test", 'Description with "quotes" and, commas', {
+        key: "value",
+      })
       const csv = log.exportCSV()
       // Should have escaped quotes
       expect(csv).toContain('""')
@@ -535,6 +546,422 @@ describe("AuditLog", () => {
       expect(count).toBe(0)
       // The callback mechanism works without throwing
       expect(errors.length).toBeGreaterThanOrEqual(0)
+    })
+  })
+
+  // ===========================================================
+  // NEW TESTS — targeting uncovered branches for 85%+ coverage
+  // ===========================================================
+
+  describe("isCryptoAvailable catch block", () => {
+    it("falls back to false when accessing crypto throws", async () => {
+      // The isCryptoAvailable function caches its result in a module-level
+      // variable. To test the catch branch, we re-import the module with
+      // a poisoned globalThis.crypto. We use vi.resetModules + dynamic import.
+      const originalCrypto = globalThis.crypto
+
+      // Define a getter on globalThis.crypto that throws
+      Object.defineProperty(globalThis, "crypto", {
+        get() {
+          throw new Error("crypto not available")
+        },
+        configurable: true,
+      })
+
+      try {
+        // Reset module cache so _cryptoAvailable starts as null
+        vi.resetModules()
+        const { AuditLog: FreshAuditLog } = await import("../audit-log")
+        const freshLog = new FreshAuditLog()
+        // record() calls computeHashSync -> djb2Hash (sync path),
+        // but isCryptoAvailable() is called from computeHash.
+        // The important thing: instantiation and record succeed even when
+        // crypto access throws.
+        const entry = freshLog.record("api_call", "info", "test", "crypto broken")
+        expect(entry.seq).toBe(1)
+        // Hash should be djb2 fallback (prefixed with "djb2_")
+        expect(entry.hash).toMatch(/^djb2_/)
+      } finally {
+        // Restore original crypto
+        Object.defineProperty(globalThis, "crypto", {
+          value: originalCrypto,
+          configurable: true,
+          writable: true,
+        })
+        // Reset modules again so other tests get the original module
+        vi.resetModules()
+      }
+    })
+  })
+
+  describe("verifyIntegrity — cached result", () => {
+    it("returns cached result on second call without new records", () => {
+      log.record("api_call", "info", "test", "Entry 1")
+      log.record("api_call", "info", "test", "Entry 2")
+
+      const result1 = log.verifyIntegrity()
+      expect(result1.valid).toBe(true)
+
+      // Second call with no new records should return cached result
+      const result2 = log.verifyIntegrity()
+      expect(result2).toBe(result1) // Same object reference (cached)
+    })
+
+    it("invalidates cache when new entry is recorded", () => {
+      log.record("api_call", "info", "test", "Entry 1")
+      const result1 = log.verifyIntegrity()
+      expect(result1.valid).toBe(true)
+
+      // Record another entry — cache should be invalidated
+      log.record("api_call", "info", "test", "Entry 2")
+      const result2 = log.verifyIntegrity()
+      expect(result2.valid).toBe(true)
+      // Should be a different object since cache was invalidated
+      expect(result2).not.toBe(result1)
+    })
+  })
+
+  describe("verifyIntegrity — tampered entry detection", () => {
+    it("detects tampered entry hash", () => {
+      log.record("api_call", "info", "test", "Entry 1")
+      log.record("api_call", "info", "test", "Entry 2")
+      log.record("api_call", "info", "test", "Entry 3")
+
+      // Tamper with an entry's hash
+      // Directly mutate the internal entry (getEntries returns copies, so
+      // we need to reach the internal array). We can do this by accessing
+      // the private entries array via bracket notation.
+      const internalEntries = (log as unknown as { entries: AuditEntry[] }).entries
+      internalEntries[1].hash = "tampered_hash_value"
+
+      const result = log.verifyIntegrity()
+      expect(result.valid).toBe(false)
+      expect(result.brokenAt).toBe(2) // seq of tampered entry
+    })
+
+    it("detects tampered prevHash", () => {
+      log.record("api_call", "info", "test", "Entry 1")
+      log.record("api_call", "info", "test", "Entry 2")
+
+      const internalEntries = (log as unknown as { entries: AuditEntry[] }).entries
+      internalEntries[1].prevHash = "wrong_prev_hash"
+
+      const result = log.verifyIntegrity()
+      expect(result.valid).toBe(false)
+      expect(result.brokenAt).toBe(2)
+    })
+  })
+
+  describe("getEntries — userId and since filters", () => {
+    it("filters by userId", () => {
+      log.record("api_call", "info", "test", "User A call", {}, "user-a")
+      log.record("api_call", "info", "test", "User B call", {}, "user-b")
+      log.record("api_call", "info", "test", "User A second call", {}, "user-a")
+
+      const results = log.getEntries({ userId: "user-a" })
+      expect(results).toHaveLength(2)
+      expect(results.every((e) => e.userId === "user-a")).toBe(true)
+    })
+
+    it("filters by since timestamp", () => {
+      // Record an entry, note its time, then wait and record another
+      const before = Date.now()
+      log.record("api_call", "info", "test", "Old entry")
+
+      // Use a since value in the past to capture all entries
+      const results = log.getEntries({ since: before })
+      expect(results).toHaveLength(1)
+      expect(results[0].description).toBe("Old entry")
+    })
+
+    it("filters by since excludes older entries", () => {
+      // Insert entries with known timestamps by manipulating the internal entries
+      const oldDate = new Date("2020-01-01T00:00:00Z")
+      const newDate = new Date("2025-01-01T00:00:00Z")
+
+      // Record two entries
+      log.record("api_call", "info", "test", "Old entry")
+      log.record("api_call", "info", "test", "New entry")
+
+      const internalEntries = (log as unknown as { entries: AuditEntry[] }).entries
+      internalEntries[0].timestamp = oldDate.toISOString()
+      internalEntries[1].timestamp = newDate.toISOString()
+
+      const cutoff = new Date("2024-01-01T00:00:00Z").getTime()
+      const results = log.getEntries({ since: cutoff })
+      expect(results).toHaveLength(1)
+      expect(results[0].description).toBe("New entry")
+    })
+
+    it("combines multiple filters", () => {
+      log.record("api_call", "info", "middleware", "Call A", {}, "user-a")
+      log.record("request_blocked", "warn", "request-guard", "Block B", {}, "user-b")
+      log.record("api_call", "warn", "middleware", "Call C", {}, "user-a")
+
+      const results = log.getEntries({ userId: "user-a", severity: "warn" })
+      expect(results).toHaveLength(1)
+      expect(results[0].description).toBe("Call C")
+    })
+  })
+
+  describe("exportCSV — newline escaping", () => {
+    it("escapes values containing newlines", () => {
+      log.record("api_call", "info", "test", "Line1\nLine2", { key: "val" })
+      const csv = log.exportCSV()
+      // The description contains a newline, so it should be quoted
+      expect(csv).toContain('"Line1\nLine2"')
+    })
+
+    it("escapes values containing commas and quotes combined", () => {
+      log.record("api_call", "info", "test", 'He said "hello, world"', { key: "value" })
+      const csv = log.exportCSV()
+      // Should have escaped quotes and be wrapped
+      expect(csv).toContain('"He said ""hello, world"""')
+    })
+  })
+
+  describe("hydrate — with stored entries", () => {
+    it("restores entries, seq, and lastHash from storage", async () => {
+      // Mock the storage-adapter's get to return stored entries
+      const fakeEntries: AuditEntry[] = [
+        {
+          seq: 10,
+          timestamp: "2025-01-01T00:00:00.000Z",
+          eventType: "api_call",
+          severity: "info",
+          module: "test",
+          description: "Stored entry 1",
+          data: {},
+          prevHash: "genesis",
+          hash: "djb2_abc123",
+        },
+        {
+          seq: 11,
+          timestamp: "2025-01-01T00:00:01.000Z",
+          eventType: "cache_hit",
+          severity: "info",
+          module: "test",
+          description: "Stored entry 2",
+          data: {},
+          prevHash: "djb2_abc123",
+          hash: "djb2_def456",
+        },
+      ]
+
+      const getSpy = vi.spyOn(storageAdapter, "get").mockResolvedValueOnce(fakeEntries)
+
+      const hydrateLog = new AuditLog({
+        persist: true,
+        storageKey: "test_hydrate_restore",
+      })
+
+      const count = await hydrateLog.hydrate()
+      expect(count).toBe(2)
+      expect(hydrateLog.size).toBe(2)
+
+      // New entry should continue from seq 12 with lastHash = "djb2_def456"
+      const newEntry = hydrateLog.record("api_call", "info", "test", "After hydrate")
+      expect(newEntry.seq).toBe(12)
+      expect(newEntry.prevHash).toBe("djb2_def456")
+
+      getSpy.mockRestore()
+    })
+
+    it("returns 0 when stored value is not an array", async () => {
+      const getSpy = vi.spyOn(storageAdapter, "get").mockResolvedValueOnce("not-an-array")
+
+      const hydrateLog = new AuditLog({
+        persist: true,
+        storageKey: "test_hydrate_bad_data",
+      })
+
+      const count = await hydrateLog.hydrate()
+      expect(count).toBe(0)
+      expect(hydrateLog.size).toBe(0)
+
+      getSpy.mockRestore()
+    })
+
+    it("returns 0 when persist is disabled", async () => {
+      const hydrateLog = new AuditLog({ persist: false })
+      const count = await hydrateLog.hydrate()
+      expect(count).toBe(0)
+    })
+  })
+
+  describe("hydrate — IDB read failure", () => {
+    it("calls onPersistError when storage get throws", async () => {
+      const errors: unknown[] = []
+      const getSpy = vi
+        .spyOn(storageAdapter, "get")
+        .mockRejectedValueOnce(new Error("IDB read failed"))
+
+      const hydrateLog = new AuditLog({
+        persist: true,
+        storageKey: "test_hydrate_idb_fail",
+        onPersistError: (err) => errors.push(err),
+      })
+
+      const count = await hydrateLog.hydrate()
+      expect(count).toBe(0)
+      expect(errors).toHaveLength(1)
+      expect((errors[0] as Error).message).toBe("IDB read failed")
+
+      getSpy.mockRestore()
+    })
+  })
+
+  describe("clear — persist:true IDB failure", () => {
+    it("calls onPersistError when IDB set fails during clear", async () => {
+      const errors: unknown[] = []
+      const setSpy = vi
+        .spyOn(storageAdapter, "set")
+        .mockRejectedValueOnce(new Error("IDB write failed"))
+
+      const clearLog = new AuditLog({
+        persist: true,
+        storageKey: "test_clear_idb_fail",
+        onPersistError: (err) => errors.push(err),
+      })
+      clearLog.record("api_call", "info", "test", "Entry")
+
+      await clearLog.clear()
+      expect(clearLog.size).toBe(0)
+      expect(errors).toHaveLength(1)
+      expect((errors[0] as Error).message).toBe("IDB write failed")
+
+      setSpy.mockRestore()
+    })
+  })
+
+  describe("schedulePersist — debounce behavior", () => {
+    it("coalesces multiple records into one persist call", async () => {
+      vi.useFakeTimers()
+      try {
+        const setSpy = vi.spyOn(storageAdapter, "set").mockResolvedValue(undefined)
+
+        const persistLog = new AuditLog({
+          persist: true,
+          storageKey: "test_debounce",
+        })
+
+        // Record multiple entries rapidly
+        persistLog.record("api_call", "info", "test", "Entry 1")
+        persistLog.record("api_call", "info", "test", "Entry 2")
+        persistLog.record("api_call", "info", "test", "Entry 3")
+
+        // Advance timer past the 1s debounce
+        await vi.advanceTimersByTimeAsync(1100)
+
+        // set should have been called exactly once (debounced)
+        const persistCalls = setSpy.mock.calls.filter((call) => call[0] === "test_debounce")
+        expect(persistCalls).toHaveLength(1)
+
+        setSpy.mockRestore()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+  })
+
+  describe("exportJSON — includes integrity and triggers logExportRequested", () => {
+    it("includes integrity check result in exported JSON", () => {
+      log.record("api_call", "info", "test", "Entry 1")
+      log.record("api_call", "info", "test", "Entry 2")
+
+      const json = log.exportJSON()
+      const parsed = JSON.parse(json)
+      expect(parsed.integrity).toEqual({ valid: true })
+      expect(parsed.totalEntries).toBe(2)
+      // exportJSON should have added an export_requested entry
+      expect(log.size).toBe(3)
+    })
+  })
+
+  describe("record — minSeverity filter returns noop entry", () => {
+    it("returns noop entry (seq=-1) for filtered severity", () => {
+      const errorLog = new AuditLog({ minSeverity: "error" })
+      const entry = errorLog.record("api_call", "info", "test", "Filtered out")
+      expect(entry.seq).toBe(-1)
+      expect(entry.hash).toBe("")
+      expect(entry.prevHash).toBe("")
+      expect(entry.data).toEqual({})
+      expect(errorLog.size).toBe(0)
+    })
+  })
+
+  describe("record — eventTypes filter returns noop entry", () => {
+    it("returns noop entry when event type not in allowed list", () => {
+      const filteredLog = new AuditLog({ eventTypes: ["api_call"] })
+      const entry = filteredLog.record("cache_hit", "info", "test", "Not in list")
+      expect(entry.seq).toBe(-1)
+      expect(entry.hash).toBe("")
+      expect(filteredLog.size).toBe(0)
+    })
+  })
+
+  describe("convenience methods — logCompressorApplied and logDeltaApplied descriptions", () => {
+    it("logCompressorApplied includes token counts in description", () => {
+      const entry = log.logCompressorApplied(200, 1000, 800)
+      expect(entry.description).toContain("200")
+      expect(entry.description).toContain("1000")
+      expect(entry.description).toContain("800")
+      expect(entry.module).toBe("prompt-compressor")
+    })
+
+    it("logDeltaApplied includes token counts in description", () => {
+      const entry = log.logDeltaApplied(150, 900, 750)
+      expect(entry.description).toContain("150")
+      expect(entry.description).toContain("900")
+      expect(entry.description).toContain("750")
+      expect(entry.module).toBe("delta-encoder")
+    })
+  })
+
+  describe("hydrate — restores empty array", () => {
+    it("handles empty stored array gracefully", async () => {
+      const getSpy = vi.spyOn(storageAdapter, "get").mockResolvedValueOnce([])
+
+      const hydrateLog = new AuditLog({
+        persist: true,
+        storageKey: "test_hydrate_empty",
+      })
+
+      const count = await hydrateLog.hydrate()
+      expect(count).toBe(0)
+      expect(hydrateLog.size).toBe(0)
+
+      // After hydrating empty, new entries should start from seq 1 with genesis
+      const entry = hydrateLog.record("api_call", "info", "test", "First after empty hydrate")
+      expect(entry.seq).toBe(1)
+      expect(entry.prevHash).toBe("genesis")
+
+      getSpy.mockRestore()
+    })
+  })
+
+  describe("dispose — with active persist timer", () => {
+    it("clears the persist timer so it does not fire after dispose", () => {
+      vi.useFakeTimers()
+      try {
+        const setSpy = vi.spyOn(storageAdapter, "set").mockResolvedValue(undefined)
+        const persistLog = new AuditLog({
+          persist: true,
+          storageKey: "test_dispose_active",
+        })
+        // Record triggers schedulePersist
+        persistLog.record("api_call", "info", "test", "Before dispose")
+        // Dispose cancels the timer
+        persistLog.dispose()
+        // Advance past debounce
+        vi.advanceTimersByTime(2000)
+        // set should NOT have been called because dispose cancelled the timer
+        const persistCalls = setSpy.mock.calls.filter((call) => call[0] === "test_dispose_active")
+        expect(persistCalls).toHaveLength(0)
+        setSpy.mockRestore()
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 })

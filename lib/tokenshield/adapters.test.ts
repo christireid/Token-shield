@@ -367,3 +367,426 @@ describe("createStreamAdapter", () => {
     shield.dispose()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Additional branch-coverage tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a mock shield whose transformParams returns the params as-is
+ * and whose wrapGenerate / wrapStream execute the provided callback directly.
+ * Optionally, transformParams can be overridden to inject custom transformed values.
+ */
+function createMockShield(overrides?: {
+  transformParams?: (args: { params: Record<string, unknown> }) => Promise<Record<string, unknown>>
+}) {
+  return {
+    transformParams:
+      overrides?.transformParams ??
+      (async ({ params }: { params: Record<string, unknown> }) => params),
+    wrapGenerate: async ({
+      doGenerate,
+    }: {
+      doGenerate: () => Promise<Record<string, unknown>>
+      params: Record<string, unknown>
+    }) => doGenerate(),
+    wrapStream: async ({
+      doStream,
+    }: {
+      doStream: () => Promise<{ stream: ReadableStream }>
+      params: Record<string, unknown>
+    }) => doStream(),
+    dispose: () => {},
+  } as unknown as ReturnType<typeof tokenShieldMiddleware>
+}
+
+describe("fromAiSdkPrompt — non-array / empty content branch", () => {
+  it("returns empty string when m.content is not an array (OpenAI adapter)", async () => {
+    // Override transformParams to inject a prompt entry where content is a plain string
+    // instead of an array, triggering the `""` fallback in fromAiSdkPrompt.
+    const shield = createMockShield({
+      transformParams: async ({ params }) => ({
+        ...params,
+        prompt: [
+          { role: "user", content: "not-an-array" as unknown }, // content is a string, not array
+        ],
+      }),
+    })
+
+    const createFn = vi.fn().mockResolvedValue({
+      choices: [{ message: { content: "response" }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 5, completion_tokens: 3 },
+    })
+
+    const chat = createOpenAIAdapter(shield, createFn, { defaultModel: "gpt-4o" })
+    await chat({ messages: [{ role: "user", content: "Hello" }] })
+
+    const calledParams = createFn.mock.calls[0][0]
+    // The message content should be "" because the content was not an array
+    expect(calledParams.messages[0].content).toBe("")
+  })
+
+  it("returns empty string when m.content is an empty array (OpenAI adapter)", async () => {
+    const shield = createMockShield({
+      transformParams: async ({ params }) => ({
+        ...params,
+        prompt: [
+          { role: "user", content: [] }, // empty array
+        ],
+      }),
+    })
+
+    const createFn = vi.fn().mockResolvedValue({
+      choices: [{ message: { content: "ok" }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    })
+
+    const chat = createOpenAIAdapter(shield, createFn, { defaultModel: "gpt-4o" })
+    await chat({ messages: [{ role: "user", content: "Hello" }] })
+
+    const calledParams = createFn.mock.calls[0][0]
+    expect(calledParams.messages[0].content).toBe("")
+  })
+
+  it("returns empty string when m.content is not an array (Anthropic adapter)", async () => {
+    const shield = createMockShield({
+      transformParams: async ({ params }) => ({
+        ...params,
+        prompt: [
+          { role: "user", content: 42 as unknown }, // content is a number, not array
+        ],
+      }),
+    })
+
+    const createFn = vi.fn().mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+      stop_reason: "end_turn",
+    })
+
+    const chat = createAnthropicAdapter(shield, createFn, {
+      defaultModel: "claude-sonnet-4-20250514",
+    })
+    await chat({ messages: [{ role: "user", content: "Hello" }] })
+
+    const calledParams = createFn.mock.calls[0][0]
+    // The non-system message should have content "" since the prompt content was not an array
+    expect(calledParams.messages[0].content).toBe("")
+  })
+})
+
+describe("createGenericAdapter — modelId fallback to 'unknown'", () => {
+  it("falls through to 'unknown' when paramModelId is undefined and no options provided", async () => {
+    const shield = createMinimalShield()
+    const callFn = vi.fn().mockResolvedValue({ text: "ok" })
+
+    // No options passed at all (no modelId in options)
+    const call = createGenericAdapter(shield, callFn)
+    await call({ messages: [{ role: "user", content: "test" }] })
+
+    const calledParams = callFn.mock.calls[0][0]
+    expect(calledParams.modelId).toBe("unknown")
+    shield.dispose()
+  })
+
+  it("falls through to 'unknown' when paramModelId is undefined and options.modelId is undefined", async () => {
+    const shield = createMinimalShield()
+    const callFn = vi.fn().mockResolvedValue({ text: "ok" })
+
+    // Pass options but without modelId
+    const call = createGenericAdapter(shield, callFn, undefined)
+    await call({ messages: [{ role: "user", content: "test" }] })
+
+    const calledParams = callFn.mock.calls[0][0]
+    expect(calledParams.modelId).toBe("unknown")
+    shield.dispose()
+  })
+})
+
+describe("createAnthropicAdapter — no system messages branch", () => {
+  it("does NOT set the system param when there are no system messages", async () => {
+    const shield = createMinimalShield()
+    const createFn = vi.fn().mockResolvedValue({
+      content: [{ type: "text", text: "response" }],
+      usage: { input_tokens: 5, output_tokens: 3 },
+      stop_reason: "end_turn",
+    })
+
+    const chat = createAnthropicAdapter(shield, createFn, {
+      defaultModel: "claude-sonnet-4-20250514",
+      defaultMaxTokens: 512,
+    })
+    await chat({
+      messages: [{ role: "user", content: "Hello, no system message here" }],
+    })
+
+    const calledParams = createFn.mock.calls[0][0]
+    // The system param should NOT be present
+    expect(calledParams.system).toBeUndefined()
+    // Only user messages should be in messages
+    expect(calledParams.messages).toHaveLength(1)
+    expect(calledParams.messages[0].role).toBe("user")
+    shield.dispose()
+  })
+})
+
+describe("createAnthropicAdapter — modelId and max_tokens fallback branches", () => {
+  it("uses fallback modelId when transformed.modelId is undefined", async () => {
+    // Use a mock shield that strips modelId from transformed params
+    const shield = createMockShield({
+      transformParams: async ({ params }) => {
+        const { modelId: _modelId, ...rest } = params
+        return rest // modelId is now undefined in transformed
+      },
+    })
+
+    const createFn = vi.fn().mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    })
+
+    const chat = createAnthropicAdapter(shield, createFn, {
+      defaultModel: "claude-sonnet-4-20250514",
+      defaultMaxTokens: 1024,
+    })
+    await chat({ messages: [{ role: "user", content: "test" }] })
+
+    const calledParams = createFn.mock.calls[0][0]
+    // Should fall back to the local modelId variable ("claude-sonnet-4-20250514")
+    expect(calledParams.model).toBe("claude-sonnet-4-20250514")
+  })
+
+  it("uses fallback max_tokens when transformed.max_tokens is undefined", async () => {
+    // Use a mock shield that strips max_tokens from transformed params
+    const shield = createMockShield({
+      transformParams: async ({ params }) => {
+        const { max_tokens: _max_tokens, ...rest } = params
+        return rest // max_tokens is now undefined in transformed
+      },
+    })
+
+    const createFn = vi.fn().mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    })
+
+    const chat = createAnthropicAdapter(shield, createFn, {
+      defaultModel: "claude-sonnet-4-20250514",
+      defaultMaxTokens: 2048,
+    })
+    await chat({ messages: [{ role: "user", content: "test" }] })
+
+    const calledParams = createFn.mock.calls[0][0]
+    // Should fall back to the local maxTokens variable (2048)
+    expect(calledParams.max_tokens).toBe(2048)
+  })
+})
+
+describe("createAnthropicAdapter — undefined content and usage in response", () => {
+  it("handles undefined content blocks in the Anthropic response", async () => {
+    const shield = createMinimalShield()
+    const createFn = vi.fn().mockResolvedValue({
+      // No 'content' field at all
+      stop_reason: "end_turn",
+    })
+
+    const chat = createAnthropicAdapter(shield, createFn, {
+      defaultModel: "claude-sonnet-4-20250514",
+    })
+    const result = await chat({
+      messages: [{ role: "user", content: "test" }],
+    })
+
+    // Should not throw; the adapter handles undefined contentBlocks gracefully
+    expect(result).toBeDefined()
+    shield.dispose()
+  })
+
+  it("handles undefined usage in the Anthropic response", async () => {
+    const shield = createMinimalShield()
+    const createFn = vi.fn().mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      // No 'usage' field
+      stop_reason: "end_turn",
+    })
+
+    const chat = createAnthropicAdapter(shield, createFn, {
+      defaultModel: "claude-sonnet-4-20250514",
+    })
+    const result = await chat({
+      messages: [{ role: "user", content: "test" }],
+    })
+
+    // Should not throw; the adapter handles undefined usage gracefully
+    expect(result).toBeDefined()
+    shield.dispose()
+  })
+
+  it("handles response with no content, no usage, and no stop_reason", async () => {
+    const shield = createMinimalShield()
+    const createFn = vi.fn().mockResolvedValue({})
+
+    const chat = createAnthropicAdapter(shield, createFn, {
+      defaultModel: "claude-sonnet-4-20250514",
+    })
+    const result = await chat({
+      messages: [{ role: "user", content: "test" }],
+    })
+
+    expect(result).toBeDefined()
+    shield.dispose()
+  })
+})
+
+describe("createStreamAdapter — modelId fallback to 'unknown'", () => {
+  it("falls through to 'unknown' when paramModelId is undefined and no options provided", async () => {
+    const shield = createMinimalShield()
+    const streamFn = vi.fn().mockResolvedValue(
+      new ReadableStream({
+        start(c) {
+          c.close()
+        },
+      }),
+    )
+
+    // No options at all
+    const stream = createStreamAdapter(shield, streamFn)
+    const result = await stream({
+      messages: [{ role: "user", content: "test" }],
+    })
+
+    expect(result).toBeInstanceOf(ReadableStream)
+    const calledParams = streamFn.mock.calls[0][0]
+    expect(calledParams.modelId).toBe("unknown")
+    shield.dispose()
+  })
+
+  it("falls through to 'unknown' when paramModelId is undefined and options is undefined", async () => {
+    const shield = createMinimalShield()
+    const streamFn = vi.fn().mockResolvedValue(
+      new ReadableStream({
+        start(c) {
+          c.close()
+        },
+      }),
+    )
+
+    const stream = createStreamAdapter(shield, streamFn, undefined)
+    const result = await stream({
+      messages: [{ role: "user", content: "test" }],
+    })
+
+    expect(result).toBeInstanceOf(ReadableStream)
+    const calledParams = streamFn.mock.calls[0][0]
+    expect(calledParams.modelId).toBe("unknown")
+    shield.dispose()
+  })
+})
+
+describe("createAnthropicAdapter — transformed.prompt fallback branch", () => {
+  it("uses the original prompt when transformed.prompt is undefined", async () => {
+    // Mock shield that strips 'prompt' from transformed output
+    const shield = createMockShield({
+      transformParams: async ({ params }) => {
+        const { prompt: _prompt, ...rest } = params
+        return rest // prompt is now undefined in transformed
+      },
+    })
+
+    const createFn = vi.fn().mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+      stop_reason: "end_turn",
+    })
+
+    const chat = createAnthropicAdapter(shield, createFn, {
+      defaultModel: "claude-sonnet-4-20250514",
+    })
+    await chat({
+      messages: [{ role: "user", content: "Hello from fallback test" }],
+    })
+
+    const calledParams = createFn.mock.calls[0][0]
+    // Even without transformed.prompt, the original prompt should be used
+    expect(calledParams.messages).toBeDefined()
+    expect(calledParams.messages[0].content).toBe("Hello from fallback test")
+  })
+})
+
+describe("createAnthropicAdapter — content block edge cases", () => {
+  it("handles content blocks with undefined text (b.text ?? '')", async () => {
+    const shield = createMinimalShield()
+    const createFn = vi.fn().mockResolvedValue({
+      content: [{ type: "text" /* text is undefined */ }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+      stop_reason: "end_turn",
+    })
+
+    const chat = createAnthropicAdapter(shield, createFn, {
+      defaultModel: "claude-sonnet-4-20250514",
+    })
+    const result = await chat({
+      messages: [{ role: "user", content: "test" }],
+    })
+
+    expect(result).toBeDefined()
+    shield.dispose()
+  })
+
+  it("handles content blocks with undefined type (b.type === undefined)", async () => {
+    const shield = createMinimalShield()
+    const createFn = vi.fn().mockResolvedValue({
+      content: [{ text: "block with no type" /* type is undefined */ }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+      stop_reason: "end_turn",
+    })
+
+    const chat = createAnthropicAdapter(shield, createFn, {
+      defaultModel: "claude-sonnet-4-20250514",
+    })
+    const result = await chat({
+      messages: [{ role: "user", content: "test" }],
+    })
+
+    expect(result).toBeDefined()
+    shield.dispose()
+  })
+
+  it("handles usage with missing output_tokens", async () => {
+    const shield = createMinimalShield()
+    const createFn = vi.fn().mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      usage: { input_tokens: 5 /* output_tokens is missing */ },
+      stop_reason: "end_turn",
+    })
+
+    const chat = createAnthropicAdapter(shield, createFn, {
+      defaultModel: "claude-sonnet-4-20250514",
+    })
+    const result = await chat({
+      messages: [{ role: "user", content: "test" }],
+    })
+
+    expect(result).toBeDefined()
+    shield.dispose()
+  })
+
+  it("handles usage with missing input_tokens", async () => {
+    const shield = createMinimalShield()
+    const createFn = vi.fn().mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      usage: { output_tokens: 3 /* input_tokens is missing */ },
+      stop_reason: "end_turn",
+    })
+
+    const chat = createAnthropicAdapter(shield, createFn, {
+      defaultModel: "claude-sonnet-4-20250514",
+    })
+    const result = await chat({
+      messages: [{ role: "user", content: "test" }],
+    })
+
+    expect(result).toBeDefined()
+    shield.dispose()
+  })
+})

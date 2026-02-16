@@ -1,5 +1,34 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+
+import {
+  MAX_TRACKED_USERS,
+  MAX_CACHE_SIZE,
+  MAX_BUDGET_RECORDS,
+  THIRTY_DAYS_MS,
+  ONE_DAY_MS,
+} from "./user-budget-types"
+
+// Hoisted mock functions for the storage adapter
+const mockGet = vi.hoisted(() => vi.fn())
+const mockSet = vi.hoisted(() => vi.fn())
+const mockCreateStore = vi.hoisted(() => vi.fn())
+vi.mock("./storage-adapter", () => ({
+  get: (...args: unknown[]) => mockGet(...args),
+  set: (...args: unknown[]) => mockSet(...args),
+  createStore: (...args: unknown[]) => mockCreateStore(...args),
+}))
+
 import { UserBudgetManager } from "./user-budget-manager"
+
+// Reset storage mocks before every test so non-IDB tests are unaffected
+beforeEach(() => {
+  mockGet.mockReset()
+  mockSet.mockReset()
+  mockCreateStore.mockReset()
+  mockGet.mockResolvedValue(undefined)
+  mockSet.mockResolvedValue(undefined)
+  mockCreateStore.mockReturnValue("mock-idb-store")
+})
 
 describe("UserBudgetManager", () => {
   let manager: UserBudgetManager
@@ -287,5 +316,560 @@ describe("UserBudgetManager", () => {
 
     // Inflight should be zero — released by estimated amount, not actual
     expect(manager.getStatus("user-1").inflight).toBe(0)
+  })
+})
+
+// -------------------------------------------------------
+// Constructor: IDB unavailable catch block (line 78)
+// -------------------------------------------------------
+
+describe("UserBudgetManager constructor IDB catch block", () => {
+  const origWindow = globalThis.window
+
+  afterEach(() => {
+    if (origWindow === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (globalThis as any).window
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(globalThis as any).window = origWindow
+    }
+  })
+
+  it("swallows createStore error when IDB is unavailable", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(globalThis as any).window = {}
+    mockCreateStore.mockImplementation(() => {
+      throw new Error("IDB not available")
+    })
+
+    // Should not throw — the catch block silences the error
+    const mgr = new UserBudgetManager({ persist: true })
+    expect(mgr).toBeTruthy()
+    // hydrate returns 0 because idbStore is null (catch swallowed the error)
+    await expect(mgr.hydrate()).resolves.toBe(0)
+  })
+})
+
+// -------------------------------------------------------
+// check(): Inflight FIFO eviction (lines 262-264)
+// -------------------------------------------------------
+
+describe("UserBudgetManager check() inflight FIFO eviction", () => {
+  it("evicts oldest inflight entry when inflightByUser exceeds MAX_TRACKED_USERS", () => {
+    const mgr = new UserBudgetManager({
+      defaultBudget: { daily: 999999, monthly: 999999 },
+    })
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mgrAny = mgr as any
+
+    // Directly fill the inflightByUser map to MAX_TRACKED_USERS
+    for (let i = 0; i < MAX_TRACKED_USERS; i++) {
+      mgrAny.inflightByUser.set(`user-fifo-${i}`, 0.001)
+    }
+    expect(mgrAny.inflightByUser.size).toBe(MAX_TRACKED_USERS)
+
+    // The first user should have inflight reserved
+    expect(mgrAny.inflightByUser.has("user-fifo-0")).toBe(true)
+    expect(mgrAny.inflightByUser.get("user-fifo-0")).toBe(0.001)
+
+    // Add one more via check() — triggers FIFO eviction since size > MAX_TRACKED_USERS
+    mgr.check(`user-fifo-overflow`, "gpt-4o-mini", 1000, 500)
+
+    // user-fifo-0 was the first inserted, so it should be evicted (FIFO)
+    expect(mgrAny.inflightByUser.has("user-fifo-0")).toBe(false)
+    // The newly added user should still have inflight
+    expect(mgrAny.inflightByUser.has("user-fifo-overflow")).toBe(true)
+    expect(mgrAny.inflightByUser.get("user-fifo-overflow")).toBeGreaterThan(0)
+    // Map should be back to MAX_TRACKED_USERS size
+    expect(mgrAny.inflightByUser.size).toBe(MAX_TRACKED_USERS)
+  })
+})
+
+// -------------------------------------------------------
+// recordSpend(): Partial inflight release (line 296, remaining > 0)
+// -------------------------------------------------------
+
+describe("UserBudgetManager recordSpend() partial inflight release", () => {
+  it("keeps remaining inflight when estimated cost is less than total inflight", async () => {
+    const mgr = new UserBudgetManager({
+      users: { u1: { daily: 999, monthly: 9999 } },
+    })
+
+    // Reserve two separate inflight amounts for the same user
+    mgr.check("u1", "gpt-4o-mini", 1000, 500)
+    const inflight1 = mgr.getStatus("u1").inflight
+    mgr.check("u1", "gpt-4o-mini", 1000, 500)
+    const inflightTotal = mgr.getStatus("u1").inflight
+    expect(inflightTotal).toBeGreaterThan(inflight1)
+
+    // Release only the first estimated cost — remaining should be > 0
+    await mgr.recordSpend("u1", 0.001, "gpt-4o-mini", inflight1)
+    const remaining = mgr.getStatus("u1").inflight
+    expect(remaining).toBeGreaterThan(0)
+    expect(remaining).toBeCloseTo(inflightTotal - inflight1, 10)
+  })
+})
+
+// -------------------------------------------------------
+// recordSpend(): Zero-cost response (line 305)
+// -------------------------------------------------------
+
+describe("UserBudgetManager recordSpend() zero-cost response", () => {
+  it("releases inflight and notifies subscribers on cost === 0", async () => {
+    const mgr = new UserBudgetManager({
+      users: { u1: { daily: 999, monthly: 9999 } },
+    })
+    const listener = vi.fn()
+    mgr.subscribe(listener)
+
+    // Reserve inflight
+    mgr.check("u1", "gpt-4o-mini", 1000, 500)
+    const inflight = mgr.getStatus("u1").inflight
+    expect(inflight).toBeGreaterThan(0)
+
+    // Record zero-cost spend with the estimated cost
+    await mgr.recordSpend("u1", 0, "gpt-4o-mini", inflight)
+
+    // Inflight should be released
+    expect(mgr.getStatus("u1").inflight).toBe(0)
+    // Subscriber should have been notified
+    expect(listener).toHaveBeenCalled()
+    // No spend record should be created (daily spend should remain 0)
+    expect(mgr.getStatus("u1").spend.daily).toBe(0)
+  })
+})
+
+// -------------------------------------------------------
+// recordSpend(): MAX_BUDGET_RECORDS cap (lines 322-323)
+// -------------------------------------------------------
+
+describe("UserBudgetManager recordSpend() MAX_BUDGET_RECORDS cap", () => {
+  it("caps records at MAX_BUDGET_RECORDS by slicing to the most recent", async () => {
+    const mgr = new UserBudgetManager({
+      users: { u1: { daily: 0, monthly: 0 } }, // no limits
+    })
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mgrAny = mgr as any
+
+    // Directly inject MAX_BUDGET_RECORDS records into the internal array
+    const now = Date.now()
+    const records = []
+    for (let i = 0; i < MAX_BUDGET_RECORDS; i++) {
+      records.push({ timestamp: now - i, cost: 0.0001, model: "gpt-4o-mini", userId: "u1" })
+    }
+    mgrAny.records = records
+    expect(mgrAny.records.length).toBe(MAX_BUDGET_RECORDS)
+
+    // Add one more via recordSpend — this should trigger the cap slice
+    await mgr.recordSpend("u1", 999.0, "gpt-4o-mini")
+
+    // After the cap, records should be sliced to MAX_BUDGET_RECORDS
+    expect(mgrAny.records.length).toBeLessThanOrEqual(MAX_BUDGET_RECORDS)
+    // The most recent record (999.0) should be in the array
+    const last = mgrAny.records[mgrAny.records.length - 1]
+    expect(last.cost).toBe(999.0)
+  })
+})
+
+// -------------------------------------------------------
+// recordSpend(): IDB write failure (line 330)
+// -------------------------------------------------------
+
+describe("UserBudgetManager recordSpend() IDB write failure", () => {
+  const origWindow = globalThis.window
+
+  beforeEach(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(globalThis as any).window = {}
+  })
+
+  afterEach(() => {
+    if (origWindow === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (globalThis as any).window
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(globalThis as any).window = origWindow
+    }
+  })
+
+  it("silently swallows IDB set error and keeps data in memory", async () => {
+    mockCreateStore.mockReturnValue("mock-idb-store")
+    mockSet.mockRejectedValueOnce(new Error("IDB quota exceeded"))
+
+    const mgr = new UserBudgetManager({ persist: true })
+    // Should not throw
+    await mgr.recordSpend("u1", 1.0, "gpt-4o-mini")
+    // Data should still be in memory
+    const status = mgr.getStatus("u1")
+    expect(status.spend.daily).toBe(1.0)
+  })
+})
+
+// -------------------------------------------------------
+// Monthly warning reset after 30 days (lines 207-209)
+// -------------------------------------------------------
+
+describe("UserBudgetManager monthly warning reset after 30 days", () => {
+  it("re-fires monthly warning after 30 days have passed", async () => {
+    const onWarning = vi.fn()
+    const mgr = new UserBudgetManager({
+      users: { u1: { daily: 0, monthly: 10.0 } },
+      onBudgetWarning: onWarning,
+    })
+
+    // Spend 80% of monthly limit to trigger warning
+    await mgr.recordSpend("u1", 8.0, "gpt-4o-mini")
+    mgr.check("u1")
+    expect(onWarning).toHaveBeenCalledTimes(1)
+    expect(onWarning.mock.calls[0][1].limitType).toBe("monthly")
+
+    // check again — warning should NOT fire again (deduped)
+    mgr.check("u1")
+    expect(onWarning).toHaveBeenCalledTimes(1)
+
+    // Advance time past 30 days so the monthly warning resets
+    const originalDateNow = Date.now
+    const thirtyOneDays = THIRTY_DAYS_MS + ONE_DAY_MS
+    Date.now = () => originalDateNow() + thirtyOneDays
+
+    try {
+      // Need fresh spend records in the new time window
+      await mgr.recordSpend("u1", 8.5, "gpt-4o-mini")
+      mgr.check("u1")
+      // Warning should fire again since the old one expired
+      expect(onWarning).toHaveBeenCalledTimes(2)
+      expect(onWarning.mock.calls[1][1].limitType).toBe("monthly")
+    } finally {
+      Date.now = originalDateNow
+    }
+  })
+})
+
+// -------------------------------------------------------
+// Monthly budget exceeded path (lines 232-252)
+// -------------------------------------------------------
+
+describe("UserBudgetManager monthly budget exceeded", () => {
+  it("fires onBudgetExceeded and blocks when monthly limit hit", async () => {
+    const onExceeded = vi.fn()
+    const mgr = new UserBudgetManager({
+      users: { u1: { daily: 0, monthly: 5.0 } }, // no daily limit, monthly=5
+      onBudgetExceeded: onExceeded,
+    })
+
+    await mgr.recordSpend("u1", 5.0, "gpt-4o-mini")
+    const result = mgr.check("u1")
+    expect(result.allowed).toBe(false)
+    expect(result.reason).toContain("monthly")
+    expect(onExceeded).toHaveBeenCalledTimes(1)
+    expect(onExceeded.mock.calls[0][0]).toBe("u1")
+    expect(onExceeded.mock.calls[0][1].limitType).toBe("monthly")
+  })
+
+  it("fires monthly warning callback at 80% of monthly limit", async () => {
+    const onWarning = vi.fn()
+    const mgr = new UserBudgetManager({
+      users: { u1: { daily: 0, monthly: 10.0 } },
+      onBudgetWarning: onWarning,
+    })
+
+    await mgr.recordSpend("u1", 8.0, "gpt-4o-mini")
+    mgr.check("u1")
+    expect(onWarning).toHaveBeenCalledTimes(1)
+    expect(onWarning.mock.calls[0][1].limitType).toBe("monthly")
+    expect(onWarning.mock.calls[0][1].percentUsed).toBeGreaterThanOrEqual(80)
+  })
+})
+
+// -------------------------------------------------------
+// releaseInflight(): Partial release (remaining > 0)
+// -------------------------------------------------------
+
+describe("UserBudgetManager releaseInflight() partial release", () => {
+  it("keeps remaining inflight when released amount is less than total", () => {
+    const mgr = new UserBudgetManager({
+      users: { u1: { daily: 999, monthly: 9999 } },
+    })
+
+    // Reserve two inflight amounts
+    mgr.check("u1", "gpt-4o-mini", 1000, 500)
+    const inflight1 = mgr.getStatus("u1").inflight
+    mgr.check("u1", "gpt-4o-mini", 1000, 500)
+    const inflightTotal = mgr.getStatus("u1").inflight
+    expect(inflightTotal).toBeGreaterThan(inflight1)
+
+    // Release only the first amount
+    mgr.releaseInflight("u1", inflight1)
+    const remaining = mgr.getStatus("u1").inflight
+    expect(remaining).toBeGreaterThan(0)
+    expect(remaining).toBeCloseTo(inflightTotal - inflight1, 10)
+  })
+})
+
+// -------------------------------------------------------
+// getStatus(): LRU eviction when _snapshotCache exceeds MAX_CACHE_SIZE
+// -------------------------------------------------------
+
+describe("UserBudgetManager getStatus() LRU eviction", () => {
+  it("evicts oldest cache entry when snapshot cache exceeds MAX_CACHE_SIZE", () => {
+    const mgr = new UserBudgetManager({
+      defaultBudget: { daily: 100, monthly: 1000 },
+    })
+
+    // Fill the snapshot cache to MAX_CACHE_SIZE + 1
+    for (let i = 0; i <= MAX_CACHE_SIZE; i++) {
+      mgr.getStatus(`cache-user-${i}`)
+    }
+
+    // Trigger one more getStatus for a new user to force eviction
+    mgr.getStatus(`cache-user-overflow`)
+
+    // The cache should have evicted old entries; verify the new entry is accessible
+    const status = mgr.getStatus(`cache-user-overflow`)
+    expect(status).toBeTruthy()
+    expect(status.userId).toBe(`cache-user-overflow`)
+  })
+})
+
+// -------------------------------------------------------
+// getStatus(): Cached snapshot reference reuse
+// -------------------------------------------------------
+
+describe("UserBudgetManager getStatus() snapshot reference reuse", () => {
+  it("reuses cached snapshot reference when values are identical across versions", async () => {
+    const mgr = new UserBudgetManager({
+      users: { u1: { daily: 100, monthly: 1000 } },
+    })
+
+    // First call creates and caches a snapshot
+    const s1 = mgr.getStatus("u1")
+
+    // Trigger a version bump without changing u1's data
+    // (recording spend for a different user bumps version)
+    await mgr.recordSpend("other-user", 1.0, "gpt-4o-mini")
+
+    // s2 should reuse the same reference because u1's values haven't changed
+    const s2 = mgr.getStatus("u1")
+    expect(s2).toBe(s1)
+  })
+})
+
+// -------------------------------------------------------
+// hydrate(): IDB has persisted records + merge/dedup logic
+// -------------------------------------------------------
+
+describe("UserBudgetManager hydrate() with persisted records", () => {
+  const origWindow = globalThis.window
+
+  beforeEach(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(globalThis as any).window = {}
+  })
+
+  afterEach(() => {
+    if (origWindow === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (globalThis as any).window
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(globalThis as any).window = origWindow
+    }
+  })
+
+  it("merges persisted records with in-memory records, deduplicating", async () => {
+    mockCreateStore.mockReturnValue("mock-idb-store")
+
+    const mgr = new UserBudgetManager({ persist: true })
+
+    // Record some spend in memory before hydrate
+    await mgr.recordSpend("u1", 1.0, "gpt-4o-mini")
+
+    const now = Date.now()
+    const persistedRecords = [
+      // Duplicate of the in-memory record (same key): should be deduped
+      // Note: since the in-memory record uses Date.now() we approximate
+      { timestamp: now, cost: 1.0, model: "gpt-4o-mini", userId: "u1" },
+      // Unique persisted record: should be merged in
+      { timestamp: now - 1000, cost: 2.0, model: "gpt-4o", userId: "u1" },
+      // Stale record older than 30 days: should be filtered out
+      { timestamp: now - THIRTY_DAYS_MS - 1000, cost: 5.0, model: "gpt-4o", userId: "u1" },
+    ]
+    mockGet.mockResolvedValueOnce(persistedRecords)
+
+    const count = await mgr.hydrate()
+    expect(count).toBeGreaterThan(0)
+
+    // The status should reflect the merged (non-stale, non-duplicate) records
+    const status = mgr.getStatus("u1")
+    // Should have at least 2.0 from the unique persisted record
+    expect(status.spend.daily).toBeGreaterThanOrEqual(2.0)
+  })
+
+  it("returns 0 when persisted records are empty", async () => {
+    mockCreateStore.mockReturnValue("mock-idb-store")
+    mockGet.mockResolvedValueOnce([])
+
+    const mgr = new UserBudgetManager({ persist: true })
+    const count = await mgr.hydrate()
+    expect(count).toBe(0)
+  })
+
+  it("returns 0 when persisted records are null", async () => {
+    mockCreateStore.mockReturnValue("mock-idb-store")
+    mockGet.mockResolvedValueOnce(null)
+
+    const mgr = new UserBudgetManager({ persist: true })
+    const count = await mgr.hydrate()
+    expect(count).toBe(0)
+  })
+})
+
+// -------------------------------------------------------
+// hydrate(): IDB failure catch block (line 475)
+// -------------------------------------------------------
+
+describe("UserBudgetManager hydrate() IDB failure", () => {
+  const origWindow = globalThis.window
+
+  beforeEach(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(globalThis as any).window = {}
+  })
+
+  afterEach(() => {
+    if (origWindow === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (globalThis as any).window
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(globalThis as any).window = origWindow
+    }
+  })
+
+  it("returns 0 when IDB get throws", async () => {
+    mockCreateStore.mockReturnValue("mock-idb-store")
+    mockGet.mockRejectedValueOnce(new Error("IDB read failed"))
+
+    const mgr = new UserBudgetManager({ persist: true })
+    const count = await mgr.hydrate()
+    expect(count).toBe(0)
+  })
+})
+
+// -------------------------------------------------------
+// resetUser(): IDB write failure (lines 518-520)
+// -------------------------------------------------------
+
+describe("UserBudgetManager resetUser() IDB write failure", () => {
+  const origWindow = globalThis.window
+
+  beforeEach(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(globalThis as any).window = {}
+  })
+
+  afterEach(() => {
+    if (origWindow === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (globalThis as any).window
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(globalThis as any).window = origWindow
+    }
+  })
+
+  it("silently swallows IDB set error and still clears in-memory data", async () => {
+    mockCreateStore.mockReturnValue("mock-idb-store")
+    const mgr = new UserBudgetManager({ persist: true })
+
+    await mgr.recordSpend("u1", 3.0, "gpt-4o-mini")
+    expect(mgr.getStatus("u1").spend.daily).toBe(3.0)
+
+    // Make the next IDB write fail
+    mockSet.mockRejectedValueOnce(new Error("IDB write failed"))
+    // resetUser should not throw
+    await mgr.resetUser("u1")
+    // In-memory data should still be cleared
+    expect(mgr.getStatus("u1").spend.daily).toBe(0)
+  })
+})
+
+// -------------------------------------------------------
+// reset(): IDB write failure (lines 537-539)
+// -------------------------------------------------------
+
+describe("UserBudgetManager reset() IDB write failure", () => {
+  const origWindow = globalThis.window
+
+  beforeEach(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(globalThis as any).window = {}
+  })
+
+  afterEach(() => {
+    if (origWindow === undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (globalThis as any).window
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(globalThis as any).window = origWindow
+    }
+  })
+
+  it("silently swallows IDB set error and still clears all in-memory data", async () => {
+    mockCreateStore.mockReturnValue("mock-idb-store")
+    const mgr = new UserBudgetManager({ persist: true })
+
+    await mgr.recordSpend("u1", 3.0, "gpt-4o-mini")
+    await mgr.recordSpend("u2", 5.0, "gpt-4o")
+
+    // Make the next IDB write fail
+    mockSet.mockRejectedValueOnce(new Error("IDB write failed"))
+    // reset should not throw
+    await mgr.reset()
+    // All in-memory data should be cleared
+    expect(mgr.getStatus("u1").spend.daily).toBe(0)
+    expect(mgr.getStatus("u2").spend.daily).toBe(0)
+  })
+})
+
+// -------------------------------------------------------
+// Daily warning reset after 24 hours (lines 155-157)
+// -------------------------------------------------------
+
+describe("UserBudgetManager daily warning reset after 24 hours", () => {
+  it("re-fires daily warning after 24 hours have passed", async () => {
+    const onWarning = vi.fn()
+    const mgr = new UserBudgetManager({
+      users: { u1: { daily: 10.0, monthly: 0 } },
+      onBudgetWarning: onWarning,
+    })
+
+    await mgr.recordSpend("u1", 8.5, "gpt-4o-mini")
+    mgr.check("u1")
+    expect(onWarning).toHaveBeenCalledTimes(1)
+
+    // Check again immediately — warning should not re-fire
+    mgr.check("u1")
+    expect(onWarning).toHaveBeenCalledTimes(1)
+
+    // Advance time past 24 hours
+    const originalDateNow = Date.now
+    const twentyFiveHours = ONE_DAY_MS + 60 * 60 * 1000
+    Date.now = () => originalDateNow() + twentyFiveHours
+
+    try {
+      // Record new spend in the new window
+      await mgr.recordSpend("u1", 8.5, "gpt-4o-mini")
+      mgr.check("u1")
+      // Warning should fire again because the 24h reset happened
+      expect(onWarning).toHaveBeenCalledTimes(2)
+    } finally {
+      Date.now = originalDateNow
+    }
   })
 })

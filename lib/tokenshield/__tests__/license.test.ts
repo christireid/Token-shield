@@ -13,7 +13,6 @@ import {
   setLicensePrivateKey,
   generateLicenseKeyPair,
   configureLicenseKeys,
-  type LicenseTier,
 } from "../license"
 
 describe("license", () => {
@@ -510,7 +509,9 @@ describe("license", () => {
 
       // Without private key, generateTestKey falls back to HMAC/unsigned
       // but setLicensePublicKey is set for verification
-      const unsigned = btoa(JSON.stringify({ tier: "pro", expiresAt: Date.now() + 86400000, holder: "test" }))
+      const unsigned = btoa(
+        JSON.stringify({ tier: "pro", expiresAt: Date.now() + 86400000, holder: "test" }),
+      )
       const info = await activateLicense(unsigned)
       // Should fail because public key is set but key has no signature
       expect(info.valid).toBe(false)
@@ -520,7 +521,7 @@ describe("license", () => {
   describe("generateTestKey signing option", () => {
     it("explicit ecdsa signing throws without private key", async () => {
       await expect(
-        generateTestKey("pro", "test", 365, undefined, { signing: "ecdsa" })
+        generateTestKey("pro", "test", 365, undefined, { signing: "ecdsa" }),
       ).rejects.toThrow("ECDSA signing requested")
     })
 
@@ -532,6 +533,262 @@ describe("license", () => {
       const key = await generateTestKey("pro", "test", 365, undefined, { signing: "hmac" })
       const decoded = JSON.parse(atob(key))
       expect(decoded.signature).toMatch(/^sha256:/)
+    })
+  })
+
+  describe("hmacVerify legacy unprefixed signature path", () => {
+    const SECRET = "legacy-secret"
+
+    it("accepts a legacy key with unprefixed djb2 signature", async () => {
+      // Manually craft a key whose signature is raw djb2 (no "djb2:" prefix)
+      // to exercise the legacy unprefixed fallback in hmacVerify (lines 136-137)
+      setLicenseSecret(SECRET)
+
+      const payload = {
+        tier: "pro",
+        expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+        holder: "legacy-holder",
+      }
+      // Compute raw djb2 hash (replicating djb2Raw logic)
+      const message = JSON.stringify(payload)
+      const input = `${SECRET}:${message}`
+      let hash = 5381
+      for (let i = 0; i < input.length; i++) {
+        hash = ((hash << 5) + hash + input.charCodeAt(i)) | 0
+      }
+      const rawDjb2 = (hash >>> 0).toString(16).padStart(8, "0")
+
+      // Create key with unprefixed signature (no "djb2:" or "sha256:" prefix)
+      const legacyKey = btoa(JSON.stringify({ payload, signature: rawDjb2 }))
+
+      const info = await activateLicense(legacyKey)
+      expect(info.tier).toBe("pro")
+      expect(info.valid).toBe(true)
+      expect(info.holder).toBe("legacy-holder")
+    })
+
+    it("rejects a legacy unprefixed signature that matches neither algorithm (line 140)", async () => {
+      // Exercise the SHA-256 fallback branch on line 139-140 that returns false
+      setLicenseSecret(SECRET)
+
+      const payload = {
+        tier: "pro",
+        expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+        holder: "bad-legacy",
+      }
+      // Use an unprefixed signature that doesn't match djb2 or sha256
+      const bogusKey = btoa(JSON.stringify({ payload, signature: "deadbeef" }))
+
+      const info = await activateLicense(bogusKey)
+      expect(info.valid).toBe(false)
+      expect(info.tier).toBe("community")
+    })
+  })
+
+  describe("ecdsaVerify catch block", () => {
+    it("returns false when signature contains invalid base64 (line 266-267)", async () => {
+      const pair = await generateLicenseKeyPair()
+      await setLicensePublicKey(pair.publicKey)
+
+      const payload = {
+        tier: "enterprise",
+        expiresAt: Date.now() + 86400000,
+        holder: "catch-test",
+      }
+      // "ecdsa:" prefix followed by characters that will cause atob to throw
+      // Using characters not valid in base64 (even with base64url decoding)
+      const badSigKey = btoa(
+        JSON.stringify({ payload, signature: "ecdsa:!!!invalid-not-base64\x00\x01\x02!!!" }),
+      )
+
+      const info = await activateLicense(badSigKey)
+      expect(info.valid).toBe(false)
+      expect(info.tier).toBe("community")
+    })
+  })
+
+  describe("activateLicense with unknown tier", () => {
+    it("rejects a key with an unrecognized tier value (line 342)", async () => {
+      // Craft a key with a tier that is not in TIER_RANK
+      const payload = {
+        tier: "platinum",
+        expiresAt: Date.now() + 86400000,
+        holder: "unknown-tier-holder",
+      }
+      const key = btoa(JSON.stringify(payload))
+
+      const info = await activateLicense(key)
+      // The unknown tier triggers throw -> catch -> valid: false
+      expect(info.valid).toBe(false)
+      expect(info.tier).toBe("community")
+    })
+
+    it("rejects a signed key with an unrecognized tier value", async () => {
+      const SECRET = "tier-test-secret"
+      setLicenseSecret(SECRET)
+
+      const payload = {
+        tier: "diamond",
+        expiresAt: Date.now() + 86400000,
+        holder: "bad-tier",
+      }
+      const key = btoa(JSON.stringify({ payload, signature: "sha256:fakesig" }))
+
+      const info = await activateLicense(key)
+      expect(info.valid).toBe(false)
+      expect(info.tier).toBe("community")
+    })
+  })
+
+  describe("generateTestKeySync production guard", () => {
+    it("throws in production environment (line 540-541)", () => {
+      const originalEnv = process.env.NODE_ENV
+      try {
+        process.env.NODE_ENV = "production"
+        expect(() => generateTestKeySync("pro", "test")).toThrow(
+          "generateTestKeySync() is disabled in production",
+        )
+      } finally {
+        process.env.NODE_ENV = originalEnv
+      }
+    })
+  })
+
+  describe("generateTestKeySync unsigned path without any secret", () => {
+    it("generates unsigned key when no secret param and no _signingSecret (line 558)", () => {
+      // resetLicense() already clears _signingSecret, so no secret is configured
+      const key = generateTestKeySync("enterprise", "unsigned-holder", 30)
+      const decoded = JSON.parse(atob(key))
+      // Should be legacy unsigned format (no payload/signature wrapper)
+      expect(decoded.tier).toBe("enterprise")
+      expect(decoded.holder).toBe("unsigned-holder")
+      expect(decoded.expiresAt).toBeDefined()
+      expect(decoded.payload).toBeUndefined()
+      expect(decoded.signature).toBeUndefined()
+    })
+  })
+
+  describe("isModulePermitted with invalid license (valid=false, devMode=false)", () => {
+    it("permits only community modules when license is invalid (line 437)", async () => {
+      // First activate a valid key to disable dev mode
+      const validKey = generateTestKeySync("enterprise", "holder")
+      await activateLicense(validKey)
+
+      // Now activate a key that will set valid=false
+      // Use an expired signed key to get valid=false with devMode already false
+      setLicenseSecret("perm-secret")
+      const expiredPayload = {
+        tier: "enterprise",
+        expiresAt: Date.now() - 86400000, // expired
+        holder: "expired-holder",
+      }
+      const expiredKey = btoa(JSON.stringify(expiredPayload))
+      // This unsigned key with a secret set will produce valid=false (no signature)
+      await activateLicense(expiredKey)
+
+      const info = getLicenseInfo()
+      expect(info.valid).toBe(false)
+
+      // Community module should be permitted (TIER_RANK["community"] === 0)
+      expect(isModulePermitted("token-counter")).toBe(true)
+      expect(isModulePermitted("cost-estimator")).toBe(true)
+      expect(isModulePermitted("event-bus")).toBe(true)
+
+      // Non-community modules should be rejected
+      expect(isModulePermitted("response-cache")).toBe(false)
+      expect(isModulePermitted("circuit-breaker")).toBe(false)
+      expect(isModulePermitted("audit-log")).toBe(false)
+
+      // Unknown modules should still be permitted
+      expect(isModulePermitted("unknown-module")).toBe(true)
+    })
+  })
+
+  describe("activateLicense with missing holder field", () => {
+    it("defaults holder to empty string on successful activation (line 390)", async () => {
+      // Craft a key with no holder field to trigger the ?? "" fallback
+      const payload = {
+        tier: "pro",
+        expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+      }
+      const key = btoa(JSON.stringify(payload))
+
+      const info = await activateLicense(key)
+      expect(info.tier).toBe("pro")
+      expect(info.valid).toBe(true)
+      expect(info.holder).toBe("")
+    })
+
+    it("defaults holder to empty string on expired key (line 381)", async () => {
+      // Craft an expired key with no holder field
+      const payload = {
+        tier: "enterprise",
+        expiresAt: Date.now() - 86400000, // expired
+      }
+      const key = btoa(JSON.stringify(payload))
+
+      const info = await activateLicense(key)
+      expect(info.valid).toBe(false)
+      expect(info.tier).toBe("community")
+      expect(info.holder).toBe("")
+    })
+
+    it("defaults holder to empty string when signature verification rejects (no sig)", async () => {
+      setLicenseSecret("holder-test-secret")
+      // Craft unsigned key in signed format but missing holder
+      const payload = {
+        tier: "pro",
+        expiresAt: Date.now() + 86400000,
+      }
+      const key = btoa(JSON.stringify(payload))
+
+      const info = await activateLicense(key)
+      expect(info.valid).toBe(false)
+      expect(info.holder).toBe("")
+    })
+  })
+
+  describe("ECDSA verification edge cases", () => {
+    it("fails ECDSA verification when signature is structurally valid but wrong", async () => {
+      const pair = await generateLicenseKeyPair()
+      await setLicensePublicKey(pair.publicKey)
+
+      const payload = {
+        tier: "pro",
+        expiresAt: Date.now() + 86400000,
+        holder: "ecdsa-wrong-sig",
+      }
+      // Create a properly formatted base64url string that is valid base64
+      // but is not a valid ECDSA signature for this payload
+      const fakeSignature = btoa(
+        "a]random.bytes.that.look.like.a.signature.but.are.not.valid.for" +
+          ".this.payload.at.all.and.are.long.enough",
+      )
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=/g, "")
+      const forgedKey = btoa(JSON.stringify({ payload, signature: "ecdsa:" + fakeSignature }))
+
+      const info = await activateLicense(forgedKey)
+      expect(info.valid).toBe(false)
+      expect(info.tier).toBe("community")
+    })
+
+    it("ECDSA key activates successfully via the ecdsa: signature path (line 358)", async () => {
+      // This explicitly tests the ecdsa: prefix branch in activateLicense
+      const pair = await generateLicenseKeyPair()
+      await setLicensePrivateKey(pair.privateKey)
+      await setLicensePublicKey(pair.publicKey)
+      // Do NOT set an HMAC secret, so only ECDSA path is possible
+
+      const key = await generateTestKey("team", "ecdsa-path-test", 365)
+      const decoded = JSON.parse(atob(key))
+      expect(decoded.signature.startsWith("ecdsa:")).toBe(true)
+
+      const info = await activateLicense(key)
+      expect(info.tier).toBe("team")
+      expect(info.valid).toBe(true)
+      expect(info.holder).toBe("ecdsa-path-test")
     })
   })
 })

@@ -76,12 +76,16 @@ describe("middleware-plugin", () => {
       registerPlugin({
         name: "p1",
         version: "1.0.0",
-        init: () => { calls.push("p1") },
+        init: () => {
+          calls.push("p1")
+        },
       })
       registerPlugin({
         name: "p2",
         version: "1.0.0",
-        init: () => { calls.push("p2") },
+        init: () => {
+          calls.push("p2")
+        },
       })
 
       const ctx: PluginContext = {
@@ -99,7 +103,9 @@ describe("middleware-plugin", () => {
       registerPlugin({
         name: "with-cleanup",
         version: "1.0.0",
-        init: () => () => { cleanupCalled.push("cleaned") },
+        init: () => () => {
+          cleanupCalled.push("cleaned")
+        },
       })
 
       const ctx: PluginContext = {
@@ -121,7 +127,9 @@ describe("middleware-plugin", () => {
         version: "1.0.0",
         init: () => {},
         events: {
-          "cache:hit": (data) => { received.push(data) },
+          "cache:hit": (data) => {
+            received.push(data)
+          },
         },
       })
 
@@ -148,7 +156,9 @@ describe("middleware-plugin", () => {
       registerPlugin({
         name: "bad-plugin",
         version: "1.0.0",
-        init: () => { throw new Error("init failed") },
+        init: () => {
+          throw new Error("init failed")
+        },
       })
       registerPlugin({
         name: "good-plugin",
@@ -164,6 +174,220 @@ describe("middleware-plugin", () => {
       }
       // Should not throw, just skip the bad plugin
       expect(() => initializePlugins(ctx)).not.toThrow()
+    })
+  })
+
+  describe("initializePlugins — event auto-wiring branches", () => {
+    it("skips non-function values in plugin.events", () => {
+      const received: unknown[] = []
+      registerPlugin({
+        name: "mixed-events",
+        version: "1.0.0",
+        init: () => {},
+        events: {
+          "cache:hit": (data) => {
+            received.push(data)
+          },
+          // Force a non-function value into the events map to exercise the
+          // `typeof handler === "function"` === false branch (line 119).
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          "cache:miss": "not-a-function" as any,
+        },
+      })
+
+      const bus = createEventBus()
+      const ctx: PluginContext = {
+        events: bus,
+        log: null,
+        auditLog: null,
+        config: {},
+      }
+      const cleanups = initializePlugins(ctx)
+
+      // The valid handler should still be wired up
+      bus.emit("cache:hit", { matchType: "exact", similarity: 1, savedCost: 0.05 })
+      expect(received).toHaveLength(1)
+
+      // Only the init return (none) + valid handler unsubscribe should be in cleanups.
+      // The non-function entry must NOT produce a cleanup entry.
+      expect(cleanups).toHaveLength(1) // one unsub for "cache:hit"
+    })
+
+    it("returns unsub cleanups for every function handler in plugin.events", () => {
+      const hits: string[] = []
+      registerPlugin({
+        name: "multi-events",
+        version: "1.0.0",
+        init: () => {},
+        events: {
+          "cache:hit": () => {
+            hits.push("cache:hit")
+          },
+          "cache:miss": () => {
+            hits.push("cache:miss")
+          },
+        },
+      })
+
+      const bus = createEventBus()
+      const ctx: PluginContext = {
+        events: bus,
+        log: null,
+        auditLog: null,
+        config: {},
+      }
+      const cleanups = initializePlugins(ctx)
+
+      // Both handlers wired
+      bus.emit("cache:hit", { matchType: "exact", similarity: 1, savedCost: 0 })
+      bus.emit("cache:miss", { similarity: 0 })
+      expect(hits).toEqual(["cache:hit", "cache:miss"])
+
+      // Two unsub cleanups (one per handler)
+      expect(cleanups).toHaveLength(2)
+
+      // After cleanup, events should no longer fire
+      for (const c of cleanups) c()
+      bus.emit("cache:hit", { matchType: "exact", similarity: 1, savedCost: 0 })
+      bus.emit("cache:miss", { similarity: 0 })
+      expect(hits).toEqual(["cache:hit", "cache:miss"]) // unchanged
+    })
+  })
+
+  describe("initializePlugins — init failure branches", () => {
+    it("logs a warning via ctx.log when init() throws an Error", () => {
+      const warnCalls: Array<{ module: string; message: string; data?: Record<string, unknown> }> =
+        []
+      const mockLogger = {
+        warn: (module: string, message: string, data?: Record<string, unknown>) => {
+          warnCalls.push({ module, message, data })
+        },
+      }
+
+      registerPlugin({
+        name: "failing-plugin",
+        version: "1.0.0",
+        init: () => {
+          throw new Error("kaboom")
+        },
+      })
+
+      const ctx: PluginContext = {
+        events: createEventBus(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        log: mockLogger as any,
+        auditLog: null,
+        config: {},
+      }
+      const cleanups = initializePlugins(ctx)
+
+      expect(cleanups).toHaveLength(0)
+      expect(warnCalls).toHaveLength(1)
+      expect(warnCalls[0].module).toBe("plugin")
+      expect(warnCalls[0].message).toContain('Plugin "failing-plugin" failed to initialize')
+      expect(warnCalls[0].data).toEqual({ error: "kaboom" })
+    })
+
+    it("stringifies non-Error throw values in the warning", () => {
+      const warnCalls: Array<{ module: string; message: string; data?: Record<string, unknown> }> =
+        []
+      const mockLogger = {
+        warn: (module: string, message: string, data?: Record<string, unknown>) => {
+          warnCalls.push({ module, message, data })
+        },
+      }
+
+      registerPlugin({
+        name: "string-thrower",
+        version: "1.0.0",
+        init: () => {
+           
+          throw "raw string error"
+        },
+      })
+
+      const ctx: PluginContext = {
+        events: createEventBus(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        log: mockLogger as any,
+        auditLog: null,
+        config: {},
+      }
+      const cleanups = initializePlugins(ctx)
+
+      expect(cleanups).toHaveLength(0)
+      expect(warnCalls).toHaveLength(1)
+      expect(warnCalls[0].data).toEqual({ error: "raw string error" })
+    })
+
+    it("does not throw when ctx.log is null and init() throws", () => {
+      registerPlugin({
+        name: "null-log-plugin",
+        version: "1.0.0",
+        init: () => {
+          throw new Error("should be silently caught")
+        },
+      })
+
+      const ctx: PluginContext = {
+        events: createEventBus(),
+        log: null,
+        auditLog: null,
+        config: {},
+      }
+
+      // The optional chaining ctx.log?.warn should no-op without throwing
+      expect(() => initializePlugins(ctx)).not.toThrow()
+    })
+
+    it("continues initializing subsequent plugins after one fails", () => {
+      const calls: string[] = []
+
+      registerPlugin({
+        name: "first-bad",
+        version: "1.0.0",
+        init: () => {
+          throw new Error("first fails")
+        },
+      })
+      registerPlugin({
+        name: "second-good",
+        version: "1.0.0",
+        init: () => {
+          calls.push("second-good")
+        },
+      })
+      registerPlugin({
+        name: "third-good",
+        version: "1.0.0",
+        init: () => {
+          calls.push("third-good")
+        },
+        events: {
+          "cache:hit": () => {
+            calls.push("third-event")
+          },
+        },
+      })
+
+      const bus = createEventBus()
+      const ctx: PluginContext = {
+        events: bus,
+        log: null,
+        auditLog: null,
+        config: {},
+      }
+      const cleanups = initializePlugins(ctx)
+
+      // Both good plugins initialized
+      expect(calls).toEqual(["second-good", "third-good"])
+
+      // Third plugin's event handler is wired
+      bus.emit("cache:hit", { matchType: "exact", similarity: 1, savedCost: 0 })
+      expect(calls).toContain("third-event")
+
+      // Cleanups from the good plugins only (1 unsub for third's cache:hit)
+      expect(cleanups).toHaveLength(1)
     })
   })
 })
