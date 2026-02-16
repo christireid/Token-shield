@@ -112,7 +112,7 @@ export class AuditLog {
     description: string,
     data: Record<string, unknown> = {},
     userId?: string,
-    model?: string
+    model?: string,
   ): AuditEntry {
     // Filter by severity
     if (SEVERITY_RANK[severity] < SEVERITY_RANK[this.config.minSeverity]) {
@@ -120,10 +120,7 @@ export class AuditLog {
     }
 
     // Filter by event type
-    if (
-      this.config.eventTypes.length > 0 &&
-      !this.config.eventTypes.includes(eventType)
-    ) {
+    if (this.config.eventTypes.length > 0 && !this.config.eventTypes.includes(eventType)) {
       return this.createNoopEntry(eventType, severity, module, description)
     }
 
@@ -164,56 +161,122 @@ export class AuditLog {
   /**
    * Convenience methods for common events.
    */
-  logApiCall(model: string, inputTokens: number, outputTokens: number, cost: number, userId?: string): AuditEntry {
-    return this.record("api_call", "info", "middleware", `API call to ${model}`, {
-      inputTokens, outputTokens, cost,
-    }, userId, model)
+  logApiCall(
+    model: string,
+    inputTokens: number,
+    outputTokens: number,
+    cost: number,
+    userId?: string,
+  ): AuditEntry {
+    return this.record(
+      "api_call",
+      "info",
+      "middleware",
+      `API call to ${model}`,
+      {
+        inputTokens,
+        outputTokens,
+        cost,
+      },
+      userId,
+      model,
+    )
   }
 
   logCacheHit(model: string, prompt: string, userId?: string): AuditEntry {
-    return this.record("cache_hit", "info", "response-cache", `Cache hit for ${model}`, {
-      promptLength: prompt.length,
-    }, userId, model)
+    return this.record(
+      "cache_hit",
+      "info",
+      "response-cache",
+      `Cache hit for ${model}`,
+      {
+        promptLength: prompt.length,
+      },
+      userId,
+      model,
+    )
   }
 
   logRequestBlocked(reason: string, model: string, userId?: string): AuditEntry {
-    return this.record("request_blocked", "warn", "request-guard", `Request blocked: ${reason}`, {
-      reason,
-    }, userId, model)
+    return this.record(
+      "request_blocked",
+      "warn",
+      "request-guard",
+      `Request blocked: ${reason}`,
+      {
+        reason,
+      },
+      userId,
+      model,
+    )
   }
 
   logBudgetExceeded(userId: string, budget: number, spent: number): AuditEntry {
-    return this.record("budget_exceeded", "error", "user-budget-manager",
-      `User ${userId} exceeded budget ($${spent.toFixed(2)}/$${budget.toFixed(2)})`, {
-      userId, budget, spent,
-    }, userId)
+    return this.record(
+      "budget_exceeded",
+      "error",
+      "user-budget-manager",
+      `User ${userId} exceeded budget ($${spent.toFixed(2)}/$${budget.toFixed(2)})`,
+      {
+        userId,
+        budget,
+        spent,
+      },
+      userId,
+    )
   }
 
   logBreakerTripped(limitType: string, threshold: number, actual: number): AuditEntry {
-    return this.record("breaker_tripped", "critical", "circuit-breaker",
-      `Circuit breaker tripped: ${limitType}`, {
-      limitType, threshold, actual,
-    })
+    return this.record(
+      "breaker_tripped",
+      "critical",
+      "circuit-breaker",
+      `Circuit breaker tripped: ${limitType}`,
+      {
+        limitType,
+        threshold,
+        actual,
+      },
+    )
   }
 
   logAnomalyDetected(metric: string, value: number, zscore: number, model?: string): AuditEntry {
-    return this.record("anomaly_detected", "warn", "anomaly-detector",
-      `Anomaly detected: ${metric} z-score ${zscore.toFixed(2)}`, {
-      metric, value, zscore,
-    }, undefined, model)
+    return this.record(
+      "anomaly_detected",
+      "warn",
+      "anomaly-detector",
+      `Anomaly detected: ${metric} z-score ${zscore.toFixed(2)}`,
+      {
+        metric,
+        value,
+        zscore,
+      },
+      undefined,
+      model,
+    )
   }
 
   logModelRouted(fromModel: string, toModel: string, reason: string, userId?: string): AuditEntry {
-    return this.record("model_routed", "info", "model-router",
-      `Routed ${fromModel} → ${toModel}: ${reason}`, {
-      fromModel, toModel, reason,
-    }, userId, toModel)
+    return this.record(
+      "model_routed",
+      "info",
+      "model-router",
+      `Routed ${fromModel} → ${toModel}: ${reason}`,
+      {
+        fromModel,
+        toModel,
+        reason,
+      },
+      userId,
+      toModel,
+    )
   }
 
   logConfigChanged(field: string, oldValue: unknown, newValue: unknown): AuditEntry {
-    return this.record("config_changed", "warn", "config",
-      `Config changed: ${field}`, {
-      field, oldValue, newValue,
+    return this.record("config_changed", "warn", "config", `Config changed: ${field}`, {
+      field,
+      oldValue,
+      newValue,
     })
   }
 
@@ -249,11 +312,13 @@ export class AuditLog {
   }): AuditEntry[] {
     let result = this.entries
     if (filters) {
-      if (filters.eventType) result = result.filter(e => e.eventType === filters.eventType)
-      if (filters.severity) result = result.filter(e => SEVERITY_RANK[e.severity] >= SEVERITY_RANK[filters.severity!])
-      if (filters.module) result = result.filter(e => e.module === filters.module)
-      if (filters.userId) result = result.filter(e => e.userId === filters.userId)
-      if (filters.since) result = result.filter(e => new Date(e.timestamp).getTime() >= filters.since!)
+      if (filters.eventType) result = result.filter((e) => e.eventType === filters.eventType)
+      if (filters.severity)
+        result = result.filter((e) => SEVERITY_RANK[e.severity] >= SEVERITY_RANK[filters.severity!])
+      if (filters.module) result = result.filter((e) => e.module === filters.module)
+      if (filters.userId) result = result.filter((e) => e.userId === filters.userId)
+      if (filters.since)
+        result = result.filter((e) => new Date(e.timestamp).getTime() >= filters.since!)
     }
     return [...result]
   }
@@ -263,37 +328,56 @@ export class AuditLog {
    */
   exportJSON(): string {
     const integrity = this.verifyIntegrity()
-    return JSON.stringify({
-      exportedAt: new Date().toISOString(),
-      integrity,
-      totalEntries: this.entries.length,
-      entries: this.entries,
-    }, null, 2)
+    return JSON.stringify(
+      {
+        exportedAt: new Date().toISOString(),
+        integrity,
+        totalEntries: this.entries.length,
+        entries: this.entries,
+      },
+      null,
+      2,
+    )
   }
 
   /**
    * Export as CSV for spreadsheet analysis.
    */
   exportCSV(): string {
-    const headers = ["seq", "timestamp", "eventType", "severity", "module", "userId", "model", "description", "data", "hash"]
-    const rows = this.entries.map(e => [
-      e.seq,
-      e.timestamp,
-      e.eventType,
-      e.severity,
-      e.module,
-      e.userId ?? "",
-      e.model ?? "",
-      e.description,
-      JSON.stringify(e.data),
-      e.hash,
-    ].map(v => {
-      const s = String(v)
-      if (s.includes(",") || s.includes('"') || s.includes("\n")) {
-        return `"${s.replace(/"/g, '""')}"`
-      }
-      return s
-    }).join(","))
+    const headers = [
+      "seq",
+      "timestamp",
+      "eventType",
+      "severity",
+      "module",
+      "userId",
+      "model",
+      "description",
+      "data",
+      "hash",
+    ]
+    const rows = this.entries.map((e) =>
+      [
+        e.seq,
+        e.timestamp,
+        e.eventType,
+        e.severity,
+        e.module,
+        e.userId ?? "",
+        e.model ?? "",
+        e.description,
+        JSON.stringify(e.data),
+        e.hash,
+      ]
+        .map((v) => {
+          const s = String(v)
+          if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+            return `"${s.replace(/"/g, '""')}"`
+          }
+          return s
+        })
+        .join(","),
+    )
     return [headers.join(","), ...rows].join("\n")
   }
 
@@ -317,7 +401,7 @@ export class AuditLog {
     eventType: AuditEventType,
     severity: AuditSeverity,
     module: string,
-    description: string
+    description: string,
   ): AuditEntry {
     return {
       seq: -1,

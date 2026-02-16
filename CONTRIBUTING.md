@@ -92,6 +92,7 @@ Pricing data lives in `lib/tokenshield/data/models.json`. To update:
 ## Reporting Bugs
 
 Open an issue with:
+
 - Steps to reproduce
 - Expected behavior
 - Actual behavior
@@ -112,16 +113,16 @@ Each module is independent and can be enabled/disabled via config. The middlewar
 
 ### Key Files
 
-| File | Purpose |
-| :--- | :--- |
-| `lib/tokenshield/index.ts` | Public API exports |
-| `lib/tokenshield/middleware.ts` | Main middleware factory |
-| `lib/tokenshield/middleware-types.ts` | Config types and shared helpers |
-| `lib/tokenshield/middleware-wrap.ts` | wrapGenerate/wrapStream implementation |
-| `lib/tokenshield/middleware-transform.ts` | transformParams implementation |
-| `lib/tokenshield/data/models.json` | Single source of truth for model pricing |
-| `scripts/sync-pricing.ts` | Codegen: models.json → TypeScript |
-| `scripts/validate-pricing.ts` | Cross-reference pricing against llm-info |
+| File                                      | Purpose                                  |
+| :---------------------------------------- | :--------------------------------------- |
+| `lib/tokenshield/index.ts`                | Public API exports                       |
+| `lib/tokenshield/middleware.ts`           | Main middleware factory                  |
+| `lib/tokenshield/middleware-types.ts`     | Config types and shared helpers          |
+| `lib/tokenshield/middleware-wrap.ts`      | wrapGenerate/wrapStream implementation   |
+| `lib/tokenshield/middleware-transform.ts` | transformParams implementation           |
+| `lib/tokenshield/data/models.json`        | Single source of truth for model pricing |
+| `scripts/sync-pricing.ts`                 | Codegen: models.json → TypeScript        |
+| `scripts/validate-pricing.ts`             | Cross-reference pricing against llm-info |
 
 ## License
 

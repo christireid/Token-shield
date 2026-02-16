@@ -37,7 +37,7 @@ const MODULE_TIERS: Record<string, LicenseTier> = {
   "request-guard": "community",
   "cost-ledger": "community",
   "event-bus": "community",
-  "logger": "community",
+  logger: "community",
 
   // Pro
   "response-cache": "pro",
@@ -99,9 +99,12 @@ export function activateLicense(key: string): LicenseInfo {
     }
 
     const tier = (payload.tier ?? "community") as LicenseTier
-    if (!TIER_RANK.hasOwnProperty(tier)) {
+    if (!(tier in TIER_RANK)) {
       throw new Error(`Unknown tier: ${tier}`)
     }
+
+    // Any explicit license activation exits dev mode, even if the key is expired
+    _devMode = false
 
     const expiresAt = payload.expiresAt ?? null
     if (expiresAt && Date.now() > expiresAt) {
@@ -120,7 +123,6 @@ export function activateLicense(key: string): LicenseInfo {
       holder: payload.holder ?? "",
       valid: true,
     }
-    _devMode = false
     return _currentLicense
   } catch {
     _currentLicense = {
@@ -153,10 +155,11 @@ export function isModulePermitted(moduleName: string): boolean {
     if (!_warningShown && requiredTier !== "community") {
       _warningShown = true
       if (typeof console !== "undefined") {
+        // eslint-disable-next-line no-console
         console.warn(
           `[TokenShield] Using ${requiredTier}-tier features without a license key. ` +
-          `All features are unlocked for development. ` +
-          `Visit https://tokenshield.dev/pricing to get a production license.`
+            `All features are unlocked for development. ` +
+            `Visit https://tokenshield.dev/pricing to get a production license.`,
         )
       }
     }
@@ -203,7 +206,11 @@ export function resetLicense(): void {
  * Generate a license key for a given tier (for testing and internal use only).
  * In production, keys would be generated server-side with cryptographic signing.
  */
-export function generateTestKey(tier: LicenseTier, holder: string = "test", expiresInDays: number = 365): string {
+export function generateTestKey(
+  tier: LicenseTier,
+  holder: string = "test",
+  expiresInDays: number = 365,
+): string {
   const payload = {
     tier,
     expiresAt: Date.now() + expiresInDays * 24 * 60 * 60 * 1000,

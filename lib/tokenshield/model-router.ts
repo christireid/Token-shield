@@ -14,11 +14,7 @@
  */
 
 import { countTokens } from "gpt-tokenizer"
-import {
-  MODEL_PRICING,
-  type ModelPricing,
-  estimateCost,
-} from "./cost-estimator"
+import { MODEL_PRICING, type ModelPricing, estimateCost } from "./cost-estimator"
 import { PRICING_REGISTRY } from "./pricing-registry"
 
 export interface ComplexitySignals {
@@ -112,13 +108,13 @@ const CONSTRAINT_KEYWORDS = new Set([
   "specification",
 ])
 
-const CODE_PATTERNS = /```|{|}|\bfunction\b|\bclass\b|\bimport\b|\bexport\b|\bconst\b|\blet\b|\bvar\b|\breturn\b|=>|\bif\s*\(|\bfor\s*\(/g
+const CODE_PATTERNS =
+  /```|{|}|\bfunction\b|\bclass\b|\bimport\b|\bexport\b|\bconst\b|\blet\b|\bvar\b|\breturn\b|=>|\bif\s*\(|\bfor\s*\(/g
 
 const STRUCTURED_OUTPUT_PATTERNS =
   /\bjson\b|\bxml\b|\byaml\b|\bcsv\b|\bschema\b|\bformat.*?as\b|\boutput.*?format\b|\breturn.*?object\b|\bstructured\b/i
 
-const SUBTASK_PATTERNS =
-  /^\s*[-*\d]+[.)]\s/gm
+const SUBTASK_PATTERNS = /^\s*[-*\d]+[.)]\s/gm
 
 const CONTEXT_PATTERNS =
   /\babove\b|\bprevious\b|\bearlier\b|\bmentioned\b|\brefer.*?to\b|\bgiven\b|\bbased on\b/i
@@ -159,20 +155,12 @@ export function analyzeComplexity(prompt: string): ComplexityScore {
 
   const signals: ComplexitySignals = {
     tokenCount: countTokens(prompt),
-    avgWordLength:
-      wordCount > 0
-        ? words.reduce((sum, w) => sum + w.length, 0) / wordCount
-        : 0,
+    avgWordLength: wordCount > 0 ? words.reduce((sum, w) => sum + w.length, 0) / wordCount : 0,
     sentenceCount: sentences.length,
-    lexicalDiversity:
-      wordCount > 0 ? uniqueWords.size / wordCount : 0,
+    lexicalDiversity: wordCount > 0 ? uniqueWords.size / wordCount : 0,
     codeSignals: (prompt.match(CODE_PATTERNS) || []).length,
-    reasoningKeywords: [...REASONING_KEYWORDS].filter((kw) =>
-      lowerPrompt.includes(kw)
-    ).length,
-    constraintKeywords: [...CONSTRAINT_KEYWORDS].filter((kw) =>
-      lowerPrompt.includes(kw)
-    ).length,
+    reasoningKeywords: [...REASONING_KEYWORDS].filter((kw) => lowerPrompt.includes(kw)).length,
+    constraintKeywords: [...CONSTRAINT_KEYWORDS].filter((kw) => lowerPrompt.includes(kw)).length,
     hasStructuredOutput: STRUCTURED_OUTPUT_PATTERNS.test(prompt),
     subTaskCount: (prompt.match(SUBTASK_PATTERNS) || []).length,
     hasContextDependency: CONTEXT_PATTERNS.test(prompt),
@@ -295,7 +283,7 @@ export function routeToModel(
       vision?: boolean
       functions?: boolean
     }
-  } = {}
+  } = {},
 ): RoutingDecision {
   const complexity = analyzeComplexity(prompt)
   const expectedOutput = options.expectedOutputTokens ?? 500
@@ -331,9 +319,15 @@ export function routeToModel(
     if (options.minContextWindow && m.contextWindow < options.minContextWindow) return false
     // Capability filters — use pricing registry for richer metadata
     if (options.requiredCapabilities) {
-      const registryEntry = PRICING_REGISTRY_LOOKUP(m.id)
-      if (options.requiredCapabilities.vision && registryEntry && !registryEntry.supportsVision) return false
-      if (options.requiredCapabilities.functions && registryEntry && !registryEntry.supportsFunctions) return false
+      const registryEntry = pricingRegistryLookup(m.id)
+      if (options.requiredCapabilities.vision && registryEntry && !registryEntry.supportsVision)
+        return false
+      if (
+        options.requiredCapabilities.functions &&
+        registryEntry &&
+        !registryEntry.supportsFunctions
+      )
+        return false
     }
     return true
   })
@@ -346,11 +340,7 @@ export function routeToModel(
     }))
     .sort((a, b) => a.cost.totalCost - b.cost.totalCost)
 
-  const defaultCost = estimateCost(
-    defaultModelId,
-    complexity.signals.tokenCount,
-    expectedOutput
-  )
+  const defaultCost = estimateCost(defaultModelId, complexity.signals.tokenCount, expectedOutput)
 
   // If no candidates match the filter, fall back to the default model
   if (sorted.length === 0) {
@@ -383,7 +373,9 @@ export function routeToModel(
 }
 
 /** Look up model capabilities from the pricing registry */
-function PRICING_REGISTRY_LOOKUP(modelId: string): { supportsVision: boolean; supportsFunctions: boolean } | undefined {
+function pricingRegistryLookup(
+  modelId: string,
+): { supportsVision: boolean; supportsFunctions: boolean } | undefined {
   const entry = PRICING_REGISTRY[modelId]
   if (!entry) return undefined
   return { supportsVision: entry.supportsVision, supportsFunctions: entry.supportsFunctions }
@@ -408,7 +400,7 @@ function PRICING_REGISTRY_LOOKUP(modelId: string): { supportsVision: boolean; su
  */
 export function rankModels(
   inputTokens: number,
-  outputTokens: number
+  outputTokens: number,
 ): { model: ModelPricing; cost: ReturnType<typeof estimateCost> }[] {
   return Object.values(MODEL_PRICING)
     .map((m) => ({

@@ -245,6 +245,15 @@ export async function callLLM(
       return callAnthropic(messages, model, options)
     case "google":
       return callGoogle(messages, model, options)
+    default: {
+      const _exhaustive: never = provider
+      throw new TokenShieldAPIError(
+        `Unknown provider: ${_exhaustive}`,
+        "openai",
+        400,
+        ERROR_CODES.API_INVALID_RESPONSE,
+      )
+    }
   }
 }
 

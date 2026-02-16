@@ -15,7 +15,10 @@
 
 import * as fs from "fs"
 import * as path from "path"
+import { fileURLToPath } from "url"
 
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 const ROOT = path.resolve(__dirname, "..")
 const DATA_PATH = path.join(ROOT, "lib/tokenshield/data/models.json")
 const REGISTRY_PATH = path.join(ROOT, "lib/tokenshield/pricing-registry.ts")
@@ -72,7 +75,7 @@ function replaceGenerated(filePath: string, newContent: string): void {
   if (startIdx === -1 || endIdx === -1) {
     throw new Error(
       `Missing marker comments in ${path.basename(filePath)}. ` +
-      `Expected "${START_MARKER}" and "${END_MARKER}".`
+        `Expected "${START_MARKER}" and "${END_MARKER}".`,
     )
   }
 
@@ -80,10 +83,7 @@ function replaceGenerated(filePath: string, newContent: string): void {
   const startLineEnd = source.indexOf("\n", startIdx)
   if (startLineEnd === -1) throw new Error("Malformed start marker")
 
-  const updated =
-    source.slice(0, startLineEnd + 1) +
-    newContent +
-    "\n  " + source.slice(endIdx)
+  const updated = source.slice(0, startLineEnd + 1) + newContent + "\n  " + source.slice(endIdx)
 
   fs.writeFileSync(filePath, updated, "utf-8")
 }
@@ -137,9 +137,10 @@ function generateCostEstimator(models: Record<string, ModelEntry>): string {
     lines.push(`  // ${provider.charAt(0).toUpperCase() + provider.slice(1)}`)
 
     for (const [id, m] of providerEntries) {
-      const cachedInputPerMillion = m.cachedInputDiscount > 0
-        ? round(m.inputPerMillion * (1 - m.cachedInputDiscount), 6)
-        : undefined
+      const cachedInputPerMillion =
+        m.cachedInputDiscount > 0
+          ? round(m.inputPerMillion * (1 - m.cachedInputDiscount), 6)
+          : undefined
 
       lines.push(`  "${id}": {`)
       lines.push(`    id: "${id}",`)
@@ -234,8 +235,10 @@ function main(): void {
   }
 
   const modelCount = Object.keys(data.models).length
-  const tieredCount = Object.values(data.models).filter(m => m.tier).length
-  const multiplierCount = Object.values(data.models).filter(m => m.outputMultiplier !== undefined).length
+  const tieredCount = Object.values(data.models).filter((m) => m.tier).length
+  const multiplierCount = Object.values(data.models).filter(
+    (m) => m.outputMultiplier !== undefined,
+  ).length
 
   // 3. Generate and write
   replaceGenerated(REGISTRY_PATH, generatePricingRegistry(data.models))
@@ -245,8 +248,8 @@ function main(): void {
   const elapsed = Date.now() - start
   console.log(
     `sync-pricing: Updated 3 files from ${modelCount} models ` +
-    `(${tieredCount} in cost-estimator, ${multiplierCount} with output multipliers) ` +
-    `in ${elapsed}ms`
+      `(${tieredCount} in cost-estimator, ${multiplierCount} with output multipliers) ` +
+      `in ${elapsed}ms`,
   )
 }
 
