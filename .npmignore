@@ -40,11 +40,9 @@ node_modules/
 .DS_Store
 .gitignore
 .npmignore
-INDEX.md
-SPEC.md
 SECURITY.md
 CHANGELOG.md
-COMMERCIAL-READINESS-REVIEW.md
-LAUNCH_ANNOUNCEMENT.md
+CONTRIBUTING.md
+MULTI-PERSPECTIVE-REVIEW.md
 pnpm-lock.yaml
 package-lock.json

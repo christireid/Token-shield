@@ -55,9 +55,7 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "dev": "next dev",
     "build": "tsup",
-    "start": "next start",
     "lint": "eslint lib/tokenshield/",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

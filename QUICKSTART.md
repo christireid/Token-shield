@@ -1,12 +1,16 @@
 # TokenShield Developer Quickstart
 
-Frontend-only React/TypeScript toolkit for reducing AI/LLM token expenses.
-12 modules + AI SDK middleware + React hooks. Zero backend required.
+Client-side TypeScript middleware for reducing LLM API costs.
+AI SDK middleware + React hooks. Zero backend required.
 
 ## Installation
 
+> **Note:** Not yet published to npm. Clone the repo and build from source for now.
+
 ```bash
-npm install @tokenshield/ai-sdk
+git clone https://github.com/tokenshield/ai-sdk.git
+cd ai-sdk
+npm install && npm run build
 ```
 
 Peer dependencies: `ai` (Vercel AI SDK), `react` (18+).
@@ -298,7 +302,7 @@ console.log(chatCount.overhead) // tokens used by role tags and separators
 ### 2. Cost Estimator
 
 ```typescript
-import { estimateCost, compareCosts, projectMonthlyCost } from "@tokenshield/ai-sdk"
+import { estimateCost, compareCosts } from "@tokenshield/ai-sdk"
 
 // Estimate cost for a single request
 const cost = estimateCost("gpt-4o", 1000, 500)
@@ -309,10 +313,6 @@ console.log(cost.totalCost) // $0.0075
 // Compare costs across models
 const comparison = compareCosts(1000, 500)
 // Returns costs for every known model, sorted cheapest first
-
-// Project monthly cost from current usage
-const monthly = projectMonthlyCost("gpt-4o", 100, 1000, 500)
-// 100 requests/day * 30 days at the given token counts
 ```
 
 ### 3. Context Manager
