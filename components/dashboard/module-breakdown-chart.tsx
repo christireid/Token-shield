@@ -1,7 +1,7 @@
 "use client"
 
 import { useId, useMemo } from "react"
-import { useDashboard } from "./dashboard-provider"
+import { useDashboardData } from "./dashboard-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell } from "recharts"
@@ -13,7 +13,7 @@ const chartConfig = Object.fromEntries(
 )
 
 export function ModuleBreakdownChart() {
-  const { data } = useDashboard()
+  const data = useDashboardData()
   const filterId = useId()
   const barGlowId = `${filterId}-bar-glow`
 

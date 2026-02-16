@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useMemo } from "react"
-import { useDashboard } from "./dashboard-provider"
+import { useDashboardData } from "./dashboard-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { PieChart, Pie, Cell } from "recharts"
@@ -82,7 +82,7 @@ const ModelTableRow = React.memo(function ModelTableRow({
 })
 
 export function ModelUsageChart() {
-  const { data } = useDashboard()
+  const data = useDashboardData()
   const filterId = React.useId()
   const donutGlowId = `${filterId}-donut-glow`
   const [sortKey, setSortKey] = React.useState<"cost" | "calls" | "tokens">("cost")

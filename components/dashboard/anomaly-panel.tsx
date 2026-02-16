@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useDashboard, type AnomalyRecord } from "./dashboard-provider"
+import { useDashboardData, useDashboardActions, type AnomalyRecord } from "./dashboard-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
@@ -146,7 +146,10 @@ const AnomalyRow = React.memo(function AnomalyRow({
       </div>
 
       {/* Timestamp */}
-      <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/60">
+      <span
+        className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/60"
+        title={new Date(anomaly.timestamp).toLocaleString()}
+      >
         {formatRelativeTime(anomaly.timestamp)}
       </span>
 
@@ -177,7 +180,8 @@ const AnomalyRow = React.memo(function AnomalyRow({
 /* ------------------------------------------------------------------ */
 
 export function AnomalyPanel() {
-  const { data, acknowledgeAnomaly } = useDashboard()
+  const data = useDashboardData()
+  const { acknowledgeAnomaly } = useDashboardActions()
   const reducedMotion = useReducedMotion()
   const anomalies = data.anomalies
   const displayAnomalies = React.useMemo(

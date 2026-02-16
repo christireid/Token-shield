@@ -103,6 +103,7 @@ export const INITIAL_USERS: UserBudget[] = [
 /* ------------------------------------------------------------------ */
 
 export function pickWeighted<T extends { weight: number }>(items: readonly T[]): T {
+  if (items.length === 0) throw new Error("pickWeighted: items array must not be empty")
   const r = Math.random()
   let acc = 0
   for (const item of items) {
@@ -113,10 +114,12 @@ export function pickWeighted<T extends { weight: number }>(items: readonly T[]):
 }
 
 export function rand(min: number, max: number): number {
+  if (min > max) return max + Math.random() * (min - max)
   return min + Math.random() * (max - min)
 }
 
 export function randInt(min: number, max: number): number {
+  if (min > max) return Math.floor(rand(max, min))
   return Math.floor(rand(min, max))
 }
 
@@ -459,11 +462,96 @@ export interface TickIds {
   alertId: number
 }
 
-export function preGenerateTickIds(nextId: () => number): TickIds {
+/* ------------------------------------------------------------------ */
+/*  Demo scenario system                                               */
+/* ------------------------------------------------------------------ */
+
+export interface ScenarioModifiers {
+  costMultiplier: number
+  savingsMultiplier: number
+  anomalyChance: number
+  alertChance: number
+  providerLatencyMultiplier: number
+  blockedChance: number
+}
+
+export const DEFAULT_MODIFIERS: ScenarioModifiers = {
+  costMultiplier: 1,
+  savingsMultiplier: 1,
+  anomalyChance: 0.02,
+  alertChance: 0.01,
+  providerLatencyMultiplier: 1,
+  blockedChance: 0.05,
+}
+
+export type DemoScenarioId =
+  | "normal"
+  | "costSpike"
+  | "underAttack"
+  | "providerOutage"
+  | "highSavings"
+
+export const DEMO_SCENARIOS: Record<
+  DemoScenarioId,
+  { label: string; description: string; modifiers: ScenarioModifiers }
+> = {
+  normal: {
+    label: "Normal Operation",
+    description: "Standard behavior with typical traffic patterns",
+    modifiers: DEFAULT_MODIFIERS,
+  },
+  costSpike: {
+    label: "Cost Spike",
+    description: "Elevated API costs and spending anomalies",
+    modifiers: {
+      ...DEFAULT_MODIFIERS,
+      costMultiplier: 3,
+      savingsMultiplier: 0.5,
+      anomalyChance: 0.15,
+      alertChance: 0.08,
+    },
+  },
+  underAttack: {
+    label: "Under Attack",
+    description: "High blocked requests and security alerts",
+    modifiers: {
+      ...DEFAULT_MODIFIERS,
+      blockedChance: 0.35,
+      anomalyChance: 0.2,
+      alertChance: 0.12,
+    },
+  },
+  providerOutage: {
+    label: "Provider Outage",
+    description: "Provider degradation with high latency",
+    modifiers: {
+      ...DEFAULT_MODIFIERS,
+      providerLatencyMultiplier: 4,
+      alertChance: 0.1,
+      anomalyChance: 0.1,
+    },
+  },
+  highSavings: {
+    label: "High Savings",
+    description: "Excellent optimization performance",
+    modifiers: {
+      ...DEFAULT_MODIFIERS,
+      savingsMultiplier: 2.5,
+      costMultiplier: 0.5,
+      anomalyChance: 0.005,
+      alertChance: 0.002,
+    },
+  },
+}
+
+export function preGenerateTickIds(
+  nextId: () => number,
+  mods: ScenarioModifiers = DEFAULT_MODIFIERS,
+): TickIds {
   const eventId = nextId()
-  const shouldGenerateAnomaly = Math.random() < 0.02
+  const shouldGenerateAnomaly = Math.random() < mods.anomalyChance
   const anomalyId = shouldGenerateAnomaly ? nextId() : 0
-  const shouldGenerateAlert = Math.random() < 0.01
+  const shouldGenerateAlert = Math.random() < mods.alertChance
   const alertId = shouldGenerateAlert ? nextId() : 0
   return { eventId, shouldGenerateAnomaly, anomalyId, shouldGenerateAlert, alertId }
 }
@@ -472,19 +560,23 @@ export function preGenerateTickIds(nextId: () => number): TickIds {
 /*  Compute next tick (pure function — no ref mutations)               */
 /* ------------------------------------------------------------------ */
 
-export function computeNextTick(prev: DashboardData, ids: TickIds): DashboardData {
+export function computeNextTick(
+  prev: DashboardData,
+  ids: TickIds,
+  mods: ScenarioModifiers = DEFAULT_MODIFIERS,
+): DashboardData {
   const now = Date.now()
   const model = pickWeighted(MODELS)
   const tokens = randInt(200, 4000)
-  const baseCost = (tokens / 1000) * model.costPer1k
-  const savingsPercent = rand(0.25, 0.65)
-  const saved = baseCost * savingsPercent
+  const baseCost = (tokens / 1000) * model.costPer1k * mods.costMultiplier
+  const savingsPercent = rand(0.25, 0.65) * mods.savingsMultiplier
+  const saved = baseCost * Math.min(savingsPercent, 0.95)
   const spent = baseCost - saved
 
   const newCumSpent = prev.totalSpent + spent
   const newCumSaved = prev.totalSaved + saved
   const totalReqs = prev.totalRequests + 1
-  const isBlocked = Math.random() < 0.05
+  const isBlocked = Math.random() < mods.blockedChance
   const newBlocked = prev.requestsBlocked + (isBlocked ? 1 : 0)
   const isCacheHit = Math.random() < 0.38
 
@@ -564,7 +656,9 @@ export function computeNextTick(prev: DashboardData, ids: TickIds): DashboardDat
   // Update provider health with slight drift
   const newProviderHealth = prev.providerHealth.map((ph) => {
     const provConfig = PROVIDERS.find((p) => p.name === ph.provider) || PROVIDERS[0]
-    const newLatencyVal = ph.latencyMs * 0.9 + (provConfig.baseLatency + rand(-40, 60)) * 0.1
+    const newLatencyVal =
+      ph.latencyMs * 0.9 +
+      (provConfig.baseLatency * mods.providerLatencyMultiplier + rand(-40, 60)) * 0.1
     const newErrorRate = Math.max(0, ph.errorRate * 0.95 + rand(0, 2) * 0.05)
     return {
       ...ph,
@@ -702,4 +796,45 @@ export function computeNextTick(prev: DashboardData, ids: TickIds): DashboardDat
     providerHealth: newProviderHealth,
     alerts: newAlerts,
   }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Time range filtering                                               */
+/* ------------------------------------------------------------------ */
+
+export const TIME_RANGE_MS: Record<string, number> = {
+  "1h": 3_600_000,
+  "6h": 21_600_000,
+  "24h": 86_400_000,
+  "7d": 604_800_000,
+  "30d": 2_592_000_000,
+}
+
+/**
+ * Returns a filtered view of dashboard data, keeping only items
+ * whose timestamps fall within the given range. Returns the original
+ * object if nothing was filtered (preserves referential equality).
+ */
+export function filterDataByTimeRange(data: DashboardData, range: string): DashboardData {
+  const ms = TIME_RANGE_MS[range]
+  if (!ms) return data
+
+  const cutoff = Date.now() - ms
+
+  const timeSeries = data.timeSeries.filter((p) => p.timestamp >= cutoff)
+  const events = data.events.filter((e) => e.timestamp >= cutoff)
+  const anomalies = data.anomalies.filter((a) => a.timestamp >= cutoff)
+  const alerts = data.alerts.filter((a) => a.timestamp >= cutoff)
+
+  // Preserve referential equality when nothing was filtered
+  if (
+    timeSeries.length === data.timeSeries.length &&
+    events.length === data.events.length &&
+    anomalies.length === data.anomalies.length &&
+    alerts.length === data.alerts.length
+  ) {
+    return data
+  }
+
+  return { ...data, timeSeries, events, anomalies, alerts }
 }

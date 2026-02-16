@@ -1,7 +1,7 @@
 "use client"
 
 import { memo, useId } from "react"
-import { useDashboard } from "./dashboard-provider"
+import { useDashboardData } from "./dashboard-provider"
 import { useReducedMotion } from "@/hooks/use-reduced-motion"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -115,7 +115,7 @@ const BUDGET_GAUGE_STYLES = `
 `
 
 export function BudgetGauge() {
-  const { data } = useDashboard()
+  const data = useDashboardData()
   const { budget } = data
   const reducedMotion = useReducedMotion()
   const filterId = useId()

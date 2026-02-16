@@ -6,6 +6,11 @@ import {
   generateSeedData,
   preGenerateTickIds,
   computeNextTick,
+  filterDataByTimeRange,
+  DEMO_SCENARIOS,
+  DEFAULT_MODIFIERS,
+  type DemoScenarioId,
+  type ScenarioModifiers,
 } from "@/lib/demo-data-engine"
 
 /* ------------------------------------------------------------------ */
@@ -195,7 +200,11 @@ interface DashboardSettings {
   setTimeRange: (t: TimeRange) => void
   isPaused: boolean
   setIsPaused: React.Dispatch<React.SetStateAction<boolean>>
+  scenario: DemoScenarioId
+  setScenario: (s: DemoScenarioId) => void
 }
+
+export type { DemoScenarioId }
 
 const DashboardSettingsContext = React.createContext<DashboardSettings | null>(null)
 
@@ -217,6 +226,8 @@ interface DashboardContextValue {
   acknowledgeAnomaly: (id: number) => void
   isPaused: boolean
   setIsPaused: React.Dispatch<React.SetStateAction<boolean>>
+  scenario: DemoScenarioId
+  setScenario: (s: DemoScenarioId) => void
 }
 
 /* ------------------------------------------------------------------ */
@@ -263,11 +274,15 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [mode, setMode] = React.useState<"demo" | "live">("demo")
   const [timeRange, setTimeRange] = React.useState<TimeRange>("24h")
   const [isPaused, setIsPaused] = React.useState(false)
+  const [scenario, setScenario] = React.useState<DemoScenarioId>("normal")
   const eventIdRef = React.useRef(0)
 
   const nextId = React.useCallback(() => ++eventIdRef.current, [])
 
   const [data, setData] = React.useState<DashboardData>(createEmptyState)
+
+  /* Resolve active scenario modifiers */
+  const modifiers: ScenarioModifiers = DEMO_SCENARIOS[scenario]?.modifiers ?? DEFAULT_MODIFIERS
 
   /* Seed with initial history on first mount */
   React.useEffect(() => {
@@ -279,12 +294,18 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     })
 
     const interval = setInterval(() => {
-      const ids = preGenerateTickIds(nextId)
-      setData((prev) => computeNextTick(prev, ids))
+      const ids = preGenerateTickIds(nextId, modifiers)
+      setData((prev) => computeNextTick(prev, ids, modifiers))
     }, 1500)
 
     return () => clearInterval(interval)
-  }, [mode, isPaused, nextId])
+  }, [mode, isPaused, nextId, modifiers])
+
+  /* ---- Filtered view of data based on time range ---- */
+  const filteredData = React.useMemo(
+    () => filterDataByTimeRange(data, timeRange),
+    [data, timeRange],
+  )
 
   /* ---- Action callbacks (stable — empty deps) ---- */
 
@@ -395,14 +416,18 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       setTimeRange,
       isPaused,
       setIsPaused,
+      scenario,
+      setScenario,
     }),
-    [mode, timeRange, isPaused],
+    [mode, timeRange, isPaused, scenario],
   )
 
   return (
     <DashboardSettingsContext.Provider value={settingsValue}>
       <DashboardActionsContext.Provider value={actionsValue}>
-        <DashboardDataContext.Provider value={data}>{children}</DashboardDataContext.Provider>
+        <DashboardDataContext.Provider value={filteredData}>
+          {children}
+        </DashboardDataContext.Provider>
       </DashboardActionsContext.Provider>
     </DashboardSettingsContext.Provider>
   )

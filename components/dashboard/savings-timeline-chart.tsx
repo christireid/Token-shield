@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useMemo } from "react"
-import { useDashboard } from "./dashboard-provider"
+import { useDashboardData } from "./dashboard-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts"
@@ -33,7 +33,7 @@ const LEGEND_NOSHIELD_STYLE: React.CSSProperties = {
 const timeFormatter = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit" })
 
 export function SavingsTimelineChart() {
-  const { data } = useDashboard()
+  const data = useDashboardData()
   const filterId = React.useId()
   const gradSavedId = `${filterId}-gradSaved`
   const gradSpentId = `${filterId}-gradSpent`

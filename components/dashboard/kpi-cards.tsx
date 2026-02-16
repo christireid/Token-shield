@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { useDashboard } from "./dashboard-provider"
+import { useDashboardData } from "./dashboard-provider"
 import { KpiCard, type KpiCardProps } from "./kpi-card"
 import { formatCurrency, COLORS } from "@/lib/dashboard-utils"
 import { DollarSign, Percent, Zap, ShieldOff, Timer, TrendingUp } from "lucide-react"
@@ -15,7 +15,7 @@ const ICON_SHIELD_OFF = <ShieldOff className="h-4 w-4" />
 const ICON_TIMER = <Timer className="h-4 w-4" />
 
 export function KpiCards() {
-  const { data } = useDashboard()
+  const data = useDashboardData()
 
   const cards: KpiCardProps[] = useMemo(
     () => [

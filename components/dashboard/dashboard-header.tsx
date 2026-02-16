@@ -1,7 +1,13 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef } from "react"
-import { useDashboard, type TimeRange } from "./dashboard-provider"
+import {
+  useDashboardData,
+  useDashboardSettings,
+  type TimeRange,
+  type DemoScenarioId,
+} from "./dashboard-provider"
+import { DEMO_SCENARIOS } from "@/lib/demo-data-engine"
 import { Switch } from "@/components/ui/switch"
 import {
   Select,
@@ -34,7 +40,9 @@ const TIME_RANGES: { value: TimeRange; label: string }[] = [
 ]
 
 export function DashboardHeader() {
-  const { mode, setMode, timeRange, setTimeRange, data, isPaused, setIsPaused } = useDashboard()
+  const data = useDashboardData()
+  const { mode, setMode, timeRange, setTimeRange, isPaused, setIsPaused, scenario, setScenario } =
+    useDashboardSettings()
   const reducedMotion = useReducedMotion()
   const { toast } = useToast()
 
@@ -243,6 +251,24 @@ export function DashboardHeader() {
             ))}
           </SelectContent>
         </Select>
+
+        {/* Scenario preset */}
+        {mode === "demo" && (
+          <Select value={scenario} onValueChange={(v) => setScenario(v as DemoScenarioId)}>
+            <SelectTrigger className="h-8 w-[160px] border-border/50 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(DEMO_SCENARIOS).map(([id, cfg]) => (
+                <SelectItem key={id} value={id}>
+                  <div className="flex flex-col">
+                    <span>{cfg.label}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         {/* Export */}
         <DropdownMenu>

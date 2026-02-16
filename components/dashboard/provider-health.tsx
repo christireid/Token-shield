@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useDashboard, type ProviderHealthRecord } from "./dashboard-provider"
+import { useDashboardData, type ProviderHealthRecord } from "./dashboard-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -174,7 +174,7 @@ const ProviderRow = React.memo(function ProviderRow({
 /* ------------------------------------------------------------------ */
 
 export function ProviderHealth() {
-  const { data } = useDashboard()
+  const data = useDashboardData()
   const reducedMotion = useReducedMotion()
 
   return (

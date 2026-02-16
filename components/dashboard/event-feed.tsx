@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useDashboard, type DashboardEvent } from "./dashboard-provider"
+import { useDashboardData, type DashboardEvent } from "./dashboard-provider"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
@@ -60,7 +60,10 @@ const EventRow = React.memo(function EventRow({
       </div>
 
       {/* Timestamp */}
-      <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/60">
+      <span
+        className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/60"
+        title={new Date(ev.timestamp).toLocaleString()}
+      >
         {formatRelativeTime(ev.timestamp)}
       </span>
     </div>
@@ -68,7 +71,7 @@ const EventRow = React.memo(function EventRow({
 })
 
 export function EventFeed() {
-  const { data } = useDashboard()
+  const data = useDashboardData()
   const reducedMotion = useReducedMotion()
   const [paused, setPaused] = React.useState(false)
   const [frozenEvents, setFrozenEvents] = React.useState<DashboardEvent[]>([])

@@ -14,6 +14,8 @@ import {
   generateInitialProviderHealth,
   generateInitialAnomalies,
   generateInitialAlerts,
+  filterDataByTimeRange,
+  TIME_RANGE_MS,
   MODELS,
   MODULE_KEYS,
   EVENT_TYPES,
@@ -361,5 +363,140 @@ describe("computeNextTick", () => {
     }
     const next = computeNextTick(seed, ids)
     expect(next.sparklines.saved.length).toBeLessThanOrEqual(20)
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/*  Defensive checks                                                   */
+/* ------------------------------------------------------------------ */
+
+describe("defensive checks", () => {
+  it("pickWeighted throws on empty array", () => {
+    expect(() => pickWeighted([])).toThrow("pickWeighted: items array must not be empty")
+  })
+
+  it("rand handles min > max by swapping", () => {
+    for (let i = 0; i < 50; i++) {
+      const val = rand(10, 5)
+      expect(val).toBeGreaterThanOrEqual(5)
+      expect(val).toBeLessThanOrEqual(10)
+    }
+  })
+
+  it("randInt handles min > max by swapping", () => {
+    for (let i = 0; i < 50; i++) {
+      const val = randInt(10, 5)
+      expect(val).toBeGreaterThanOrEqual(5)
+      expect(val).toBeLessThan(10)
+      expect(Number.isInteger(val)).toBe(true)
+    }
+  })
+})
+
+/* ------------------------------------------------------------------ */
+/*  Time range filtering                                               */
+/* ------------------------------------------------------------------ */
+
+describe("TIME_RANGE_MS", () => {
+  it("defines all expected time ranges", () => {
+    expect(TIME_RANGE_MS).toHaveProperty("1h")
+    expect(TIME_RANGE_MS).toHaveProperty("6h")
+    expect(TIME_RANGE_MS).toHaveProperty("24h")
+    expect(TIME_RANGE_MS).toHaveProperty("7d")
+    expect(TIME_RANGE_MS).toHaveProperty("30d")
+  })
+
+  it("has correct millisecond values", () => {
+    expect(TIME_RANGE_MS["1h"]).toBe(3_600_000)
+    expect(TIME_RANGE_MS["24h"]).toBe(86_400_000)
+  })
+})
+
+describe("filterDataByTimeRange", () => {
+  it("returns the same object when no data is filtered", () => {
+    let counter = 0
+    const data = generateSeedData(() => ++counter)
+    // All seed data is within the last ~60 minutes; "6h" window should keep everything
+    const filtered = filterDataByTimeRange(data, "6h")
+    expect(filtered).toBe(data)
+  })
+
+  it("filters out old timeSeries points", () => {
+    let counter = 0
+    const data = generateSeedData(() => ++counter)
+    // Manually insert an old point well outside the window
+    const oldPoint = {
+      timestamp: Date.now() - 7_200_000, // 2 hours ago
+      spent: 0.01,
+      saved: 0.02,
+      cumulativeSpent: 0.01,
+      cumulativeSaved: 0.02,
+    }
+    const modified = { ...data, timeSeries: [oldPoint, ...data.timeSeries] }
+    const filtered = filterDataByTimeRange(modified, "1h")
+    // The old point should be removed; remaining count may be less due to boundary timing
+    expect(filtered.timeSeries.length).toBeLessThan(modified.timeSeries.length)
+    expect(filtered.timeSeries.every((p) => p.timestamp !== oldPoint.timestamp)).toBe(true)
+  })
+
+  it("filters out old events", () => {
+    let counter = 0
+    const data = generateSeedData(() => ++counter)
+    const oldEvent = {
+      id: 9999,
+      timestamp: Date.now() - 7_200_000,
+      type: "cache:hit" as const,
+      message: "old event",
+    }
+    const modified = { ...data, events: [oldEvent, ...data.events] }
+    const filtered = filterDataByTimeRange(modified, "1h")
+    expect(filtered.events.length).toBe(data.events.length)
+  })
+
+  it("filters out old anomalies and alerts", () => {
+    let counter = 0
+    const data = generateSeedData(() => ++counter)
+    const oldAnomaly = {
+      ...data.anomalies[0],
+      id: 9998,
+      timestamp: Date.now() - 7_200_000,
+    }
+    const oldAlert = {
+      ...data.alerts[0],
+      id: 9997,
+      timestamp: Date.now() - 7_200_000,
+    }
+    const modified = {
+      ...data,
+      anomalies: [oldAnomaly, ...data.anomalies],
+      alerts: [oldAlert, ...data.alerts],
+    }
+    const filtered = filterDataByTimeRange(modified, "1h")
+    expect(filtered.anomalies.length).toBe(data.anomalies.length)
+    expect(filtered.alerts.length).toBe(data.alerts.length)
+  })
+
+  it("returns original data for unknown range", () => {
+    let counter = 0
+    const data = generateSeedData(() => ++counter)
+    const filtered = filterDataByTimeRange(data, "unknown")
+    expect(filtered).toBe(data)
+  })
+
+  it("preserves non-temporal fields unchanged", () => {
+    let counter = 0
+    const data = generateSeedData(() => ++counter)
+    const oldPoint = {
+      timestamp: Date.now() - 7_200_000,
+      spent: 0.01,
+      saved: 0.02,
+      cumulativeSpent: 0.01,
+      cumulativeSaved: 0.02,
+    }
+    const modified = { ...data, timeSeries: [oldPoint, ...data.timeSeries] }
+    const filtered = filterDataByTimeRange(modified, "1h")
+    expect(filtered.totalSpent).toBe(modified.totalSpent)
+    expect(filtered.byModule).toBe(modified.byModule)
+    expect(filtered.users).toBe(modified.users)
   })
 })

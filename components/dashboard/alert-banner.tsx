@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useDashboard, type DashboardAlert } from "./dashboard-provider"
+import { useDashboardData, useDashboardActions, type DashboardAlert } from "./dashboard-provider"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -80,7 +80,10 @@ const AlertRow = React.memo(function AlertRow({
       </Badge>
 
       {/* Timestamp */}
-      <span className="shrink-0 text-[10px] text-muted-foreground/50">
+      <span
+        className="shrink-0 text-[10px] text-muted-foreground/50"
+        title={new Date(alert.timestamp).toLocaleString()}
+      >
         {formatRelativeTime(alert.timestamp)}
       </span>
 
@@ -103,7 +106,8 @@ const AlertRow = React.memo(function AlertRow({
 /* ------------------------------------------------------------------ */
 
 export function AlertBanner() {
-  const { data, dismissAlert } = useDashboard()
+  const data = useDashboardData()
+  const { dismissAlert } = useDashboardActions()
   const reducedMotion = useReducedMotion()
 
   const activeAlerts = React.useMemo(() => data.alerts.filter((a) => !a.dismissed), [data.alerts])

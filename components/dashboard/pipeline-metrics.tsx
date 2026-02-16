@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useMemo } from "react"
-import { useDashboard, type PipelineStageMetric } from "./dashboard-provider"
+import { useDashboardData, type PipelineStageMetric } from "./dashboard-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { STAGE_COLORS } from "@/lib/dashboard-utils"
@@ -190,7 +190,7 @@ const PIPELINE_STYLES = `
 `
 
 export function PipelineMetrics() {
-  const { data } = useDashboard()
+  const data = useDashboardData()
   const metrics = data.pipelineMetrics
   const reducedMotion = useReducedMotion()
 

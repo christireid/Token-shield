@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useDashboard, type UserBudget } from "./dashboard-provider"
+import { useDashboardData, useDashboardActions, type UserBudget } from "./dashboard-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import {
   Table,
@@ -185,7 +185,7 @@ function EditableLimit({ value, onSave }: { value: number; onSave: (v: number) =
 
 /* ---- Add user dialog ---- */
 function AddUserDialog() {
-  const { addUser } = useDashboard()
+  const { addUser } = useDashboardActions()
   const { toast } = useToast()
   const [open, setOpen] = React.useState(false)
   const [name, setName] = React.useState("")
@@ -371,7 +371,8 @@ const SortHeader = React.memo(function SortHeader({
 })
 
 export function UserBudgetTable() {
-  const { data, updateUserBudget, removeUser, resetUserSpend } = useDashboard()
+  const data = useDashboardData()
+  const { updateUserBudget, removeUser, resetUserSpend } = useDashboardActions()
   const { toast } = useToast()
   const [sortKey, setSortKey] = React.useState<SortKey>("percentUsed")
   const [sortDir, setSortDir] = React.useState<"asc" | "desc">("desc")
