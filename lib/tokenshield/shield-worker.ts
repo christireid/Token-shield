@@ -94,7 +94,10 @@ export class ShieldWorker {
             reject(new Error("Worker failed to load"))
           }
           this.pending.clear()
-          this.initInline(config).catch(() => {})
+          this.initInline(config).catch(() => {
+            // Inline fallback also failed — engine remains uninitialized.
+            // Subsequent calls will return null/empty results gracefully.
+          })
         }
         this.mode = "worker"
         await this.post<void>({ type: "INIT", id: nextId(), payload: config })

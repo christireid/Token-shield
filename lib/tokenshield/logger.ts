@@ -89,6 +89,9 @@ const EVENT_LOG_LEVELS: Record<keyof TokenShieldEvents, LogLevel> = {
   "stream:abort": "warn",
   "stream:complete": "info",
   "anomaly:detected": "warn",
+  "compressor:applied": "info",
+  "delta:applied": "info",
+  "storage:error": "warn",
 }
 
 // -------------------------------------------------------

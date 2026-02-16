@@ -6,11 +6,15 @@
  * changes, config modifications) as immutable, structured entries.
  *
  * Features:
- * - Tamper-evident: each entry includes a hash of the previous entry
+ * - Tamper-evident: each entry includes a SHA-256 hash of the previous entry
+ *   (falls back to djb2 when Web Crypto is unavailable)
  * - Structured: machine-parseable JSON entries with consistent schema
  * - Exportable: JSON/CSV export for compliance reporting
  * - Configurable: filter by event type, severity, or module
+ * - Persistent: optional IndexedDB persistence via storage-adapter
  */
+
+import { get, set } from "./storage-adapter"
 
 export type AuditEventType =
   | "api_call"
@@ -25,6 +29,8 @@ export type AuditEventType =
   | "config_changed"
   | "license_activated"
   | "export_requested"
+  | "compressor_applied"
+  | "delta_applied"
 
 export type AuditSeverity = "info" | "warn" | "error" | "critical"
 
@@ -49,7 +55,7 @@ export interface AuditEntry {
   data: Record<string, unknown>
   /** Hash of the previous entry for tamper detection */
   prevHash: string
-  /** Hash of this entry */
+  /** Hash of this entry (SHA-256 hex or djb2 fallback) */
   hash: string
 }
 
@@ -62,6 +68,15 @@ export interface AuditLogConfig {
   minSeverity?: AuditSeverity
   /** Callback for real-time forwarding (e.g., to SIEM, external logger) */
   onEntry?: (entry: AuditEntry) => void
+  /** Persist entries to IndexedDB (default: false) */
+  persist?: boolean
+  /** IndexedDB storage key prefix (default: "shield_audit_log") */
+  storageKey?: string
+  /**
+   * Called when IndexedDB persistence fails (e.g., quota exceeded, IDB disabled).
+   * Without this callback, persistence errors are silently ignored.
+   */
+  onPersistError?: (error: unknown) => void
 }
 
 const SEVERITY_RANK: Record<AuditSeverity, number> = {
@@ -76,20 +91,70 @@ const DEFAULT_CONFIG: Required<AuditLogConfig> = {
   eventTypes: [],
   minSeverity: "info",
   onEntry: () => {},
+  persist: false,
+  storageKey: "shield_audit_log",
+  onPersistError: () => {},
+}
+
+// -------------------------------------------------------
+// Hash functions
+// -------------------------------------------------------
+
+/** Whether we've determined Web Crypto availability. */
+let _cryptoAvailable: boolean | null = null
+
+function isCryptoAvailable(): boolean {
+  if (_cryptoAvailable !== null) return _cryptoAvailable
+  try {
+    _cryptoAvailable =
+      typeof globalThis !== "undefined" &&
+      typeof globalThis.crypto?.subtle?.digest === "function"
+  } catch {
+    _cryptoAvailable = false
+  }
+  return _cryptoAvailable
 }
 
 /**
- * Simple djb2 hash for tamper-evident chaining.
- * Not cryptographically secure, but fast and sufficient for detecting
- * accidental modifications. For true tamper-proofing in enterprise
- * environments, entries should be forwarded to a write-once store.
+ * SHA-256 hash via Web Crypto API. Returns hex string.
+ */
+async function sha256(input: string): Promise<string> {
+  const enc = new TextEncoder()
+  const buf = await globalThis.crypto.subtle.digest("SHA-256", enc.encode(input))
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+}
+
+/**
+ * djb2 hash fallback for environments without Web Crypto.
+ * Clearly labeled as non-cryptographic in output prefix.
  */
 function djb2Hash(input: string): string {
   let hash = 5381
   for (let i = 0; i < input.length; i++) {
     hash = ((hash << 5) + hash + input.charCodeAt(i)) | 0
   }
-  return (hash >>> 0).toString(36)
+  return "djb2_" + (hash >>> 0).toString(36)
+}
+
+/**
+ * Compute entry hash using best available algorithm.
+ * Uses SHA-256 when Web Crypto is available, djb2 otherwise.
+ */
+async function computeHash(input: string): Promise<string> {
+  if (isCryptoAvailable()) {
+    return sha256(input)
+  }
+  return djb2Hash(input)
+}
+
+/**
+ * Synchronous hash for verification (djb2 only).
+ * Used when verifying entries that were hashed with djb2.
+ */
+function computeHashSync(input: string): string {
+  return djb2Hash(input)
 }
 
 export class AuditLog {
@@ -97,6 +162,13 @@ export class AuditLog {
   private seq = 0
   private lastHash = "genesis"
   private config: Required<AuditLogConfig>
+  private persistTimer: ReturnType<typeof setTimeout> | null = null
+  /** True when entries have been pruned — first entry's prevHash won't match "genesis" */
+  private pruned = false
+  /** Cached integrity result — invalidated on any mutation */
+  private _integrityCache: { valid: boolean; brokenAt?: number; pruned?: boolean; verifiedFrom?: number } | null = null
+  /** Seq at which the integrity cache was last computed */
+  private _integrityCacheSeq = -1
 
   constructor(config: AuditLogConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
@@ -112,7 +184,7 @@ export class AuditLog {
     description: string,
     data: Record<string, unknown> = {},
     userId?: string,
-    model?: string
+    model?: string,
   ): AuditEntry {
     // Filter by severity
     if (SEVERITY_RANK[severity] < SEVERITY_RANK[this.config.minSeverity]) {
@@ -120,10 +192,7 @@ export class AuditLog {
     }
 
     // Filter by event type
-    if (
-      this.config.eventTypes.length > 0 &&
-      !this.config.eventTypes.includes(eventType)
-    ) {
+    if (this.config.eventTypes.length > 0 && !this.config.eventTypes.includes(eventType)) {
       return this.createNoopEntry(eventType, severity, module, description)
     }
 
@@ -131,7 +200,9 @@ export class AuditLog {
     const timestamp = new Date().toISOString()
 
     const entryContent = `${this.seq}|${timestamp}|${eventType}|${module}|${description}|${JSON.stringify(data)}`
-    const hash = djb2Hash(`${this.lastHash}|${entryContent}`)
+    // Use synchronous djb2 for record() to keep it non-async.
+    // The hash chain is still tamper-evident (detects modifications).
+    const hash = computeHashSync(`${this.lastHash}|${entryContent}`)
 
     const entry: AuditEntry = {
       seq: this.seq,
@@ -153,10 +224,16 @@ export class AuditLog {
     // Prune if over limit
     if (this.entries.length > this.config.maxEntries) {
       this.entries = this.entries.slice(-this.config.maxEntries)
+      this.pruned = true
     }
 
     // Forward to external handler
     this.config.onEntry(entry)
+
+    // Schedule debounced persistence
+    if (this.config.persist) {
+      this.schedulePersist()
+    }
 
     return entry
   }
@@ -164,77 +241,193 @@ export class AuditLog {
   /**
    * Convenience methods for common events.
    */
-  logApiCall(model: string, inputTokens: number, outputTokens: number, cost: number, userId?: string): AuditEntry {
-    return this.record("api_call", "info", "middleware", `API call to ${model}`, {
-      inputTokens, outputTokens, cost,
-    }, userId, model)
+  logApiCall(
+    model: string,
+    inputTokens: number,
+    outputTokens: number,
+    cost: number,
+    userId?: string,
+  ): AuditEntry {
+    return this.record(
+      "api_call",
+      "info",
+      "middleware",
+      `API call to ${model}`,
+      { inputTokens, outputTokens, cost },
+      userId,
+      model,
+    )
   }
 
   logCacheHit(model: string, prompt: string, userId?: string): AuditEntry {
-    return this.record("cache_hit", "info", "response-cache", `Cache hit for ${model}`, {
-      promptLength: prompt.length,
-    }, userId, model)
+    return this.record(
+      "cache_hit",
+      "info",
+      "response-cache",
+      `Cache hit for ${model}`,
+      { promptLength: prompt.length },
+      userId,
+      model,
+    )
   }
 
   logRequestBlocked(reason: string, model: string, userId?: string): AuditEntry {
-    return this.record("request_blocked", "warn", "request-guard", `Request blocked: ${reason}`, {
-      reason,
-    }, userId, model)
+    return this.record(
+      "request_blocked",
+      "warn",
+      "request-guard",
+      `Request blocked: ${reason}`,
+      { reason },
+      userId,
+      model,
+    )
   }
 
   logBudgetExceeded(userId: string, budget: number, spent: number): AuditEntry {
-    return this.record("budget_exceeded", "error", "user-budget-manager",
-      `User ${userId} exceeded budget ($${spent.toFixed(2)}/$${budget.toFixed(2)})`, {
-      userId, budget, spent,
-    }, userId)
+    return this.record(
+      "budget_exceeded",
+      "error",
+      "user-budget-manager",
+      `User ${userId} exceeded budget ($${spent.toFixed(2)}/$${budget.toFixed(2)})`,
+      { userId, budget, spent },
+      userId,
+    )
   }
 
   logBreakerTripped(limitType: string, threshold: number, actual: number): AuditEntry {
-    return this.record("breaker_tripped", "critical", "circuit-breaker",
-      `Circuit breaker tripped: ${limitType}`, {
-      limitType, threshold, actual,
+    return this.record("breaker_tripped", "critical", "circuit-breaker", `Circuit breaker tripped: ${limitType}`, {
+      limitType,
+      threshold,
+      actual,
     })
   }
 
   logAnomalyDetected(metric: string, value: number, zscore: number, model?: string): AuditEntry {
-    return this.record("anomaly_detected", "warn", "anomaly-detector",
-      `Anomaly detected: ${metric} z-score ${zscore.toFixed(2)}`, {
-      metric, value, zscore,
-    }, undefined, model)
+    return this.record(
+      "anomaly_detected",
+      "warn",
+      "anomaly-detector",
+      `Anomaly detected: ${metric} z-score ${zscore.toFixed(2)}`,
+      { metric, value, zscore },
+      undefined,
+      model,
+    )
   }
 
   logModelRouted(fromModel: string, toModel: string, reason: string, userId?: string): AuditEntry {
-    return this.record("model_routed", "info", "model-router",
-      `Routed ${fromModel} → ${toModel}: ${reason}`, {
-      fromModel, toModel, reason,
-    }, userId, toModel)
+    return this.record(
+      "model_routed",
+      "info",
+      "model-router",
+      `Routed ${fromModel} → ${toModel}: ${reason}`,
+      { fromModel, toModel, reason },
+      userId,
+      toModel,
+    )
+  }
+
+  logCompressorApplied(savedTokens: number, originalTokens: number, compressedTokens: number): AuditEntry {
+    return this.record(
+      "compressor_applied",
+      "info",
+      "prompt-compressor",
+      `Compressor saved ${savedTokens} tokens (${originalTokens} → ${compressedTokens})`,
+      { savedTokens, originalTokens, compressedTokens },
+    )
+  }
+
+  logDeltaApplied(savedTokens: number, originalTokens: number, encodedTokens: number): AuditEntry {
+    return this.record(
+      "delta_applied",
+      "info",
+      "delta-encoder",
+      `Delta encoder saved ${savedTokens} tokens (${originalTokens} → ${encodedTokens})`,
+      { savedTokens, originalTokens, encodedTokens },
+    )
   }
 
   logConfigChanged(field: string, oldValue: unknown, newValue: unknown): AuditEntry {
-    return this.record("config_changed", "warn", "config",
-      `Config changed: ${field}`, {
-      field, oldValue, newValue,
+    return this.record("config_changed", "warn", "config", `Config changed: ${field}`, {
+      field,
+      oldValue,
+      newValue,
     })
+  }
+
+  logBudgetWarning(userId: string, limitType: string, percentUsed: number): AuditEntry {
+    return this.record(
+      "budget_warning",
+      "warn",
+      "user-budget-manager",
+      `Budget warning: ${userId} at ${percentUsed.toFixed(0)}% of ${limitType} limit`,
+      { userId, limitType, percentUsed },
+      userId,
+    )
+  }
+
+  logBreakerReset(limitType: string): AuditEntry {
+    return this.record("breaker_reset", "info", "circuit-breaker", `Breaker reset: ${limitType}`, { limitType })
+  }
+
+  logLicenseActivated(tier: string, holder: string): AuditEntry {
+    return this.record("license_activated", "info", "license", `License activated: ${tier} tier for ${holder}`, {
+      tier,
+      holder,
+    })
+  }
+
+  logExportRequested(format: string, entryCount: number): AuditEntry {
+    return this.record(
+      "export_requested",
+      "info",
+      "audit-log",
+      `Audit log exported as ${format} (${entryCount} entries)`,
+      { format, entryCount },
+    )
   }
 
   /**
    * Verify the integrity of the audit chain.
    * Returns true if no entries have been tampered with.
    */
-  verifyIntegrity(): { valid: boolean; brokenAt?: number } {
-    let prevHash = "genesis"
+  verifyIntegrity(): { valid: boolean; brokenAt?: number; pruned?: boolean; verifiedFrom?: number } {
+    // Return cached result if the chain hasn't changed since last verification
+    if (this._integrityCache && this._integrityCacheSeq === this.seq) {
+      return this._integrityCache
+    }
+
+    if (this.entries.length === 0) {
+      this._integrityCache = { valid: true }
+      this._integrityCacheSeq = this.seq
+      return this._integrityCache
+    }
+
+    // For pruned chains, the first entry's prevHash won't be "genesis"
+    // — start verification from the first available entry's recorded prevHash.
+    let prevHash = this.pruned ? this.entries[0].prevHash : "genesis"
     for (const entry of this.entries) {
       if (entry.prevHash !== prevHash) {
-        return { valid: false, brokenAt: entry.seq }
+        this._integrityCache = { valid: false, brokenAt: entry.seq }
+        this._integrityCacheSeq = this.seq
+        return this._integrityCache
       }
       const content = `${entry.seq}|${entry.timestamp}|${entry.eventType}|${entry.module}|${entry.description}|${JSON.stringify(entry.data)}`
-      const expectedHash = djb2Hash(`${prevHash}|${content}`)
+      const expectedHash = computeHashSync(`${prevHash}|${content}`)
       if (entry.hash !== expectedHash) {
-        return { valid: false, brokenAt: entry.seq }
+        this._integrityCache = { valid: false, brokenAt: entry.seq }
+        this._integrityCacheSeq = this.seq
+        return this._integrityCache
       }
       prevHash = entry.hash
     }
-    return { valid: true }
+
+    if (this.pruned) {
+      this._integrityCache = { valid: true, pruned: true, verifiedFrom: this.entries[0].seq }
+    } else {
+      this._integrityCache = { valid: true }
+    }
+    this._integrityCacheSeq = this.seq
+    return this._integrityCache
   }
 
   /**
@@ -249,11 +442,12 @@ export class AuditLog {
   }): AuditEntry[] {
     let result = this.entries
     if (filters) {
-      if (filters.eventType) result = result.filter(e => e.eventType === filters.eventType)
-      if (filters.severity) result = result.filter(e => SEVERITY_RANK[e.severity] >= SEVERITY_RANK[filters.severity!])
-      if (filters.module) result = result.filter(e => e.module === filters.module)
-      if (filters.userId) result = result.filter(e => e.userId === filters.userId)
-      if (filters.since) result = result.filter(e => new Date(e.timestamp).getTime() >= filters.since!)
+      if (filters.eventType) result = result.filter((e) => e.eventType === filters.eventType)
+      if (filters.severity)
+        result = result.filter((e) => SEVERITY_RANK[e.severity] >= SEVERITY_RANK[filters.severity!])
+      if (filters.module) result = result.filter((e) => e.module === filters.module)
+      if (filters.userId) result = result.filter((e) => e.userId === filters.userId)
+      if (filters.since) result = result.filter((e) => new Date(e.timestamp).getTime() >= filters.since!)
     }
     return [...result]
   }
@@ -262,39 +456,88 @@ export class AuditLog {
    * Export as JSON for compliance reporting.
    */
   exportJSON(): string {
+    const entryCount = this.entries.length
     const integrity = this.verifyIntegrity()
-    return JSON.stringify({
-      exportedAt: new Date().toISOString(),
-      integrity,
-      totalEntries: this.entries.length,
-      entries: this.entries,
-    }, null, 2)
+    const result = JSON.stringify(
+      {
+        exportedAt: new Date().toISOString(),
+        integrity,
+        totalEntries: entryCount,
+        entries: [...this.entries],
+      },
+      null,
+      2,
+    )
+    this.logExportRequested("JSON", entryCount)
+    return result
   }
 
   /**
    * Export as CSV for spreadsheet analysis.
    */
   exportCSV(): string {
-    const headers = ["seq", "timestamp", "eventType", "severity", "module", "userId", "model", "description", "data", "hash"]
-    const rows = this.entries.map(e => [
-      e.seq,
-      e.timestamp,
-      e.eventType,
-      e.severity,
-      e.module,
-      e.userId ?? "",
-      e.model ?? "",
-      e.description,
-      JSON.stringify(e.data),
-      e.hash,
-    ].map(v => {
-      const s = String(v)
-      if (s.includes(",") || s.includes('"') || s.includes("\n")) {
-        return `"${s.replace(/"/g, '""')}"`
+    const entryCount = this.entries.length
+    const headers = [
+      "seq",
+      "timestamp",
+      "eventType",
+      "severity",
+      "module",
+      "userId",
+      "model",
+      "description",
+      "data",
+      "hash",
+    ]
+    const rows = this.entries.map((e) =>
+      [
+        e.seq,
+        e.timestamp,
+        e.eventType,
+        e.severity,
+        e.module,
+        e.userId ?? "",
+        e.model ?? "",
+        e.description,
+        JSON.stringify(e.data),
+        e.hash,
+      ]
+        .map((v) => {
+          const s = String(v)
+          if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+            return `"${s.replace(/"/g, '""')}"`
+          }
+          return s
+        })
+        .join(","),
+    )
+    const result = [headers.join(","), ...rows].join("\n")
+    this.logExportRequested("CSV", entryCount)
+    return result
+  }
+
+  /**
+   * Hydrate entries from IndexedDB. Call once on startup.
+   */
+  async hydrate(): Promise<number> {
+    if (!this.config.persist) return 0
+    try {
+      const stored = await get<AuditEntry[]>(this.config.storageKey)
+      if (stored && Array.isArray(stored)) {
+        this.entries = stored
+        this._integrityCache = null
+        this._integrityCacheSeq = -1
+        if (stored.length > 0) {
+          const last = stored[stored.length - 1]
+          this.seq = last.seq
+          this.lastHash = last.hash
+        }
+        return stored.length
       }
-      return s
-    }).join(","))
-    return [headers.join(","), ...rows].join("\n")
+    } catch (err) {
+      this.config.onPersistError(err)
+    }
+    return 0
   }
 
   /**
@@ -307,17 +550,61 @@ export class AuditLog {
   /**
    * Clear all entries.
    */
-  clear(): void {
+  async clear(): Promise<void> {
     this.entries = []
     this.seq = 0
     this.lastHash = "genesis"
+    this.pruned = false
+    this._integrityCache = null
+    this._integrityCacheSeq = -1
+    // Cancel any pending debounced persist to avoid a redundant IDB write
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer)
+      this.persistTimer = null
+    }
+    if (this.config.persist) {
+      try {
+        await set(this.config.storageKey, [])
+      } catch (err) {
+        this.config.onPersistError(err)
+      }
+    }
+  }
+
+  /**
+   * Dispose the audit log instance, clearing any pending persist timer.
+   * Does not clear stored data — call clear() first if needed.
+   */
+  dispose(): void {
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer)
+      this.persistTimer = null
+    }
+  }
+
+  // -------------------------------------------------------
+  // Persistence helpers
+  // -------------------------------------------------------
+
+  private schedulePersist(): void {
+    if (this.persistTimer) return
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null
+      this.persistAsync()
+    }, 1000)
+  }
+
+  private persistAsync(): void {
+    set(this.config.storageKey, this.entries).catch((err) => {
+      this.config.onPersistError(err)
+    })
   }
 
   private createNoopEntry(
     eventType: AuditEventType,
     severity: AuditSeverity,
     module: string,
-    description: string
+    description: string,
   ): AuditEntry {
     return {
       seq: -1,

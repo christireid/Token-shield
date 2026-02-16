@@ -221,6 +221,10 @@ export function useEventLog(maxEntries = 50): EventLogEntry[] {
       "stream:chunk",
       "stream:abort",
       "stream:complete",
+      "anomaly:detected",
+      "router:holdback",
+      "compressor:applied",
+      "delta:applied",
     ]
 
     const handlers: Array<() => void> = []

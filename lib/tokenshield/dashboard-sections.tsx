@@ -8,7 +8,7 @@
  * are re-exported from dashboard.tsx.
  */
 
-import React from "react"
+import React, { useState, useMemo, useCallback } from "react"
 import {
   useSavings,
   useCostLedger,
@@ -21,6 +21,7 @@ import {
 import type { CostCircuitBreaker } from "./circuit-breaker"
 import type { UserBudgetManager } from "./user-budget-manager"
 import type { ProviderAdapter } from "./provider-adapter"
+import type { AuditLog, AuditEntry, AuditSeverity, AuditEventType } from "./audit-log"
 
 // -------------------------------------------------------
 // Utility functions
@@ -227,12 +228,17 @@ export const EVENT_COLORS: Record<string, string> = {
   "cache:hit": "#22c55e",
   "stream:complete": "#22c55e",
   "cache:store": "#22c55e",
-  // Yellow: warnings
+  // Yellow: warnings / informational
+  "anomaly:detected": "#f59e0b",
+  "router:holdback": "#f59e0b",
   "breaker:warning": "#f59e0b",
   "userBudget:warning": "#f59e0b",
   "context:trimmed": "#f59e0b",
   "router:downgraded": "#f59e0b",
   "stream:chunk": "#f59e0b",
+  // Blue: optimization events
+  "compressor:applied": "#3b82f6",
+  "delta:applied": "#8b5cf6",
   // Red: blocked / tripped / exceeded
   "request:blocked": "#ef4444",
   "breaker:tripped": "#ef4444",
@@ -288,6 +294,14 @@ export function summarizeEventData(type: string, data: Record<string, unknown>):
         return `tokens: ${data.outputTokens ?? "?"}, est: ${typeof data.estimatedCost === "number" ? formatDollars(data.estimatedCost) : "?"}`
       case "stream:complete":
         return `cost: ${typeof data.totalCost === "number" ? formatDollars(data.totalCost) : "?"}`
+      case "compressor:applied":
+        return `saved: ${data.savedTokens ?? "?"} tokens (${data.originalTokens} → ${data.compressedTokens})`
+      case "delta:applied":
+        return `saved: ${data.savedTokens ?? "?"} tokens (${data.originalTokens} → ${data.encodedTokens})`
+      case "anomaly:detected":
+        return `${data.type}: z-score ${typeof data.zScore === "number" ? data.zScore.toFixed(1) : "?"}, value: ${data.value ?? "?"}`
+      case "router:holdback":
+        return `model: ${data.model ?? "?"}, holdback: ${typeof data.holdbackRate === "number" ? (data.holdbackRate * 100).toFixed(0) + "%" : "?"}`
       default: {
         // Fallback: show first 2 keys
         const keys = Object.keys(data).slice(0, 2)
@@ -570,6 +584,249 @@ export function PipelineMetricsSection() {
           at {formatTime(metrics.lastEvent.timestamp)}
         </div>
       )}
+    </div>
+  )
+}
+
+// -------------------------------------------------------
+// Savings Attribution Section
+// -------------------------------------------------------
+
+const MODULE_COLORS: Record<string, string> = {
+  cache: "#22c55e",
+  compressor: "#3b82f6",
+  delta: "#8b5cf6",
+  router: "#f59e0b",
+  context: "#06b6d4",
+  prefix: "#ec4899",
+}
+
+export interface SavingsAttribution {
+  cache: number
+  compressor: number
+  delta: number
+  router: number
+  context: number
+  prefix: number
+}
+
+export function SavingsAttributionSection({ attribution }: { attribution: SavingsAttribution }) {
+  const entries = useMemo(() => {
+    return Object.entries(attribution)
+      .filter(([, v]) => v > 0)
+      .sort((a, b) => b[1] - a[1])
+  }, [attribution])
+
+  const total = useMemo(() => entries.reduce((sum, [, v]) => sum + v, 0), [entries])
+
+  if (total === 0) {
+    return (
+      <div>
+        <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}>Savings Attribution</h3>
+        <div style={{ fontSize: 12, color: "#9ca3af" }}>No savings recorded yet.</div>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}>
+        Savings Attribution
+        <span style={{ fontWeight: 400, fontSize: 12, marginLeft: 8, color: "#6b7280" }}>
+          Total: {formatDollars(total)}
+        </span>
+      </h3>
+
+      {/* Stacked bar */}
+      <div style={{ display: "flex", height: 12, borderRadius: 6, overflow: "hidden", marginBottom: 12 }}>
+        {entries.map(([module, value]) => (
+          <div
+            key={module}
+            title={`${module}: ${formatDollars(value)} (${((value / total) * 100).toFixed(1)}%)`}
+            style={{
+              width: `${(value / total) * 100}%`,
+              background: MODULE_COLORS[module] ?? "#6b7280",
+              transition: "width 0.3s ease",
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Legend + details */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+        {entries.map(([module, value]) => (
+          <div key={module} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 2,
+                background: MODULE_COLORS[module] ?? "#6b7280",
+              }}
+            />
+            <span style={{ fontWeight: 500 }}>{module}</span>
+            <span style={{ color: "#6b7280" }}>
+              {formatDollars(value)} ({((value / total) * 100).toFixed(0)}%)
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// -------------------------------------------------------
+// Audit Log Section (Enterprise)
+// -------------------------------------------------------
+
+const SEVERITY_COLORS: Record<AuditSeverity, string> = {
+  info: "#6b7280",
+  warn: "#f59e0b",
+  error: "#ef4444",
+  critical: "#dc2626",
+}
+
+const SEVERITY_BG: Record<AuditSeverity, string> = {
+  info: "#f3f4f6",
+  warn: "#fef3c7",
+  error: "#fee2e2",
+  critical: "#fecaca",
+}
+
+export function AuditLogSection({ auditLog }: { auditLog: AuditLog }) {
+  const [filter, setFilter] = useState<AuditEventType | "">("")
+  const [severityFilter, setSeverityFilter] = useState<AuditSeverity | "">("")
+
+  const entries = useMemo(() => {
+    const filters: { eventType?: AuditEventType; severity?: AuditSeverity } = {}
+    if (filter) filters.eventType = filter
+    if (severityFilter) filters.severity = severityFilter
+    return auditLog.getEntries(filters).slice(-50).reverse()
+  }, [auditLog, filter, severityFilter, auditLog.size])
+
+  const integrity = useMemo(() => auditLog.verifyIntegrity(), [auditLog, auditLog.size])
+
+  const handleExportJSON = useCallback(() => {
+    const json = auditLog.exportJSON()
+    const blob = new Blob([json], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `tokenshield-audit-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [auditLog])
+
+  const handleExportCSV = useCallback(() => {
+    const csv = auditLog.exportCSV()
+    const blob = new Blob([csv], { type: "text/csv" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `tokenshield-audit-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [auditLog])
+
+  return (
+    <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>
+          Audit Log ({auditLog.size} entries)
+          {integrity.valid ? (
+            <span style={{ color: "#22c55e", marginLeft: 8, fontSize: 11 }}>
+              {integrity.pruned ? "VERIFIED (pruned)" : "VERIFIED"}
+            </span>
+          ) : (
+            <span style={{ color: "#ef4444", marginLeft: 8, fontSize: 11 }}>INTEGRITY FAILURE</span>
+          )}
+        </h3>
+        <div style={{ display: "flex", gap: 4 }}>
+          <button
+            onClick={handleExportJSON}
+            style={{
+              padding: "4px 8px", fontSize: 11, border: "1px solid #d1d5db",
+              borderRadius: 4, background: "#fff", cursor: "pointer",
+            }}
+          >
+            JSON
+          </button>
+          <button
+            onClick={handleExportCSV}
+            style={{
+              padding: "4px 8px", fontSize: 11, border: "1px solid #d1d5db",
+              borderRadius: 4, background: "#fff", cursor: "pointer",
+            }}
+          >
+            CSV
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value as AuditEventType | "")}
+          style={{ padding: "4px 8px", fontSize: 11, border: "1px solid #d1d5db", borderRadius: 4 }}
+        >
+          <option value="">All types</option>
+          <option value="api_call">API Call</option>
+          <option value="cache_hit">Cache Hit</option>
+          <option value="request_blocked">Blocked</option>
+          <option value="budget_exceeded">Budget</option>
+          <option value="breaker_tripped">Breaker</option>
+          <option value="anomaly_detected">Anomaly</option>
+          <option value="model_routed">Routed</option>
+          <option value="config_changed">Config</option>
+        </select>
+        <select
+          value={severityFilter}
+          onChange={(e) => setSeverityFilter(e.target.value as AuditSeverity | "")}
+          style={{ padding: "4px 8px", fontSize: 11, border: "1px solid #d1d5db", borderRadius: 4 }}
+        >
+          <option value="">All severity</option>
+          <option value="info">Info+</option>
+          <option value="warn">Warn+</option>
+          <option value="error">Error+</option>
+          <option value="critical">Critical</option>
+        </select>
+      </div>
+
+      <div style={{ maxHeight: 300, overflow: "auto", fontSize: 11, fontFamily: "monospace" }}>
+        {entries.length === 0 && (
+          <div style={{ color: "#9ca3af", padding: 12, textAlign: "center" }}>No audit entries</div>
+        )}
+        {entries.map((entry) => (
+          <div
+            key={entry.seq}
+            style={{
+              padding: "6px 8px",
+              borderBottom: "1px solid #f3f4f6",
+              background: SEVERITY_BG[entry.severity],
+            }}
+          >
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span style={{ color: "#9ca3af", width: 40, flexShrink: 0 }}>#{entry.seq}</span>
+              <span
+                style={{
+                  color: SEVERITY_COLORS[entry.severity],
+                  fontWeight: 600,
+                  width: 55,
+                  flexShrink: 0,
+                  textTransform: "uppercase",
+                  fontSize: 10,
+                }}
+              >
+                {entry.severity}
+              </span>
+              <span style={{ color: "#374151", flex: 1 }}>{entry.description}</span>
+              <span style={{ color: "#9ca3af", flexShrink: 0 }}>
+                {entry.timestamp.slice(11, 19)}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

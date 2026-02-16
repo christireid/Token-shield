@@ -105,8 +105,12 @@ export class CostLedger {
       try {
         this.channel = new BroadcastChannel(BROADCAST_CHANNEL_NAME)
         this.channel.onmessage = (event) => {
-          if (event.data && event.data.type === "NEW_ENTRY" && event.data.entry) {
-            this.mergeEntry(event.data.entry as LedgerEntry)
+          try {
+            if (event.data && event.data.type === "NEW_ENTRY" && event.data.entry) {
+              this.mergeEntry(event.data.entry as LedgerEntry)
+            }
+          } catch {
+            // Malformed cross-tab message — ignore to avoid crashing the handler
           }
         }
       } catch {

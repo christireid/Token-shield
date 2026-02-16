@@ -255,6 +255,16 @@ export class ProviderAdapter {
     }
     return entries.map(({ provider, model, estimatedCost }) => ({ provider, model, estimatedCost }))
   }
+
+  /**
+   * Dispose the adapter, clearing all pending recovery timers.
+   */
+  dispose(): void {
+    for (const timer of this.recoveryTimers.values()) {
+      clearTimeout(timer)
+    }
+    this.recoveryTimers.clear()
+  }
 }
 
 export function createProviderAdapter(config: AdapterConfig): ProviderAdapter {

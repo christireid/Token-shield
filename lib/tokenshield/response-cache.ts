@@ -68,6 +68,11 @@ export interface CacheConfig {
    * @example { cost: 10, price: 10, billing: 10, budget: 10 }
    */
   semanticSeeds?: Record<string, number>
+  /**
+   * Called when IndexedDB operations fail (e.g., quota exceeded, IDB disabled).
+   * Without this callback, storage errors are silently ignored.
+   */
+  onStorageError?: (error: unknown) => void
 }
 
 /** Default per-content-type TTL values */
@@ -219,6 +224,7 @@ export class ResponseCache {
         maxMemories: this.config.maxEntries,
         enableInhibition: true,
         persist: false, // Persistence handled by ResponseCache's own IDB
+        onStorageError: this.config.onStorageError,
       })
     }
   }
@@ -362,8 +368,7 @@ export class ResponseCache {
         }
       } catch (err) {
         // IDB read failed — fall through to fuzzy match (in-memory)
-        // eslint-disable-next-line no-console
-        console.warn("[TokenShield] Cache IDB read failed, falling back to in-memory lookup:", err)
+        this.config.onStorageError?.(err)
       }
     }
 
@@ -451,7 +456,7 @@ export class ResponseCache {
 
     // Teach the holographic engine about this entry
     if (this.holoEngine) {
-      this.holoEngine.learn(prompt, response, model, inputTokens, outputTokens).catch(() => {})
+      this.holoEngine.learn(prompt, response, model, inputTokens, outputTokens).catch((err) => { this.config.onStorageError?.(err) })
     }
 
     // Evict LRU if over capacity
@@ -469,7 +474,7 @@ export class ResponseCache {
         // Evict from IDB to keep stores coherent
         try {
           const store = this.getStore()
-          if (store) del(oldestKey, store).catch(() => {})
+          if (store) del(oldestKey, store).catch((err) => { this.config.onStorageError?.(err) })
         } catch {
           /* IDB not available */
         }
@@ -482,8 +487,7 @@ export class ResponseCache {
       try {
         await set(key, entry, persistStore)
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn("[TokenShield] Cache IDB write failed (SSR or quota exceeded):", err)
+        this.config.onStorageError?.(err)
       }
     }
   }
@@ -517,7 +521,7 @@ export class ResponseCache {
                 entry.inputTokens,
                 entry.outputTokens,
               )
-              .catch(() => {})
+              .catch((err) => { this.config.onStorageError?.(err) })
           }
           loaded++
         } else if (entry) {
@@ -551,6 +555,17 @@ export class ResponseCache {
       totalLookups: this.totalLookups,
       hitRate: this.totalLookups > 0 ? this.totalHits / this.totalLookups : 0,
     }
+  }
+
+  /**
+   * Dispose the cache instance, releasing memory and clearing internal state.
+   * Does not wipe persisted IndexedDB data — call clear() first if needed.
+   */
+  dispose(): void {
+    this.memoryCache.clear()
+    this.holoEngine = null
+    this.totalLookups = 0
+    this.totalHits = 0
   }
 
   /**

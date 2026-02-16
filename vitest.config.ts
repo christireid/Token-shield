@@ -17,6 +17,7 @@ export default defineConfig({
         // React UI components require jsdom environment
         "lib/tokenshield/dashboard.tsx",
         "lib/tokenshield/dashboard-sections.tsx",
+        "lib/tokenshield/license-activation.tsx",
         "lib/tokenshield/savings-calculator.tsx",
         "lib/tokenshield/react-context.tsx",
         // React hooks require DOM + rendering context

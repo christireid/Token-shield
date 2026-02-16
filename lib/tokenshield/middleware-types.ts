@@ -20,6 +20,9 @@ import type { TokenShieldLogger, LogEntry } from "./logger"
 import type { ProviderAdapter, AdapterConfig } from "./provider-adapter"
 import type { ComplexityScore } from "./model-router"
 import type { AnomalyDetector, AnomalyConfig, AnomalyEvent } from "./anomaly-detector"
+import type { AuditLog, AuditLogConfig } from "./audit-log"
+import type { CompressorConfig } from "./prompt-compressor"
+import type { DeltaEncoderConfig } from "./conversation-delta-encoder"
 import { estimateCost } from "./cost-estimator"
 
 // -------------------------------------------------------
@@ -58,6 +61,8 @@ export interface TokenShieldMiddlewareConfig {
     prefix?: boolean
     ledger?: boolean
     anomaly?: boolean
+    compressor?: boolean
+    delta?: boolean
   }
 
   /** Request guard config */
@@ -92,6 +97,11 @@ export interface TokenShieldMiddlewareConfig {
     encodingStrategy?: "bigram" | "holographic"
     /** Semantic seeds for holographic encoding (maps domain terms to seed angles) */
     semanticSeeds?: Record<string, number>
+    /**
+     * Called when IndexedDB operations fail (e.g., quota exceeded, IDB disabled).
+     * If not provided, storage errors are emitted as `storage:error` events on the event bus.
+     */
+    onStorageError?: (error: unknown) => void
   }
 
   /** Context manager config */
@@ -215,6 +225,25 @@ export interface TokenShieldMiddlewareConfig {
 
   /** Optional multi-provider adapter for routing, retries, and health tracking */
   providerAdapter?: ProviderAdapter | AdapterConfig
+
+  /** Optional enterprise audit logging. Records all pipeline events to a tamper-evident log. */
+  auditLog?: AuditLogConfig | AuditLog
+
+  /**
+   * Optional prompt compression. Reduces user message tokens by 15-40% using
+   * stopword elision, verbose pattern contraction, and redundancy elimination.
+   * Set to false to disable, true to enable with defaults, or a CompressorConfig
+   * for fine-grained control. Default: enabled.
+   */
+  compressor?: boolean | CompressorConfig
+
+  /**
+   * Optional conversation delta encoding. Eliminates cross-turn paragraph
+   * duplication, system prompt overlap, and quoted response redundancy.
+   * Set to false to disable, true to enable with defaults, or a DeltaEncoderConfig
+   * for fine-grained control. Default: enabled.
+   */
+  delta?: boolean | DeltaEncoderConfig
 }
 
 // -------------------------------------------------------
@@ -243,6 +272,8 @@ export interface TokenShieldMiddleware {
   logger: TokenShieldLogger | null
   /** Access the provider adapter for health data */
   providerAdapter: ProviderAdapter | null
+  /** Access the audit log for compliance/forensic data */
+  auditLog: AuditLog | null
   /** Pre-model transform — runs breaker, budget, guard, cache, context, router, prefix */
   transformParams: (args: { params: Record<string, unknown> }) => Promise<Record<string, unknown>>
   /** Wraps non-streaming model calls with caching, ledger, budget tracking */
@@ -315,6 +346,10 @@ export interface ShieldMeta {
   abTestHoldout?: boolean
   /** Cached last user text to avoid redundant extraction in wrapGenerate/wrapStream */
   lastUserText?: string
+  /** Tokens saved by prompt compressor */
+  compressorSaved?: number
+  /** Tokens saved by delta encoder */
+  deltaSaved?: number
 }
 
 /**
@@ -354,6 +389,7 @@ export interface MiddlewareContext {
   instanceEvents: ReturnType<typeof createEventBus>
   log: TokenShieldLogger | null
   adapter: ProviderAdapter | null
+  auditLog: AuditLog | null
 }
 
 // -------------------------------------------------------

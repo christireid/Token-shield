@@ -1,4 +1,5 @@
 import { TokenShieldConfigError } from "./errors"
+import { PRICING_REGISTRY, type ModelPricingEntry } from "./pricing-registry"
 
 /**
  * TokenShield - Cost Estimator
@@ -6,6 +7,9 @@ import { TokenShieldConfigError } from "./errors"
  * Real pricing data for major LLM providers as of February 2026.
  * Prices are in USD per 1 million tokens.
  * Sources: openai.com/api/pricing, anthropic.com/pricing, ai.google.dev/pricing
+ *
+ * Single source of truth: PRICING_REGISTRY (pricing-registry.ts)
+ * MODEL_PRICING is derived from PRICING_REGISTRY for backward compatibility.
  */
 
 export interface ModelPricing {
@@ -19,234 +23,40 @@ export interface ModelPricing {
   tier: "budget" | "standard" | "premium" | "flagship"
 }
 
-// Real pricing as of Feb 2026 from provider websites
-export const MODEL_PRICING: Record<string, ModelPricing> = {
-  // @generated:start — DO NOT EDIT. Run `npm run sync-pricing` to regenerate from data/models.json
-  // Openai
-  "gpt-4o": {
-    id: "gpt-4o",
-    provider: "openai",
-    name: "GPT-4o",
-    inputPerMillion: 2.5,
-    outputPerMillion: 10,
-    cachedInputPerMillion: 1.25,
-    contextWindow: 128000,
-    tier: "standard",
-  },
-  "gpt-4o-mini": {
-    id: "gpt-4o-mini",
-    provider: "openai",
-    name: "GPT-4o Mini",
-    inputPerMillion: 0.15,
-    outputPerMillion: 0.6,
-    cachedInputPerMillion: 0.075,
-    contextWindow: 128000,
-    tier: "budget",
-  },
-  "gpt-4.1": {
-    id: "gpt-4.1",
-    provider: "openai",
-    name: "GPT-4.1",
-    inputPerMillion: 2,
-    outputPerMillion: 8,
-    cachedInputPerMillion: 0.5,
-    contextWindow: 1048576,
-    tier: "standard",
-  },
-  "gpt-4.1-mini": {
-    id: "gpt-4.1-mini",
-    provider: "openai",
-    name: "GPT-4.1 Mini",
-    inputPerMillion: 0.4,
-    outputPerMillion: 1.6,
-    cachedInputPerMillion: 0.1,
-    contextWindow: 1048576,
-    tier: "budget",
-  },
-  "gpt-4.1-nano": {
-    id: "gpt-4.1-nano",
-    provider: "openai",
-    name: "GPT-4.1 Nano",
-    inputPerMillion: 0.1,
-    outputPerMillion: 0.4,
-    cachedInputPerMillion: 0.025,
-    contextWindow: 1048576,
-    tier: "budget",
-  },
-  o1: {
-    id: "o1",
-    provider: "openai",
-    name: "o1",
-    inputPerMillion: 15,
-    outputPerMillion: 60,
-    cachedInputPerMillion: 3.75,
-    contextWindow: 200000,
-    tier: "premium",
-  },
-  o3: {
-    id: "o3",
-    provider: "openai",
-    name: "o3",
-    inputPerMillion: 2,
-    outputPerMillion: 8,
-    cachedInputPerMillion: 0.5,
-    contextWindow: 200000,
-    tier: "standard",
-  },
-  "o3-pro": {
-    id: "o3-pro",
-    provider: "openai",
-    name: "o3 Pro",
-    inputPerMillion: 20,
-    outputPerMillion: 80,
-    cachedInputPerMillion: 5,
-    contextWindow: 200000,
-    tier: "flagship",
-  },
-  "o4-mini": {
-    id: "o4-mini",
-    provider: "openai",
-    name: "o4 Mini",
-    inputPerMillion: 1.1,
-    outputPerMillion: 4.4,
-    cachedInputPerMillion: 0.275,
-    contextWindow: 200000,
-    tier: "budget",
-  },
-  "gpt-5": {
-    id: "gpt-5",
-    provider: "openai",
-    name: "GPT-5",
-    inputPerMillion: 2,
-    outputPerMillion: 8,
-    cachedInputPerMillion: 0.5,
-    contextWindow: 128000,
-    tier: "premium",
-  },
-  "gpt-5.2": {
-    id: "gpt-5.2",
-    provider: "openai",
-    name: "GPT-5.2",
-    inputPerMillion: 1.75,
-    outputPerMillion: 14,
-    cachedInputPerMillion: 0.175,
-    contextWindow: 400000,
-    tier: "flagship",
-  },
-  "gpt-5-mini": {
-    id: "gpt-5-mini",
-    provider: "openai",
-    name: "GPT-5 Mini",
-    inputPerMillion: 0.25,
-    outputPerMillion: 2,
-    cachedInputPerMillion: 0.025,
-    contextWindow: 128000,
-    tier: "budget",
-  },
-  "gpt-5-nano": {
-    id: "gpt-5-nano",
-    provider: "openai",
-    name: "GPT-5 Nano",
-    inputPerMillion: 0.05,
-    outputPerMillion: 0.2,
-    cachedInputPerMillion: 0.0125,
-    contextWindow: 128000,
-    tier: "budget",
-  },
-  // Anthropic
-  "claude-opus-4.5": {
-    id: "claude-opus-4.5",
-    provider: "anthropic",
-    name: "Claude Opus 4.5",
-    inputPerMillion: 5,
-    outputPerMillion: 25,
-    cachedInputPerMillion: 0.5,
-    contextWindow: 200000,
-    tier: "flagship",
-  },
-  "claude-opus-4.6": {
-    id: "claude-opus-4.6",
-    provider: "anthropic",
-    name: "Claude Opus 4.6",
-    inputPerMillion: 5,
-    outputPerMillion: 25,
-    cachedInputPerMillion: 0.5,
-    contextWindow: 200000,
-    tier: "flagship",
-  },
-  "claude-sonnet-4.5": {
-    id: "claude-sonnet-4.5",
-    provider: "anthropic",
-    name: "Claude Sonnet 4.5",
-    inputPerMillion: 3,
-    outputPerMillion: 15,
-    cachedInputPerMillion: 0.3,
-    contextWindow: 200000,
-    tier: "standard",
-  },
-  "claude-haiku-4.5": {
-    id: "claude-haiku-4.5",
-    provider: "anthropic",
-    name: "Claude Haiku 4.5",
-    inputPerMillion: 1,
-    outputPerMillion: 5,
-    cachedInputPerMillion: 0.1,
-    contextWindow: 200000,
-    tier: "budget",
-  },
-  // Google
-  "gemini-2.5-pro": {
-    id: "gemini-2.5-pro",
-    provider: "google",
-    name: "Gemini 2.5 Pro",
-    inputPerMillion: 1.25,
-    outputPerMillion: 10,
-    cachedInputPerMillion: 0.3125,
-    contextWindow: 1048576,
-    tier: "premium",
-  },
-  "gemini-2.5-flash": {
-    id: "gemini-2.5-flash",
-    provider: "google",
-    name: "Gemini 2.5 Flash",
-    inputPerMillion: 0.15,
-    outputPerMillion: 0.6,
-    cachedInputPerMillion: 0.0375,
-    contextWindow: 1048576,
-    tier: "budget",
-  },
-  "gemini-2.5-flash-lite": {
-    id: "gemini-2.5-flash-lite",
-    provider: "google",
-    name: "Gemini 2.5 Flash Lite",
-    inputPerMillion: 0.075,
-    outputPerMillion: 0.3,
-    cachedInputPerMillion: 0.01875,
-    contextWindow: 1048576,
-    tier: "budget",
-  },
-  "gemini-3-pro": {
-    id: "gemini-3-pro",
-    provider: "google",
-    name: "Gemini 3 Pro",
-    inputPerMillion: 1.25,
-    outputPerMillion: 10,
-    cachedInputPerMillion: 0.3125,
-    contextWindow: 1048576,
-    tier: "premium",
-  },
-  "gemini-3-flash": {
-    id: "gemini-3-flash",
-    provider: "google",
-    name: "Gemini 3 Flash",
-    inputPerMillion: 0.15,
-    outputPerMillion: 0.6,
-    cachedInputPerMillion: 0.0375,
-    contextWindow: 1048576,
-    tier: "budget",
-  },
-  // @generated:end
+/**
+ * Derive a ModelPricing entry from the richer PRICING_REGISTRY format.
+ */
+function toModelPricing(entry: ModelPricingEntry): ModelPricing {
+  const cachedInputPerMillion =
+    entry.cachedInputDiscount > 0 && entry.cachedInputDiscount < 1
+      ? entry.inputPerMillion * entry.cachedInputDiscount
+      : undefined
+  return {
+    id: entry.id,
+    provider: entry.provider as ModelPricing["provider"],
+    name: entry.name,
+    inputPerMillion: entry.inputPerMillion,
+    outputPerMillion: entry.outputPerMillion,
+    cachedInputPerMillion,
+    contextWindow: entry.contextWindow,
+    tier: inferTier(entry.inputPerMillion),
+  }
 }
+
+function inferTier(inputPerMillion: number): ModelPricing["tier"] {
+  if (inputPerMillion >= 10) return "flagship"
+  if (inputPerMillion >= 2) return "premium"
+  if (inputPerMillion >= 1) return "standard"
+  return "budget"
+}
+
+/**
+ * MODEL_PRICING derived from PRICING_REGISTRY — single source of truth.
+ * Backward-compatible shape used by estimateCost, compareCosts, etc.
+ */
+export const MODEL_PRICING: Record<string, ModelPricing> = Object.fromEntries(
+  Object.entries(PRICING_REGISTRY).map(([id, entry]) => [id, toModelPricing(entry)]),
+)
 
 /**
  * Union of all model IDs with built-in pricing data.

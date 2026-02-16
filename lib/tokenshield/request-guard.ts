@@ -452,4 +452,14 @@ export class RequestGuard {
   updateConfig(config: Partial<GuardConfig>): void {
     this.config = { ...this.config, ...config }
   }
+
+  /**
+   * Dispose the guard instance, clearing any pending debounce timer.
+   */
+  dispose(): void {
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer)
+      this.debounceTimer = null
+    }
+  }
 }

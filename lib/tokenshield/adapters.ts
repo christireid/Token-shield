@@ -106,14 +106,15 @@ export function createGenericAdapter<
 
     const result = await shield.wrapGenerate({
       doGenerate: async () => {
-        // Reconstruct the params with potential transformations
-        // Note: We cast back to TParams because we assume the transformation
-        // mostly touches TokenShield-specific fields or leaves structure intact.
-        // Realistically, complex transformations might break custom types,
-        // but for generic usage, this is usually sufficient.
+        // Strip the internal AI-SDK `prompt` field before reconstructing user-facing
+        // params. `modelId` is kept since it's part of the generic adapter's TParams.
+        const {
+          prompt: _prompt,
+          ...cleanTransformed
+        } = transformed as Record<string, unknown>
         const executionParams = {
           ...params,
-          ...transformed, // Apply overrides from middleware (e.g. model routing)
+          ...cleanTransformed,
         } as TParams
 
         const rawResult = await callFn(executionParams)
@@ -147,8 +148,7 @@ export interface OpenAIAdapterOptions {
 /**
  * Adapter for the OpenAI SDK (`client.chat.completions.create`).
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function createOpenAIAdapter<TParams extends { messages: any[]; model?: string }, TResult>(
+export function createOpenAIAdapter<TParams extends { messages: AdapterMessage[]; model?: string }, TResult>(
   shield: TokenShieldMiddleware,
   createFn: (params: TParams) => Promise<TResult>,
   options?: OpenAIAdapterOptions,
@@ -230,8 +230,7 @@ export interface AnthropicAdapterOptions {
  * Adapter for the Anthropic SDK (`client.messages.create`).
  */
 export function createAnthropicAdapter<
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  TParams extends { messages: any[]; model?: string; max_tokens?: number },
+  TParams extends { messages: AdapterMessage[]; model?: string; max_tokens?: number },
   TResult,
 >(
   shield: TokenShieldMiddleware,
@@ -335,9 +334,14 @@ export function createStreamAdapter<
 
     const result = await shield.wrapStream({
       doStream: async () => {
+        // Strip the internal AI-SDK `prompt` field; keep `modelId` as it's part of TParams
+        const {
+          prompt: _prompt,
+          ...cleanTransformed
+        } = transformed as Record<string, unknown>
         const executionParams = {
           ...params,
-          ...transformed,
+          ...cleanTransformed,
         } as TParams
         return { stream: await streamFn(executionParams) }
       },
