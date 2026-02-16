@@ -57,12 +57,17 @@ const IV_LENGTH = 12
 async function deriveKeyFromPassphrase(passphrase: string): Promise<CryptoKey> {
   const encoder = new TextEncoder()
 
-  // Retrieve or generate a stable salt
+  // Retrieve or generate a stable salt. Re-read after write to handle the case
+  // where two tabs race to set the salt simultaneously — the re-read ensures
+  // both tabs converge on the same persisted value.
   let saltHex = localStorage.getItem(SALT_KEY)
   if (!saltHex) {
     const salt = crypto.getRandomValues(new Uint8Array(16))
     saltHex = Array.from(salt, (b) => b.toString(16).padStart(2, "0")).join("")
     localStorage.setItem(SALT_KEY, saltHex)
+    // Re-read to converge on the winning write if another tab raced us
+    const confirmed = localStorage.getItem(SALT_KEY)
+    if (confirmed) saltHex = confirmed
   }
   const salt = new Uint8Array(saltHex.match(/.{2}/g)!.map((h) => parseInt(h, 16)))
 
@@ -90,8 +95,16 @@ async function deriveKeyFromPassphrase(passphrase: string): Promise<CryptoKey> {
 async function getSessionKey(): Promise<CryptoKey> {
   const stored = sessionStorage.getItem(SESSION_KEY_NAME)
   if (stored) {
-    const jwk = JSON.parse(stored)
-    return crypto.subtle.importKey("jwk", jwk, { name: ALGORITHM }, true, ["encrypt", "decrypt"])
+    try {
+      const jwk = JSON.parse(stored)
+      return await crypto.subtle.importKey("jwk", jwk, { name: ALGORITHM }, true, [
+        "encrypt",
+        "decrypt",
+      ])
+    } catch {
+      // Corrupted or invalid key data — regenerate
+      sessionStorage.removeItem(SESSION_KEY_NAME)
+    }
   }
 
   const key = await crypto.subtle.generateKey({ name: ALGORITHM, length: 256 }, true, [
