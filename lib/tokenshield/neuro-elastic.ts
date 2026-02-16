@@ -63,12 +63,12 @@ export interface FindResult {
   hits: number
 }
 
+/** Make all fields of T required except for keys K, which remain optional. */
+type RequiredExcept<T, K extends keyof T> = Required<Omit<T, K>> & Pick<T, K>
+
 export class NeuroElasticEngine {
   private memory: MemorySlot[] = []
-  private config: Required<
-    Pick<NeuroElasticConfig, "threshold" | "maxMemories" | "enableInhibition" | "persist">
-  > &
-    Pick<NeuroElasticConfig, "seeds" | "onStorageError">
+  private config: RequiredExcept<NeuroElasticConfig, "seeds" | "onStorageError">
   private isHydrated = false
   /** Global noise vector — bits active in >50% of memories (IDF inhibition) */
   private noiseVector: Uint32Array = new Uint32Array(DIMENSIONS)
@@ -82,6 +82,7 @@ export class NeuroElasticEngine {
       maxMemories: config?.maxMemories ?? 500,
       enableInhibition: config?.enableInhibition ?? true,
       persist: config?.persist ?? false,
+      onStorageError: config?.onStorageError,
     }
   }
 

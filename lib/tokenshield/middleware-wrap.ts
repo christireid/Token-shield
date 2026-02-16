@@ -118,8 +118,13 @@ async function recordPostRequestUsage(
   if (userBudgetManager && meta?.userId) {
     await userBudgetManager
       .recordSpend(meta.userId, perRequestCost, modelId, meta.userBudgetInflight)
-      .catch(() => {
-        /* IDB write failed — inflight already released synchronously */
+      .catch((err) => {
+        // IDB write failed — inflight already released synchronously
+        safeEmit(instanceEvents, "storage:error", {
+          module: "userBudget",
+          operation: "recordSpend",
+          error: err,
+        })
       })
   }
 

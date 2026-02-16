@@ -86,7 +86,10 @@ export interface AdaptivePrediction {
   stdDev: number
 }
 
-const DEFAULT_CONFIG: Required<Omit<AdaptiveOptimizerConfig, "onStorageError">> & Pick<AdaptiveOptimizerConfig, "onStorageError"> = {
+/** Make all fields of T required except for keys K, which remain optional. */
+type RequiredExcept<T, K extends keyof T> = Required<Omit<T, K>> & Pick<T, K>
+
+const DEFAULT_CONFIG: RequiredExcept<AdaptiveOptimizerConfig, "onStorageError"> = {
   minObservations: 5,
   alpha: 0.15,
   safetyPercentile: 0.95,
@@ -101,7 +104,7 @@ const DEFAULT_CONFIG: Required<Omit<AdaptiveOptimizerConfig, "onStorageError">> 
 // -------------------------------------------------------
 
 export class AdaptiveOutputOptimizer {
-  private config: Required<Omit<AdaptiveOptimizerConfig, "onStorageError">> & Pick<AdaptiveOptimizerConfig, "onStorageError">
+  private config: RequiredExcept<AdaptiveOptimizerConfig, "onStorageError">
   /** Learned stats keyed by "taskType:model" */
   private stats = new Map<string, OutputStats>()
   private isHydrated = false

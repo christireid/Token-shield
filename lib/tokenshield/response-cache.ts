@@ -224,6 +224,7 @@ export class ResponseCache {
         maxMemories: this.config.maxEntries,
         enableInhibition: true,
         persist: false, // Persistence handled by ResponseCache's own IDB
+        onStorageError: this.config.onStorageError,
       })
     }
   }

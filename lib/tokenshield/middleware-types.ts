@@ -97,6 +97,11 @@ export interface TokenShieldMiddlewareConfig {
     encodingStrategy?: "bigram" | "holographic"
     /** Semantic seeds for holographic encoding (maps domain terms to seed angles) */
     semanticSeeds?: Record<string, number>
+    /**
+     * Called when IndexedDB operations fail (e.g., quota exceeded, IDB disabled).
+     * If not provided, storage errors are emitted as `storage:error` events on the event bus.
+     */
+    onStorageError?: (error: unknown) => void
   }
 
   /** Context manager config */

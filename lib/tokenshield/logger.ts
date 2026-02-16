@@ -91,6 +91,7 @@ const EVENT_LOG_LEVELS: Record<keyof TokenShieldEvents, LogLevel> = {
   "anomaly:detected": "warn",
   "compressor:applied": "info",
   "delta:applied": "info",
+  "storage:error": "warn",
 }
 
 // -------------------------------------------------------

@@ -123,6 +123,13 @@ export function tokenShieldMiddleware(
       })
     : null
 
+  /** Default storage-error handler: emits on instance event bus. */
+  const defaultOnStorageError = (module: string, operation: string) => (error: unknown) => {
+    try {
+      instanceEvents.emit("storage:error", { module, operation, error })
+    } catch { /* non-fatal */ }
+  }
+
   const cache = modules.cache
     ? new ResponseCache({
         maxEntries: config.cache?.maxEntries ?? 500,
@@ -130,6 +137,7 @@ export function tokenShieldMiddleware(
         similarityThreshold: config.cache?.similarityThreshold ?? 0.85,
         encodingStrategy: config.cache?.encodingStrategy,
         semanticSeeds: config.cache?.semanticSeeds,
+        onStorageError: config.cache?.onStorageError ?? defaultOnStorageError("cache", "idb"),
       })
     : null
 
@@ -206,6 +214,7 @@ export function tokenShieldMiddleware(
     "anomaly:detected",
     "compressor:applied",
     "delta:applied",
+    "storage:error",
   ]
   const forwardingCleanups: Array<() => void> = []
   for (const name of EVENT_NAMES) {

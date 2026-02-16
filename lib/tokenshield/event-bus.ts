@@ -39,6 +39,7 @@ export type TokenShieldEvents = {
   "anomaly:detected": AnomalyEvent
   "compressor:applied": { savedTokens: number; originalTokens: number; compressedTokens: number }
   "delta:applied": { savedTokens: number; originalTokens: number; encodedTokens: number }
+  "storage:error": { module: string; operation: string; error: unknown }
 }
 
 export type EventBus = ReturnType<typeof mitt<TokenShieldEvents>>
