@@ -561,4 +561,227 @@ describe("createBudgetStage", () => {
     expect(result.aborted).toBe(false)
     expect(result.meta.userId).toBe("user-123")
   })
+
+  it("aborts when getUserId returns a non-string value", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+    })
+    // Cast to bypass TypeScript — simulates a runtime non-string return
+    const stage = createBudgetStage(manager, (() => 42) as unknown as () => string, {
+      reserveForOutput: 500,
+    })
+    const ctx = makeCtx()
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.aborted).toBe(true)
+    expect(result.abortReason).toContain("non-empty string")
+  })
+
+  it("sets userBudgetInflight to 0 when estimateCost throws", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+    })
+    const stage = createBudgetStage(manager, () => "user-cost-err", { reserveForOutput: 500 })
+    // Use an unknown model ID so estimateCost will throw
+    const ctx = makeCtx({
+      lastUserText: "Some prompt text",
+      modelId: "nonexistent-model-that-will-throw",
+    })
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.aborted).toBe(false)
+    expect(result.meta.userBudgetInflight).toBe(0)
+  })
+
+  it("applies tier routing and sets meta.tierRouted and meta.originalModel when tier model differs", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+      tierModels: {
+        premium: "gpt-4o",
+      },
+      users: {
+        "tier-user": { daily: 10, monthly: 100, tier: "premium" },
+      },
+    })
+    const stage = createBudgetStage(manager, () => "tier-user", { reserveForOutput: 500 })
+    // Start with a different model than the tier model
+    const ctx = makeCtx({ modelId: "gpt-4o-mini" })
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.aborted).toBe(false)
+    expect(result.meta.tierRouted).toBe(true)
+    expect(result.meta.originalModel).toBe("gpt-4o-mini")
+    expect(result.modelId).toBe("gpt-4o")
+  })
+
+  it("does not apply tier routing when tier model equals current modelId", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+      tierModels: {
+        premium: "gpt-4o",
+      },
+      users: {
+        "tier-user-same": { daily: 10, monthly: 100, tier: "premium" },
+      },
+    })
+    const stage = createBudgetStage(manager, () => "tier-user-same", { reserveForOutput: 500 })
+    // Already on the tier model
+    const ctx = makeCtx({ modelId: "gpt-4o" })
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.aborted).toBe(false)
+    expect(result.meta.tierRouted).toBeUndefined()
+    expect(result.meta.originalModel).toBeUndefined()
+    expect(result.modelId).toBe("gpt-4o")
+  })
+
+  it("does not apply tier routing when getModelForUser returns null (no tierModels configured)", () => {
+    const manager = new UserBudgetManager({
+      defaultBudget: { daily: 10, monthly: 100 },
+      // No tierModels configured at all
+    })
+    const stage = createBudgetStage(manager, () => "user-no-tier", { reserveForOutput: 500 })
+    const ctx = makeCtx({ modelId: "gpt-4o" })
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.aborted).toBe(false)
+    expect(result.meta.tierRouted).toBeUndefined()
+    expect(result.modelId).toBe("gpt-4o")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Additional branch coverage: createRouterStage
+// ---------------------------------------------------------------------------
+
+describe("createRouterStage - additional branch coverage", () => {
+  it("skips when lastUserText is empty", () => {
+    const tiers = [{ modelId: "gpt-4o-mini", maxComplexity: 40 }]
+    const stage = createRouterStage(tiers)
+    const ctx = makeCtx({ lastUserText: "", modelId: "gpt-4o" })
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.modelId).toBe("gpt-4o")
+  })
+
+  it("does not set originalModel again if already set by budget stage", () => {
+    const tiers = [{ modelId: "gpt-4o-mini", maxComplexity: 80 }]
+    const stage = createRouterStage(tiers)
+    const ctx = makeCtx({
+      lastUserText: "Hello",
+      modelId: "gpt-4o",
+      meta: { originalModel: "gpt-4o-turbo" },
+    })
+    const result = stage.execute(ctx) as PipelineContext
+    // originalModel should stay as previously set
+    if (result.modelId !== "gpt-4o") {
+      expect(result.meta.originalModel).toBe("gpt-4o-turbo")
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Additional branch coverage: createPrefixStage
+// ---------------------------------------------------------------------------
+
+describe("createPrefixStage - additional branch coverage", () => {
+  it("returns ctx unchanged when MODEL_PRICING[modelId] is undefined", () => {
+    const stage = createPrefixStage("openai")
+    const originalMessages = [{ role: "user", content: "Hello" }]
+    const ctx = makeCtx({ modelId: "totally-unknown-model-xyz", messages: [...originalMessages] })
+    const result = stage.execute(ctx) as PipelineContext
+    expect(result.meta.prefixSaved).toBeUndefined()
+    expect(result.messages).toEqual(originalMessages)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Additional branch coverage: Pipeline removeStage and getStageNames
+// ---------------------------------------------------------------------------
+
+describe("Pipeline - removeStage and getStageNames additional coverage", () => {
+  it("removeStage with non-existent name is a no-op", () => {
+    const pipeline = new Pipeline()
+    pipeline.addStage({ name: "a", execute: (ctx) => ctx })
+    pipeline.removeStage("nonexistent")
+    expect(pipeline.getStageNames()).toEqual(["a"])
+  })
+
+  it("getStageNames returns empty array for empty pipeline", () => {
+    const pipeline = new Pipeline()
+    expect(pipeline.getStageNames()).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Additional branch coverage: Pipeline hook error swallowing
+// ---------------------------------------------------------------------------
+
+describe("Pipeline - hook error swallowing additional coverage", () => {
+  it("swallows beforeStage hook error and continues executing stage", async () => {
+    const stageExecuted = vi.fn()
+    const pipeline = createPipeline({
+      name: "s1",
+      execute: (ctx) => {
+        stageExecuted()
+        return ctx
+      },
+    })
+    pipeline.addHook({
+      beforeStage: () => {
+        throw new Error("before hook blew up")
+      },
+    })
+    const result = await pipeline.execute(makeCtx())
+    expect(result.aborted).toBe(false)
+    expect(stageExecuted).toHaveBeenCalledOnce()
+  })
+
+  it("swallows afterStage hook error without affecting next stage execution", async () => {
+    const secondStageExecuted = vi.fn()
+    const pipeline = createPipeline(
+      { name: "s1", execute: (ctx) => ctx },
+      {
+        name: "s2",
+        execute: (ctx) => {
+          secondStageExecuted()
+          return ctx
+        },
+      },
+    )
+    pipeline.addHook({
+      afterStage: () => {
+        throw new Error("after hook blew up")
+      },
+    })
+    const result = await pipeline.execute(makeCtx())
+    expect(result.aborted).toBe(false)
+    expect(secondStageExecuted).toHaveBeenCalledOnce()
+  })
+
+  it("swallows onError hook error when both stage and hook throw", async () => {
+    const pipeline = createPipeline({
+      name: "bad-stage",
+      execute: () => {
+        throw new Error("stage exploded")
+      },
+    })
+    pipeline.addHook({
+      onError: () => {
+        throw new Error("onError hook also exploded")
+      },
+    })
+    const result = await pipeline.execute(makeCtx())
+    expect(result.aborted).toBe(true)
+    expect(result.abortReason).toContain("stage exploded")
+  })
+
+  it("handles stage throwing non-Error values (e.g., string)", async () => {
+    const onError = vi.fn()
+    const pipeline = createPipeline({
+      name: "string-thrower",
+      execute: () => {
+        throw "a string error"
+      },
+    })
+    pipeline.addHook({ onError })
+    const result = await pipeline.execute(makeCtx())
+    expect(result.aborted).toBe(true)
+    expect(result.abortReason).toContain("a string error")
+    expect(onError).toHaveBeenCalledWith("string-thrower", expect.any(Error), expect.any(Object))
+  })
 })
