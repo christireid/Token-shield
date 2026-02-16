@@ -13,6 +13,7 @@
 
 import { get, set, del, keys, createStore } from "./storage-adapter"
 import { NeuroElasticEngine } from "./neuro-elastic"
+import { SemanticMinHashIndex } from "./semantic-minhash"
 
 /**
  * Content type classification for TTL-aware caching.
@@ -208,6 +209,12 @@ export class ResponseCache {
   private idbStore: ReturnType<typeof createStore> | null = null
   /** Optional holographic encoding engine for enhanced fuzzy matching */
   private holoEngine: NeuroElasticEngine | null = null
+  /**
+   * MinHash index for O(1) fuzzy pre-filtering in the default bigram path.
+   * Candidates from LSH are verified with textSimilarity() for consistency.
+   * The O(n) bigram scan remains as a fallback for LSH false negatives.
+   */
+  private minHashIndex: SemanticMinHashIndex<string>
   /** Total lookup() calls (hits + misses) for accurate hit rate calculation */
   private totalLookups = 0
   /** Total cache hits across all lookup() calls */
@@ -215,6 +222,11 @@ export class ResponseCache {
 
   constructor(config: Partial<CacheConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
+
+    // Initialize MinHash index for O(1) fuzzy pre-filtering (bigram path)
+    this.minHashIndex = new SemanticMinHashIndex<string>({
+      maxEntries: this.config.maxEntries,
+    })
 
     // Initialize holographic engine if strategy is set
     if (this.config.encodingStrategy === "holographic") {
@@ -290,8 +302,22 @@ export class ResponseCache {
       }
     }
 
-    // Fuzzy match from memory (read-only scan)
+    // Fuzzy match from memory (read-only)
     if (this.config.similarityThreshold < 1) {
+      // MinHash pre-filter: O(1) LSH candidate lookup
+      const lshResult = this.minHashIndex.find(prompt, this.config.similarityThreshold)
+      if (lshResult) {
+        const candidateKey = lshResult.entry.data
+        const candidate = this.memoryCache.get(candidateKey)
+        if (candidate && (!model || candidate.model === model) && !this.isExpired(candidate)) {
+          const sim = textSimilarity(prompt, candidate.prompt)
+          if (sim >= this.config.similarityThreshold) {
+            return { hit: true, entry: candidate, matchType: "fuzzy", similarity: sim }
+          }
+        }
+      }
+
+      // Bigram fallback (O(n) scan)
       let bestMatch: CacheEntry | undefined
       let bestSimilarity = 0
       for (const entry of this.memoryCache.values()) {
@@ -396,7 +422,24 @@ export class ResponseCache {
         }
       }
 
-      // 3b. Bigram fallback (original algorithm)
+      // 3b. MinHash pre-filter: O(1) LSH candidate lookup
+      const lshResult = this.minHashIndex.find(prompt, this.config.similarityThreshold)
+      if (lshResult) {
+        const candidateKey = lshResult.entry.data
+        const candidate = this.memoryCache.get(candidateKey)
+        if (candidate && (!model || candidate.model === model) && !this.isExpired(candidate)) {
+          // Verify with actual bigram textSimilarity for consistency
+          const sim = textSimilarity(prompt, candidate.prompt)
+          if (sim >= this.config.similarityThreshold) {
+            const updated = this.touchEntry(candidate)
+            this.memoryCache.set(candidateKey, updated)
+            this.totalHits++
+            return { hit: true, entry: updated, matchType: "fuzzy", similarity: sim }
+          }
+        }
+      }
+
+      // 3c. Bigram fallback (O(n) scan — covers LSH false negatives and cross-model edge cases)
       let bestMatch: CacheEntry | undefined
       let bestSimilarity = 0
 
@@ -454,9 +497,14 @@ export class ResponseCache {
 
     this.memoryCache.set(key, entry)
 
+    // Index in MinHash for O(1) fuzzy lookup (bigram path)
+    this.minHashIndex.insert(prompt, key)
+
     // Teach the holographic engine about this entry
     if (this.holoEngine) {
-      this.holoEngine.learn(prompt, response, model, inputTokens, outputTokens).catch((err) => { this.config.onStorageError?.(err) })
+      this.holoEngine.learn(prompt, response, model, inputTokens, outputTokens).catch((err) => {
+        this.config.onStorageError?.(err)
+      })
     }
 
     // Evict LRU if over capacity
@@ -474,7 +522,10 @@ export class ResponseCache {
         // Evict from IDB to keep stores coherent
         try {
           const store = this.getStore()
-          if (store) del(oldestKey, store).catch((err) => { this.config.onStorageError?.(err) })
+          if (store)
+            del(oldestKey, store).catch((err) => {
+              this.config.onStorageError?.(err)
+            })
         } catch {
           /* IDB not available */
         }
@@ -511,6 +562,8 @@ export class ResponseCache {
         }
         if (entry && !this.isExpired(entry)) {
           this.memoryCache.set(key, entry)
+          // Populate MinHash index for O(1) fuzzy lookups after reload
+          this.minHashIndex.insert(entry.prompt, key)
           // Populate holographic engine so fuzzy matching works after reload
           if (this.holoEngine) {
             this.holoEngine
@@ -521,7 +574,9 @@ export class ResponseCache {
                 entry.inputTokens,
                 entry.outputTokens,
               )
-              .catch((err) => { this.config.onStorageError?.(err) })
+              .catch((err) => {
+                this.config.onStorageError?.(err)
+              })
           }
           loaded++
         } else if (entry) {
@@ -563,6 +618,7 @@ export class ResponseCache {
    */
   dispose(): void {
     this.memoryCache.clear()
+    this.minHashIndex.clear()
     this.holoEngine = null
     this.totalLookups = 0
     this.totalHits = 0
@@ -573,6 +629,7 @@ export class ResponseCache {
    */
   async clear(): Promise<void> {
     this.memoryCache.clear()
+    this.minHashIndex.clear()
     this.totalLookups = 0
     this.totalHits = 0
     if (this.holoEngine) {

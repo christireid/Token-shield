@@ -202,6 +202,10 @@ export {
   usePipelineMetrics,
   useSessionSavings,
   useShieldedCall,
+  // Fine-grained split-context hooks
+  useTokenShieldInstances,
+  useTokenShieldSavings,
+  useTokenShieldConfig,
   type TokenShieldProviderProps,
   type EventLogEntry,
   type PipelineMetrics,

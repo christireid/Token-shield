@@ -19,6 +19,10 @@ export {
   TokenShieldProvider,
   useSavings,
   createSavingsStore,
+  // Fine-grained split-context hooks
+  useTokenShieldInstances,
+  useTokenShieldSavings,
+  useTokenShieldConfig,
   type TokenShieldProviderProps,
   type TokenShieldContextValue,
   type SavingsEvent,

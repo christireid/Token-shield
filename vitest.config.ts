@@ -14,6 +14,7 @@ export default defineConfig({
         // Barrel re-exports (no logic to test)
         "lib/tokenshield/index.ts",
         "lib/tokenshield/react.tsx",
+        "lib/tokenshield/delta-encoder.ts",
         // React UI components require jsdom environment
         "lib/tokenshield/dashboard.tsx",
         "lib/tokenshield/dashboard-sections.tsx",
