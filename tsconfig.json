@@ -21,15 +21,11 @@
     }
   },
   "include": [
-    "next-env.d.ts",
-    "lib/**/*.ts",
-    "lib/**/*.tsx",
-    "app/**/*.ts",
-    "app/**/*.tsx",
-    "components/**/*.ts",
-    "components/**/*.tsx",
-    "hooks/**/*.ts",
-    "hooks/**/*.tsx"
+    "lib/tokenshield/**/*.ts",
+    "lib/tokenshield/**/*.tsx",
+    "hooks/use-count-up.ts",
+    "hooks/use-reduced-motion.ts",
+    "hooks/use-staggered-reveal.ts"
   ],
   "exclude": ["node_modules", "dist", "examples"]
 }
