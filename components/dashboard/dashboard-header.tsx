@@ -23,6 +23,7 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { ALERT_SEVERITY_CONFIG } from "@/lib/dashboard-utils"
 import { useReducedMotion } from "@/hooks/use-reduced-motion"
+import { useToast } from "@/hooks/use-toast"
 
 const TIME_RANGES: { value: TimeRange; label: string }[] = [
   { value: "1h", label: "1 Hour" },
@@ -35,6 +36,7 @@ const TIME_RANGES: { value: TimeRange; label: string }[] = [
 export function DashboardHeader() {
   const { mode, setMode, timeRange, setTimeRange, data, isPaused, setIsPaused } = useDashboard()
   const reducedMotion = useReducedMotion()
+  const { toast } = useToast()
 
   // Consolidated: compute active alerts once, derive badge + count from it
   const { notificationBadge, activeAlertCount } = useMemo(() => {
@@ -82,43 +84,50 @@ export function DashboardHeader() {
     return () => clearTimeout(revokeTimerRef.current)
   }, [])
 
-  const handleExport = useCallback((format: "json" | "csv") => {
-    if (typeof document === "undefined") return
-    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-")
-    let content: string
-    let mimeType: string
-    let extension: string
+  const handleExport = useCallback(
+    (format: "json" | "csv") => {
+      if (typeof document === "undefined") return
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-")
+      let content: string
+      let mimeType: string
+      let extension: string
 
-    if (format === "json") {
-      content = JSON.stringify(dataRef.current, null, 2)
-      mimeType = "application/json"
-      extension = "json"
-    } else {
-      const rows = dataRef.current.timeSeries.map((p) =>
-        [
-          new Date(p.timestamp).toISOString(),
-          p.spent.toFixed(6),
-          p.saved.toFixed(6),
-          p.cumulativeSpent.toFixed(6),
-          p.cumulativeSaved.toFixed(6),
-        ].join(","),
-      )
-      content = ["timestamp,spent,saved,cumulative_spent,cumulative_saved", ...rows].join("\n")
-      mimeType = "text/csv"
-      extension = "csv"
-    }
+      if (format === "json") {
+        content = JSON.stringify(dataRef.current, null, 2)
+        mimeType = "application/json"
+        extension = "json"
+      } else {
+        const rows = dataRef.current.timeSeries.map((p) =>
+          [
+            new Date(p.timestamp).toISOString(),
+            p.spent.toFixed(6),
+            p.saved.toFixed(6),
+            p.cumulativeSpent.toFixed(6),
+            p.cumulativeSaved.toFixed(6),
+          ].join(","),
+        )
+        content = ["timestamp,spent,saved,cumulative_spent,cumulative_saved", ...rows].join("\n")
+        mimeType = "text/csv"
+        extension = "csv"
+      }
 
-    const blob = new Blob([content], { type: mimeType })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `tokenshield-export-${timestamp}.${extension}`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    clearTimeout(revokeTimerRef.current)
-    revokeTimerRef.current = setTimeout(() => URL.revokeObjectURL(url), 10_000)
-  }, [])
+      const blob = new Blob([content], { type: mimeType })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `tokenshield-export-${timestamp}.${extension}`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      clearTimeout(revokeTimerRef.current)
+      revokeTimerRef.current = setTimeout(() => URL.revokeObjectURL(url), 10_000)
+      toast({
+        title: "Export complete",
+        description: `${format.toUpperCase()} file downloaded successfully.`,
+      })
+    },
+    [toast],
+  )
 
   const togglePause = useCallback(() => {
     setIsPaused((prev: boolean) => !prev)

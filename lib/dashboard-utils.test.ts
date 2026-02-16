@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import {
   formatRelativeTime,
   formatCurrency,
@@ -28,39 +28,37 @@ import {
 /* ------------------------------------------------------------------ */
 
 describe("formatRelativeTime", () => {
-  let dateSpy: ReturnType<typeof vi.spyOn>
-
-  beforeEach(() => {
-    dateSpy = vi.spyOn(Date, "now").mockReturnValue(1_000_000)
-  })
-
-  afterEach(() => {
-    dateSpy.mockRestore()
-  })
+  const NOW = 1_000_000
 
   it('returns "just now" for < 5 seconds ago', () => {
-    expect(formatRelativeTime(1_000_000 - 2_000)).toBe("just now")
-    expect(formatRelativeTime(1_000_000 - 4_999)).toBe("just now")
+    expect(formatRelativeTime(NOW - 2_000, NOW)).toBe("just now")
+    expect(formatRelativeTime(NOW - 4_999, NOW)).toBe("just now")
   })
 
   it("returns seconds for < 60 seconds", () => {
-    expect(formatRelativeTime(1_000_000 - 10_000)).toBe("10s ago")
-    expect(formatRelativeTime(1_000_000 - 59_000)).toBe("59s ago")
+    expect(formatRelativeTime(NOW - 10_000, NOW)).toBe("10s ago")
+    expect(formatRelativeTime(NOW - 59_000, NOW)).toBe("59s ago")
   })
 
   it("returns minutes for < 60 minutes", () => {
-    expect(formatRelativeTime(1_000_000 - 120_000)).toBe("2m ago")
-    expect(formatRelativeTime(1_000_000 - 3_540_000)).toBe("59m ago")
+    expect(formatRelativeTime(NOW - 120_000, NOW)).toBe("2m ago")
+    expect(formatRelativeTime(NOW - 3_540_000, NOW)).toBe("59m ago")
   })
 
   it("returns hours for < 24 hours", () => {
-    expect(formatRelativeTime(1_000_000 - 3_600_000)).toBe("1h ago")
-    expect(formatRelativeTime(1_000_000 - 7_200_000)).toBe("2h ago")
+    expect(formatRelativeTime(NOW - 3_600_000, NOW)).toBe("1h ago")
+    expect(formatRelativeTime(NOW - 7_200_000, NOW)).toBe("2h ago")
   })
 
   it("returns days for >= 24 hours", () => {
-    expect(formatRelativeTime(1_000_000 - 86_400_000)).toBe("1d ago")
-    expect(formatRelativeTime(1_000_000 - 172_800_000)).toBe("2d ago")
+    expect(formatRelativeTime(NOW - 86_400_000, NOW)).toBe("1d ago")
+    expect(formatRelativeTime(NOW - 172_800_000, NOW)).toBe("2d ago")
+  })
+
+  it("defaults to Date.now() when now parameter is omitted", () => {
+    // The function still works without the now parameter
+    const result = formatRelativeTime(Date.now() - 1_000)
+    expect(result).toBe("just now")
   })
 })
 

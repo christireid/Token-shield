@@ -17,6 +17,7 @@ import { UserBudgetTable } from "./user-budget-table"
 import { useStaggeredReveal } from "@/hooks/use-staggered-reveal"
 import { useReducedMotion } from "@/hooks/use-reduced-motion"
 import { DashboardErrorBoundary } from "./error-boundary"
+import { Toaster } from "@/components/ui/toaster"
 
 const SectionHeader = React.memo(function SectionHeader({ title }: { title: string }) {
   return (
@@ -189,6 +190,7 @@ export function DashboardShell() {
           </div>
         </main>
       </div>
+      <Toaster />
     </DashboardProvider>
   )
 }

@@ -11,8 +11,8 @@
  * Format a timestamp into a human-readable relative time string.
  * Uses a "just now" threshold of < 5 seconds.
  */
-export function formatRelativeTime(ts: number): string {
-  const diff = Math.floor((Date.now() - ts) / 1000)
+export function formatRelativeTime(ts: number, now = Date.now()): string {
+  const diff = Math.floor((now - ts) / 1000)
   if (diff < 5) return "just now"
   if (diff < 60) return `${diff}s ago`
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`

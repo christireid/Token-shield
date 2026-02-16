@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { MoreHorizontal, Plus, RotateCcw, Trash2, ArrowUpDown, Pencil } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useToast } from "@/hooks/use-toast"
 
 const TIER_BADGE_CLASSES: Record<string, string> = {
   standard: "border-border/40 bg-secondary/40 text-muted-foreground",
@@ -185,6 +186,7 @@ function EditableLimit({ value, onSave }: { value: number; onSave: (v: number) =
 /* ---- Add user dialog ---- */
 function AddUserDialog() {
   const { addUser } = useDashboard()
+  const { toast } = useToast()
   const [open, setOpen] = React.useState(false)
   const [name, setName] = React.useState("")
   const [tier, setTier] = React.useState<"standard" | "premium" | "unlimited">("standard")
@@ -208,6 +210,7 @@ function AddUserDialog() {
         monthly: parseFloat(monthlyLimit) || 200,
       },
     })
+    toast({ title: "User added", description: `${name.trim()} has been added successfully.` })
     setName("")
     setTier("standard")
     setDailyLimit("10")
@@ -369,6 +372,7 @@ const SortHeader = React.memo(function SortHeader({
 
 export function UserBudgetTable() {
   const { data, updateUserBudget, removeUser, resetUserSpend } = useDashboard()
+  const { toast } = useToast()
   const [sortKey, setSortKey] = React.useState<SortKey>("percentUsed")
   const [sortDir, setSortDir] = React.useState<"asc" | "desc">("desc")
   const [confirmRemoveUserId, setConfirmRemoveUserId] = React.useState<string | null>(null)
@@ -562,7 +566,11 @@ export function UserBudgetTable() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (confirmRemoveUserId) removeUser(confirmRemoveUserId)
+                if (confirmRemoveUserId) {
+                  const userName = confirmRemoveUser?.displayName ?? "User"
+                  removeUser(confirmRemoveUserId)
+                  toast({ title: "User removed", description: `${userName} has been removed.` })
+                }
                 setConfirmRemoveUserId(null)
               }}
             >
