@@ -8,7 +8,7 @@
  * @example
  * ```ts
  * // Simple: 3 lines of code
- * import { createTokenShield } from 'tokenshield'
+ * import { createTokenShield } from '@tokenshield/ai-sdk'
  * const shield = createTokenShield({ preset: 'chatApp', monthlyBudget: 100 })
  * // Use with Vercel AI SDK: wrapLanguageModel({ model, middleware: shield })
  * ```

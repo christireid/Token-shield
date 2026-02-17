@@ -94,16 +94,13 @@ The correct architecture places TokenShield on the client as an optimization and
 // --- Client (React component using TokenShield) ---
 
 import { useSavings, useBudgetAlert } from "@tokenshield/ai-sdk/react"
-import { estimateCost } from "@tokenshield/ai-sdk"
 
 function ChatInput({ userId }: { userId: string }) {
   const savings = useSavings()
-  const budget = useBudgetAlert({ warningThreshold: 0.8 })
+  const budget = useBudgetAlert()
 
   async function handleSend(prompt: string) {
-    // 1. Client-side estimation and budget check (UX layer)
-    const estimate = estimateCost(prompt, "gpt-4o")
-
+    // 1. Client-side budget check (UX layer)
     if (budget.isWarning) {
       showWarning("You are approaching your spending limit.")
     }
@@ -112,7 +109,7 @@ function ChatInput({ userId }: { userId: string }) {
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, model: estimate.model }),
+      body: JSON.stringify({ prompt, model: "gpt-4o" }),
       credentials: "include", // Send session cookie
     })
 

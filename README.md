@@ -4,7 +4,7 @@ Drop-in middleware that reduces AI API costs without changing your prompts.
 
 Works with Vercel AI SDK, OpenAI, and Anthropic. TypeScript-first.
 
-> **v0.5.0 (pre-release)** — Not yet published to npm. API may change before v1.0.
+> **v1.0.0** — Not yet published to npm. Install from source.
 
 ---
 
@@ -128,8 +128,8 @@ function App() {
 }
 
 function CostDisplay() {
-  const { totalSaved, savingsRate } = useSavings()
-  return <p>Saved ${totalSaved.toFixed(2)} ({(savingsRate * 100).toFixed(0)}%)</p>
+  const { totalDollarsSaved, totalCacheHits } = useSavings()
+  return <p>Saved ${totalDollarsSaved.toFixed(2)} ({totalCacheHits} cache hits)</p>
 }
 ```
 

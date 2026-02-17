@@ -82,7 +82,9 @@ export function CostProjection() {
               }`}
             >
               <span className="block">{t.label}</span>
-              <span className={`block text-[10px] ${tierIdx === i ? "text-primary-foreground/70" : "text-muted-foreground/60"}`}>
+              <span
+                className={`block text-[10px] ${tierIdx === i ? "text-primary-foreground/70" : "text-muted-foreground/60"}`}
+              >
                 {t.model}
               </span>
             </button>
@@ -146,7 +148,8 @@ export function CostProjection() {
               {(projection.savedPercent * 100).toFixed(0)}% saved
             </span>
             <span className="text-[11px] text-muted-foreground">
-              of ${projection.monthlyCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}/mo
+              of ${projection.monthlyCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              /mo
             </span>
           </div>
           <div className="h-3 w-full overflow-hidden rounded-full bg-secondary/50">
@@ -205,7 +208,7 @@ export function CostProjection() {
           <div className="mt-8 flex flex-col items-center gap-4 text-center">
             <p className="text-sm font-medium text-foreground">Get started in 30 seconds</p>
             <code className="rounded-lg border border-border/50 border-l-2 border-l-primary/40 bg-card px-5 py-3 font-mono text-sm text-muted-foreground">
-              npm install tokenshield
+              npm install @tokenshield/ai-sdk
             </code>
             <p className="text-xs text-muted-foreground">
               MIT license. 2 dependencies. Works with Next.js, Vite, and any TypeScript project.

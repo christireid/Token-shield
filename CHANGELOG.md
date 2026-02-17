@@ -4,7 +4,7 @@ All notable changes to Token Shield will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.5.0] - 2026-02-17
+## [1.0.0] - 2026-02-17
 
 ### BREAKING CHANGES
 

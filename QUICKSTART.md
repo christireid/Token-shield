@@ -99,7 +99,7 @@ function App() {
 
 function Dashboard() {
   const { totalDollarsSaved, totalCacheHits } = useSavings()
-  const { isOverBudget } = useBudgetAlert(10) // $10 alert
+  const { isOverBudget } = useBudgetAlert()
   return (
     <div>
       <p>

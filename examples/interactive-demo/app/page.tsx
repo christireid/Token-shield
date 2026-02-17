@@ -37,9 +37,9 @@ export default function TokenShieldDemo() {
     <div className="min-h-screen bg-gray-50 p-8 font-sans text-gray-900">
       <div className="max-w-4xl mx-auto space-y-8">
         <header className="text-center">
-          <h1 className="text-3xl font-bold text-blue-600">TokenShield Interactive Demo</h1>
+          <h1 className="text-3xl font-bold text-blue-600">Token Shield Interactive Demo</h1>
           <p className="text-gray-600 mt-2">
-            Simulate real-world LLM traffic and see cost savings in action.
+            Simulate real-world LLM traffic and see how <code>shield()</code> reduces costs.
           </p>
         </header>
 

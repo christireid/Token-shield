@@ -5,7 +5,7 @@
  *
  * Barrel re-export for all React hooks and the context provider.
  * This file exists so that consumers can import everything from
- * a single path: `import { TokenShieldProvider, useSavings } from "tokenshield/react"`
+ * a single path: `import { TokenShieldProvider, useSavings } from "@tokenshield/ai-sdk/react"`
  *
  * Hooks are organized into focused files:
  *   - react-context.tsx     — Provider, context, savings store

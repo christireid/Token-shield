@@ -11,7 +11,7 @@
  *
  * Vercel AI SDK usage:
  *   import { wrapLanguageModel } from 'ai'
- *   import { tokenShieldMiddleware } from 'tokenshield'
+ *   import { tokenShieldMiddleware } from '@tokenshield/ai-sdk'
  *
  *   const model = wrapLanguageModel({
  *     model: openai('gpt-4o'),
@@ -20,7 +20,7 @@
  *   const result = await streamText({ model, messages })
  *
  * Generic adapter usage:
- *   import { tokenShieldMiddleware, createGenericAdapter } from 'tokenshield'
+ *   import { tokenShieldMiddleware, createGenericAdapter } from '@tokenshield/ai-sdk'
  *
  *   const shield = tokenShieldMiddleware({ ... })
  *   const protectedCall = createGenericAdapter(shield, myModelCallFn)
@@ -127,7 +127,9 @@ export function tokenShieldMiddleware(
   const defaultOnStorageError = (module: string, operation: string) => (error: unknown) => {
     try {
       instanceEvents.emit("storage:error", { module, operation, error })
-    } catch { /* non-fatal */ }
+    } catch {
+      /* non-fatal */
+    }
   }
 
   const cache = modules.cache
@@ -155,7 +157,9 @@ export function tokenShieldMiddleware(
               limit: detail.limit,
               percentUsed: detail.percentUsed,
             })
-          } catch { /* non-fatal */ }
+          } catch {
+            /* non-fatal */
+          }
         },
         onTripped: (detail) => {
           config.breaker?.onTripped?.(detail)
@@ -166,7 +170,9 @@ export function tokenShieldMiddleware(
               limit: detail.limit,
               action: config.breaker?.action ?? "stop",
             })
-          } catch { /* non-fatal */ }
+          } catch {
+            /* non-fatal */
+          }
         },
         onReset: (window) => {
           config.breaker?.onReset?.(window)
@@ -302,11 +308,19 @@ export function tokenShieldMiddleware(
     })
     on("breaker:tripped", (d) => {
       const data = d as Record<string, unknown>
-      auditLog.logBreakerTripped(String(data.limitType ?? ""), Number(data.threshold ?? 0), Number(data.actual ?? 0))
+      auditLog.logBreakerTripped(
+        String(data.limitType ?? ""),
+        Number(data.threshold ?? 0),
+        Number(data.actual ?? 0),
+      )
     })
     on("userBudget:exceeded", (d) => {
       const data = d as Record<string, unknown>
-      auditLog.logBudgetExceeded(String(data.userId ?? ""), Number(data.limit ?? 0), Number(data.spent ?? 0))
+      auditLog.logBudgetExceeded(
+        String(data.userId ?? ""),
+        Number(data.limit ?? 0),
+        Number(data.spent ?? 0),
+      )
     })
     on("userBudget:warning", (d) => {
       const data = d as Record<string, unknown>

@@ -29,7 +29,7 @@ const MODULES: {
   {
     name: "Cost Estimator",
     description:
-      "Real pricing data for GPT-5.2, Claude Opus 4.5, Gemini 2.5 Pro, and 10 more models. Updated Feb 2026.",
+      "Real pricing data for GPT-4o, Claude Sonnet, Gemini 2.5 Pro, and 20+ more models. Updated automatically.",
     tag: "Core",
     icon: DollarSign,
   },
@@ -159,13 +159,15 @@ export function Features() {
       <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16">
         <h2 className="text-balance text-2xl font-black sm:text-3xl">
           <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-            11 modules.
+            Every module.
           </span>
           <br />
           <span className="text-muted-foreground">One import.</span>
         </h2>
         <p className="mt-2 text-sm text-muted-foreground sm:text-base">
-          Each module works standalone or through the unified AI SDK middleware.
+          Each module works standalone or through the unified{" "}
+          <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">shield()</code>{" "}
+          middleware.
         </p>
 
         <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

@@ -8,7 +8,7 @@ export function Hero() {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText("npm install tokenshield")
+    navigator.clipboard.writeText("npm install @tokenshield/ai-sdk")
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }, [])
@@ -66,16 +66,16 @@ export function Hero() {
 
         {/* Description */}
         <p className="mt-4 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg sm:leading-relaxed">
-          11 TypeScript modules that reduce token waste through exact BPE counting, semantic
-          caching, context trimming, smart model routing, tool overhead analysis, streaming abort
-          tracking, and hard spending limits. Works entirely client-side.
+          Drop-in middleware that reduces AI API costs through semantic caching, prompt compression,
+          and budget enforcement. Three lines of code. Works with Vercel AI SDK, OpenAI, and
+          Anthropic.
         </p>
 
         {/* npm install command */}
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           <div className="group relative flex items-center gap-3 rounded-lg border-l-2 border-l-primary/50 bg-background px-4 py-2.5 shadow-[inset_0_0_0_1px_hsl(215,20%,20%)]">
             <code className="font-mono text-sm text-muted-foreground">
-              npm install tokenshield
+              npm install @tokenshield/ai-sdk
             </code>
             <button
               onClick={handleCopy}
@@ -115,10 +115,10 @@ export function Hero() {
         {/* Key stats */}
         <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-6">
           {[
-            { value: "11", label: "Modules", gradient: true },
-            { value: "0", label: "Backend needed", gradient: false },
-            { value: "BPE", label: "Exact token encoding", gradient: false },
-            { value: "3", label: "Providers supported", gradient: false },
+            { value: "3", label: "Lines to add", gradient: true },
+            { value: "0", label: "Config required", gradient: false },
+            { value: "60%", label: "Avg cost reduction", gradient: false },
+            { value: "3", label: "SDKs supported", gradient: false },
           ].map((stat) => (
             <div
               key={stat.label}
