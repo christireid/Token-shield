@@ -3,8 +3,6 @@ node_modules/
 
 # Build output
 dist/
-.next/
-out/
 *.tsbuildinfo
 
 # Environment
@@ -19,15 +17,8 @@ Thumbs.db
 .vscode/settings.json
 .idea/
 
-# Lock files (use npm)
-pnpm-lock.yaml
-
-# v0 runtime files
-__v0_runtime_loader.js
-__v0_devtools.tsx
-__v0_jsx-dev-runtime.ts
-instrumentation-client.js
-instrumentation-client.ts
-
 # Coverage
 coverage/
+
+# Pack output
+*.tgz

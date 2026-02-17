@@ -1,7 +1,7 @@
 {
-  "name": "@tokenshield/ai-sdk",
-  "version": "0.5.0",
-  "description": "Cut LLM API costs 30-60% with 3 lines of code. TypeScript middleware for caching, routing, budget enforcement, and token optimization.",
+  "name": "token-shield",
+  "version": "1.0.0",
+  "description": "Drop-in TypeScript middleware that reduces AI API costs via semantic caching, prompt compression, and cost tracking.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -12,42 +12,16 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
-    "./react": {
-      "types": "./dist/react.d.ts",
-      "import": "./dist/react.js",
-      "require": "./dist/react.cjs"
-    },
-    "./license": {
-      "types": "./dist/license.d.ts",
-      "import": "./dist/license.js",
-      "require": "./dist/license.cjs"
-    },
-    "./audit-log": {
-      "types": "./dist/audit-log.d.ts",
-      "import": "./dist/audit-log.js",
-      "require": "./dist/audit-log.cjs"
-    },
-    "./compressor": {
-      "types": "./dist/compressor.d.ts",
-      "import": "./dist/compressor.js",
-      "require": "./dist/compressor.cjs"
-    },
-    "./delta-encoder": {
-      "types": "./dist/delta-encoder.d.ts",
-      "import": "./dist/delta-encoder.js",
-      "require": "./dist/delta-encoder.cjs"
-    },
-    "./middleware": {
-      "types": "./dist/middleware.d.ts",
-      "import": "./dist/middleware.js",
-      "require": "./dist/middleware.cjs"
+    "./vercel": {
+      "types": "./dist/vercel.d.ts",
+      "import": "./dist/vercel.js",
+      "require": "./dist/vercel.cjs"
     },
     "./package.json": "./package.json"
   },
   "files": [
     "dist",
     "README.md",
-    "QUICKSTART.md",
     "LICENSE"
   ],
   "sideEffects": false,
@@ -55,33 +29,15 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "dev": "next dev",
-    "sync-pricing": "tsx scripts/sync-pricing.ts",
-    "validate-pricing": "tsx scripts/validate-pricing.ts",
-    "prebuild": "tsx scripts/sync-pricing.ts",
     "build": "tsup",
-    "start": "next start",
-    "lint": "eslint lib/tokenshield/",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "validate": "run-s typecheck lint format:check test",
-    "clean": "rm -rf dist .next coverage",
-    "prepare": "husky",
-    "prepack": "npm run build",
-    "prepublishOnly": "npm run typecheck && npm run test && npm run build"
-  },
-  "lint-staged": {
-    "*.{ts,tsx}": [
-      "prettier --write",
-      "eslint --fix --no-warn-ignored"
-    ],
-    "*.{json,yml,yaml,md,mjs,js}": [
-      "prettier --write"
-    ]
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist coverage",
+    "prepublishOnly": "npm run typecheck && npm run test && npm run build",
+    "check-exports": "node scripts/check-exports.mjs",
+    "check-bundle": "node scripts/check-bundle.mjs"
   },
   "keywords": [
     "ai",
@@ -89,122 +45,38 @@
     "tokens",
     "cost",
     "optimization",
+    "caching",
+    "compression",
+    "middleware",
     "openai",
     "anthropic",
     "vercel-ai-sdk",
-    "react",
-    "middleware",
-    "caching",
-    "budget",
-    "token-management",
-    "gpt",
-    "claude",
-    "gemini"
+    "typescript"
   ],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tokenshield/ai-sdk.git"
+    "url": "https://github.com/christireid/Token-shield.git"
   },
-  "homepage": "https://github.com/tokenshield/ai-sdk#readme",
+  "homepage": "https://github.com/christireid/Token-shield#readme",
   "bugs": {
-    "url": "https://github.com/tokenshield/ai-sdk/issues"
+    "url": "https://github.com/christireid/Token-shield/issues"
   },
   "peerDependencies": {
-    "ai": ">=3.0.0",
-    "react": ">=18.0.0",
-    "react-dom": ">=18.0.0"
+    "ai": ">=3.0.0"
   },
   "peerDependenciesMeta": {
-    "react": {
-      "optional": true
-    },
-    "react-dom": {
-      "optional": true
-    },
     "ai": {
       "optional": true
     }
   },
   "dependencies": {
-    "gpt-tokenizer": "^3.4.0",
-    "idb-keyval": "^6.2.2",
-    "mitt": "^3.0.1",
-    "ohash": "^2.0.11",
-    "openai": "^6.21.0",
-    "valibot": "^1.2.0"
+    "gpt-tokenizer": "^3.4.0"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@hookform/resolvers": "^3.9.1",
-    "@radix-ui/react-accordion": "1.2.2",
-    "@radix-ui/react-alert-dialog": "1.1.4",
-    "@radix-ui/react-aspect-ratio": "1.1.1",
-    "@radix-ui/react-avatar": "1.1.2",
-    "@radix-ui/react-checkbox": "1.1.3",
-    "@radix-ui/react-collapsible": "1.1.2",
-    "@radix-ui/react-context-menu": "2.2.4",
-    "@radix-ui/react-dialog": "1.1.4",
-    "@radix-ui/react-dropdown-menu": "2.1.4",
-    "@radix-ui/react-hover-card": "1.1.4",
-    "@radix-ui/react-label": "2.1.1",
-    "@radix-ui/react-menubar": "1.1.4",
-    "@radix-ui/react-navigation-menu": "1.2.3",
-    "@radix-ui/react-popover": "1.1.4",
-    "@radix-ui/react-progress": "1.1.1",
-    "@radix-ui/react-radio-group": "1.2.2",
-    "@radix-ui/react-scroll-area": "1.2.2",
-    "@radix-ui/react-select": "2.1.4",
-    "@radix-ui/react-separator": "1.1.1",
-    "@radix-ui/react-slider": "1.2.2",
-    "@radix-ui/react-slot": "1.1.1",
-    "@radix-ui/react-switch": "1.1.2",
-    "@radix-ui/react-tabs": "1.1.2",
-    "@radix-ui/react-toast": "1.2.4",
-    "@radix-ui/react-toggle": "1.1.1",
-    "@radix-ui/react-toggle-group": "1.1.1",
-    "@radix-ui/react-tooltip": "1.1.6",
-    "@tailwindcss/postcss": "^4.1.13",
-    "@testing-library/dom": "^10.4.1",
-    "@testing-library/react": "^16.3.2",
-    "@types/node": "^22",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
     "@vitest/coverage-v8": "^4.0.18",
-    "autoprefixer": "^10.4.20",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "cmdk": "1.1.1",
-    "date-fns": "4.1.0",
-    "embla-carousel-react": "8.5.1",
-    "eslint": "^10.0.0",
-    "eslint-config-prettier": "^10.1.8",
-    "husky": "^9.1.7",
-    "input-otp": "1.4.1",
-    "jsdom": "^28.1.0",
-    "lint-staged": "^16.2.7",
-    "llm-info": "^1.0.69",
-    "lucide-react": "^0.544.0",
-    "next": "16.1.6",
-    "next-themes": "^0.4.6",
-    "npm-run-all2": "^8.0.4",
-    "postcss": "^8.5",
-    "prettier": "^3.8.1",
-    "react": "^19",
-    "react-day-picker": "8.10.1",
-    "react-dom": "^19",
-    "react-hook-form": "^7.54.1",
-    "react-resizable-panels": "^2.1.7",
-    "recharts": "2.15.0",
-    "sonner": "^1.7.1",
-    "tailwind-merge": "^2.5.5",
-    "tailwindcss": "^3.4.17",
-    "tailwindcss-animate": "^1.0.7",
     "tsup": "^8.5.1",
     "typescript": "5.7.3",
-    "typescript-eslint": "^8.55.0",
-    "vaul": "^1.1.2",
-    "vitest": "^4.0.18",
-    "zod": "^3.24.1"
+    "vitest": "^4.0.18"
   }
 }

@@ -1,0 +1,8 @@
+{
+  "name": "token-shield-vercel-edge",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "token-shield": "file:../../"
+  }
+}

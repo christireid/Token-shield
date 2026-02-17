@@ -1,0 +1,64 @@
+{
+  "timestamp": "2026-02-17T15:26:02.518Z",
+  "environment": {
+    "node": "v22.22.0",
+    "platform": "linux",
+    "arch": "x64"
+  },
+  "results": [
+    {
+      "name": "cache.lookup (exact hit)",
+      "ops": 697877,
+      "msPerOp": 0.001432917800000007,
+      "runs": 10000
+    },
+    {
+      "name": "cache.lookup (miss)",
+      "ops": 148704,
+      "msPerOp": 0.0067247513000000024,
+      "runs": 10000
+    },
+    {
+      "name": "cache.lookup (fuzzy, 50 entries)",
+      "ops": 4392,
+      "msPerOp": 0.22767313370000003,
+      "runs": 10000
+    },
+    {
+      "name": "promptCompression (short text)",
+      "ops": 38919,
+      "msPerOp": 0.025694099899999993,
+      "runs": 10000
+    },
+    {
+      "name": "promptCompression (verbose ~80 tokens)",
+      "ops": 11496,
+      "msPerOp": 0.0869831056,
+      "runs": 10000
+    },
+    {
+      "name": "estimateCost (known model)",
+      "ops": 6466791,
+      "msPerOp": 0.0001546361999999135,
+      "runs": 10000
+    },
+    {
+      "name": "estimateCost (unknown model)",
+      "ops": 1677409,
+      "msPerOp": 0.0005961574999999357,
+      "runs": 10000
+    },
+    {
+      "name": "shield.process (miss + compress)",
+      "ops": 10619,
+      "msPerOp": 0.09416721200000029,
+      "runs": 1000
+    },
+    {
+      "name": "shield.process (cache hit)",
+      "ops": 657015,
+      "msPerOp": 0.0015220362000000023,
+      "runs": 10000
+    }
+  ]
+}

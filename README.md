@@ -1,226 +1,147 @@
-# TokenShield AI SDK
+# token-shield
 
-**Companies using LLM APIs waste 30-60% of their spend on redundant calls, expensive models for simple queries, and missed caching opportunities.** TokenShield recovers that money with 3 lines of code.
+TypeScript middleware that reduces AI API costs via semantic caching, prompt compression, and cost tracking. Drop-in — no prompt rewrites required.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![npm version](https://img.shields.io/npm/v/@tokenshield/ai-sdk.svg)](https://www.npmjs.com/package/@tokenshield/ai-sdk)
-[![Tests](https://img.shields.io/badge/tests-822%20passed-brightgreen)](./lib/tokenshield)
+```
+npm install token-shield
+```
 
----
+## Quick start
 
-## How Much Are You Wasting?
+```ts
+import { createShield } from "token-shield";
 
-| Monthly LLM Spend | Estimated Waste | TokenShield Savings | ROI at $29/mo |
-| :--- | :--- | :--- | :--- |
-| $5,000 | $1,500 - $3,000 | $1,200 - $2,400/mo | **41x - 83x** |
-| $25,000 | $7,500 - $15,000 | $6,000 - $12,000/mo | **207x - 414x** |
-| $100,000 | $30,000 - $60,000 | $24,000 - $48,000/mo | **828x - 1,655x** |
+const shield = createShield({ cache: true, compression: true });
 
-*Based on measured savings from response caching (10-15%), model routing (20-30%), prefix optimization (15-25%), context trimming (10-15%), and request deduplication (3-5%).*
+// Before each LLM call
+const result = shield.process({
+  model: "gpt-4o",
+  messages: [{ role: "user", content: "What is TypeScript?" }],
+});
 
----
+if (result.cached) {
+  // Cache hit — skip the API call entirely
+  console.log(result.cached.response);
+} else {
+  // Call your LLM with (possibly compressed) messages
+  const response = await callYourLLM(result.messages);
 
-## 3-Line Integration
+  // Record for caching + cost tracking
+  shield.record({
+    model: "gpt-4o",
+    prompt: "What is TypeScript?",
+    response: response.text,
+    inputTokens: response.usage.promptTokens,
+    outputTokens: response.usage.completionTokens,
+  });
+}
 
-TokenShield runs **inside your application** as middleware. No proxy servers, no URL changes, no vendor lock-in.
+console.log(shield.stats);
+```
 
-### With Vercel AI SDK
+## Vercel AI SDK
 
-```typescript
-import { openai } from "@ai-sdk/openai";
+```ts
+import { withShield } from "token-shield";
 import { wrapLanguageModel } from "ai";
-import { tokenShieldMiddleware } from "@tokenshield/ai-sdk";
+import { openai } from "@ai-sdk/openai";
 
 const model = wrapLanguageModel({
   model: openai("gpt-4o"),
-  middleware: tokenShieldMiddleware(), // All optimizations active
+  middleware: withShield({ cache: true, compression: true }),
 });
 ```
 
-### With OpenAI SDK
+## What it does
 
-```typescript
-import OpenAI from "openai";
-import { tokenShieldMiddleware, createOpenAIAdapter } from "@tokenshield/ai-sdk";
+- **Semantic caching** — Exact and fuzzy match. Cache hits eliminate 100% of tokens for that request. Keys are model-scoped to prevent cross-model contamination.
+- **Prompt compression** — Client-side, zero API calls. Removes filler words, contracts verbose patterns, deduplicates sentences. Typically 15–35% savings on verbose prompts.
+- **Cost tracking** — Per-model, per-request cost estimation with 18 built-in model prices (OpenAI, Anthropic, Google). Unknown models explicitly return `known: false`.
 
-const shield = tokenShieldMiddleware();
-const client = createOpenAIAdapter(shield, (p) => new OpenAI().chat.completions.create(p as any));
+## Stats output
 
-const response = await client({
-  messages: [{ role: "user", content: "Hello world" }],
-  model: "gpt-4o",
-});
-```
-
-### With Anthropic SDK
-
-```typescript
-import Anthropic from "@anthropic-ai/sdk";
-import { tokenShieldMiddleware, createAnthropicAdapter } from "@tokenshield/ai-sdk";
-
-const shield = tokenShieldMiddleware();
-const client = createAnthropicAdapter(shield, (p) => new Anthropic().messages.create(p as any));
-```
-
----
-
-## What It Does (and How Much Each Module Saves)
-
-| Module | What It Does | Savings |
-| :--- | :--- | :--- |
-| **Response Cache** | Semantic similarity matching catches rephrased duplicates. No API call = no cost. | 10-15% |
-| **Model Router** | Routes "What is 2+2?" to GPT-4.1-Nano instead of GPT-4o. Same answer, 25x cheaper. | 20-30% |
-| **Prefix Optimizer** | Reorders messages so providers cache your system prompt automatically. | 15-25% |
-| **Context Manager** | Trims conversations to fit token budgets without losing critical context. | 10-15% |
-| **Request Guard** | Blocks duplicate requests, rate limits, and cost-gates before API calls. | 3-5% |
-| **Cost Ledger** | Tracks every dollar spent vs. saved with per-module attribution. Export to JSON/CSV. | Visibility |
-| **Circuit Breaker** | Hard spending limits (per-hour, per-day, per-month) to prevent bill shock. | Protection |
-| **User Budget Manager** | Per-user daily/monthly quotas for SaaS applications. | Governance |
-| **Anomaly Detector** | Statistical outlier detection for cost and token spikes. | Early warning |
-
----
-
-## Why Not a Gateway?
-
-Most LLM cost tools (Helicone, Portkey, Edgee) are **API gateways**: you change your base URL to route traffic through their servers.
-
-| | TokenShield SDK | Gateway (Helicone, Edgee, etc.) |
-| :--- | :--- | :--- |
-| **Architecture** | In-process middleware | Network proxy |
-| **Latency** | **< 5ms** | 50-200ms per request |
-| **Vendor Lock-In** | **None** (delete 3 lines to remove) | High (infrastructure dependency) |
-| **Data Privacy** | **Your infra only** | Data flows through 3rd party |
-| **Per-User Budgets** | **Built-in** | Limited or unavailable |
-| **Prefix Optimization** | **Automatic** | Not available |
-| **Pricing** | **MIT core / $29 Pro** | $20-800/mo |
-| **Remove It** | Delete import | Redeploy infrastructure |
-
-[Full competitive analysis vs. Edgee](docs/tokenshield-vs-edgee.md)
-
----
-
-## Configuration
-
-```typescript
-tokenShieldMiddleware({
-  modules: {
-    guard: true,      // Rate limiting, dedup, cost gate
-    cache: true,      // Semantic response caching
-    context: true,    // Conversation trimming
-    router: true,     // Complexity-based model routing
-    prefix: true,     // Provider cache optimization
-    ledger: true,     // Cost tracking
-  },
-  guard: {
-    debounceMs: 300,
-    maxRequestsPerMinute: 60,
-    maxCostPerHour: 10,
-    deduplicateWindow: 5000, // 5s window for identical prompts
-  },
-  cache: {
-    maxEntries: 500,
-    ttlMs: 3_600_000,
-    similarityThreshold: 0.85,
-    encodingStrategy: "holographic", // Better paraphrase detection
-  },
-  router: {
-    tiers: [
-      { modelId: "gpt-4.1-nano", maxComplexity: 20 },
-      { modelId: "gpt-4.1-mini", maxComplexity: 50 },
-      { modelId: "gpt-4o", maxComplexity: 100 },
-    ],
-  },
-  breaker: {
-    limits: { perHour: 5, perDay: 50, perMonth: 500 },
-    action: "stop",
-  },
-  onUsage: (entry) => console.log(`$${entry.cost.toFixed(4)} spent, $${entry.saved.toFixed(4)} saved`),
-});
-```
-
-See [QUICKSTART.md](QUICKSTART.md) for the full configuration reference.
-
----
-
-## React Integration
-
-17 hooks for real-time cost visibility:
-
-```typescript
-import { TokenShieldProvider, useSavings, useBudgetAlert } from "@tokenshield/ai-sdk";
-
-function App() {
-  return (
-    <TokenShieldProvider defaultModelId="gpt-4o">
-      <Dashboard />
-    </TokenShieldProvider>
-  );
-}
-
-function Dashboard() {
-  const { totalSaved, savingsRate } = useSavings();
-  const { isOverBudget } = useBudgetAlert(10); // $10 alert
-
-  return (
-    <div>
-      <p>Saved: ${totalSaved.toFixed(2)} ({(savingsRate * 100).toFixed(0)}%)</p>
-      {isOverBudget && <p>Budget exceeded!</p>}
-    </div>
-  );
+```ts
+{
+  requests: 150,
+  cacheHits: 47,
+  cacheHitRate: 0.31,
+  compressionTokensSaved: 12400,
+  cacheTokensSaved: 94000,
+  totalTokensSaved: 106400,
+  totalEstimatedCost: 1.23,
+  estimatedCostSaved: 0.85,
 }
 ```
 
----
+## Benchmarks
 
-## Pricing
-
-| Tier | Price | Includes |
-| :--- | :--- | :--- |
-| **Community** | Free (MIT) | Token Counter, Cost Estimator, Request Guard, Cost Ledger |
-| **Pro** | $29/mo | + Response Cache, Model Router, Prefix Optimizer, Context Manager |
-| **Team** | $99/mo | + Circuit Breaker, User Budgets, Anomaly Detection, Data Export |
-| **Enterprise** | Custom | + Audit Logging, Custom Routing, Priority Support, SLA |
-
-All features are unlocked in development. License keys are required for production use of Pro/Team/Enterprise features.
-
-```typescript
-import { activateLicense } from "@tokenshield/ai-sdk";
-activateLicense("your-license-key");
-```
-
----
-
-## Security
-
-TokenShield is a **client-side SDK**. Your API keys and data never leave your infrastructure. No telemetry, no phone-home, no third-party data sharing.
-
-See [SECURITY.md](SECURITY.md) for the full trust model.
-
----
-
-## Installation
+Benchmarks use synthetic data. No API calls. Run them yourself:
 
 ```bash
-npm install @tokenshield/ai-sdk
+npx tsx benchmarks/run.ts
 ```
 
-**Peer dependencies** (optional):
-- `ai >= 3.0.0` — For Vercel AI SDK middleware
-- `react >= 18.0.0` — For React hooks and dashboard
+| Operation | Typical overhead |
+|-----------|-----------------|
+| Cache lookup (exact hit) | <0.002ms |
+| Cache lookup (fuzzy, 50 entries) | ~0.2ms |
+| Prompt compression (~80 tokens) | ~0.09ms |
+| Cost estimation | <0.001ms |
+| Full shield.process (cache hit) | <0.002ms |
 
----
+Compression savings depend on prompt verbosity:
+- Verbose instructions: 15–35%
+- Conversational messages: 10–20%
+- Technical/code prompts: 2–8%
+- Already-concise prompts: 0% (correctly skipped)
 
-## Documentation
+See [benchmarks/summary.md](benchmarks/summary.md) for methodology and honest claims guidance.
 
-- [Quick Start Guide](QUICKSTART.md) — Full configuration reference
-- [Security & Trust Model](SECURITY.md) — How data flows
-- [Competitive Analysis](docs/tokenshield-vs-edgee.md) — vs. Edgee, Helicone, Portkey
-- [Technical Specification](SPEC.md) — Architecture deep-dive
-- [Changelog](CHANGELOG.md) — Version history
-- [Contributing](CONTRIBUTING.md) — How to contribute
+## Runtime support
 
----
+| Runtime | Status |
+|---------|--------|
+| Node.js 18+ | Supported |
+| Vercel Edge | Supported |
+| Cloudflare Workers | Untested (likely works) |
+| Browser | Not supported in v1 |
+
+No Node-only APIs. Cache is in-memory (no IndexedDB, no filesystem).
+
+## API
+
+| Export | Type | Description |
+|--------|------|-------------|
+| `createShield` | function | Create a shield instance |
+| `shield` | function | Alias for `createShield` |
+| `semanticCache` | function | Standalone semantic cache |
+| `promptCompression` | function | Compress a prompt |
+| `costTracker` | function | Create a cost accumulator |
+| `estimateCost` | function | One-shot cost calculation |
+| `withShield` | function | Vercel AI SDK middleware |
+| `ShieldOptions` | type | Configuration type |
+| `ShieldStats` | type | Stats output type |
+
+Full API documentation: [docs/api-spec.md](docs/api-spec.md)
+
+## Limitations
+
+- Cache is in-memory only. Does not persist across process restarts.
+- Compression is English-focused. Non-English prompts may see reduced savings.
+- Token counting uses OpenAI's BPE encoding. Approximate for Anthropic (~35% divergence) and Google (~12%).
+- Unknown models return `known: false` with zero cost — no fabricated estimates.
+- Fuzzy matching is O(n) per lookup. Performance degrades above ~10K cache entries.
+
+Full limitations: [docs/limitations.md](docs/limitations.md)
+
+## Roadmap
+
+- [ ] Persistent cache (Redis, SQLite)
+- [ ] Multi-language compression
+- [ ] Request deduplication
+- [ ] Cost alerting / budget limits
+- [ ] Dashboard / analytics (optional)
 
 ## License
 
-MIT &copy; 2026 Code&Clarity. See [LICENSE](LICENSE) for details.
+MIT
