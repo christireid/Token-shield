@@ -193,33 +193,6 @@ export {
 } from "./errors"
 
 // -------------------------------------------------------
-// React (re-export for convenience — also available via /react)
-// -------------------------------------------------------
-
-export {
-  TokenShieldProvider,
-  useSavings,
-  useTokenCount,
-  useBudgetAlert,
-  useTokenEstimate,
-  useComplexityAnalysis,
-  useContextManager,
-  useResponseCache,
-  useRequestGuard,
-  useModelRouter,
-  useCostLedger,
-  useFeatureCost,
-  useUserBudget,
-  useEventLog,
-  useSessionSavings,
-  useShieldedCall,
-  type TokenShieldProviderProps,
-} from "./react"
-
-// Dashboard Component
-export { TokenShieldDashboard, type TokenShieldDashboardProps } from "./dashboard"
-
-// -------------------------------------------------------
 // License
 // -------------------------------------------------------
 

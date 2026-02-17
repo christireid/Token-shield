@@ -811,10 +811,6 @@ describe("All index.ts exports are importable", () => {
       "resetLicense",
       // Audit
       "AuditLog",
-      // React
-      "TokenShieldProvider",
-      "useSavings",
-      "TokenShieldDashboard",
     ]
 
     const advModule = adv as Record<string, unknown>

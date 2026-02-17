@@ -43,9 +43,13 @@ export interface ShieldConfig {
   trackCosts?: boolean
   /** Enable request deduplication and rate limiting (default: true) */
   guard?: boolean
-  /** Monthly spending limit in USD. Enables circuit breaker when set. */
+  /** Monthly spending limit in USD. Enables circuit breaker when set.
+   *  Must be a positive number. Omit or set to `undefined` for no limit.
+   *  Note: `0` is treated as "no limit" (falsy), not "block all requests". */
   monthlyBudget?: number
-  /** Daily spending limit in USD. Enables circuit breaker when set. */
+  /** Daily spending limit in USD. Enables circuit breaker when set.
+   *  Must be a positive number. Omit or set to `undefined` for no limit.
+   *  Note: `0` is treated as "no limit" (falsy), not "block all requests". */
   dailyBudget?: number
   /** Cache similarity threshold 0-1 (default: 0.85) */
   similarityThreshold?: number
