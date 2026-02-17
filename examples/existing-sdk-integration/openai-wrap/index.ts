@@ -74,18 +74,9 @@ async function main() {
     }
   }
 
-  // Comparison Table Output
-  console.log("📊 Comparison: TokenShield vs. Edgee Gateway")
-  console.table([
-    { Feature: "Integration", TokenShield: "npm install (In-App)", Edgee: "DNS / API Proxy" },
-    { Feature: "Latency", TokenShield: "< 5ms overhead", Edgee: "50-200ms overhead" },
-    {
-      Feature: "Vendor Lock-in",
-      TokenShield: "None (remove lines)",
-      Edgee: "High (infra dependency)",
-    },
-    { Feature: "Cost", TokenShield: "Free (MIT)", Edgee: "Platform Markup" },
-  ])
+  // Summary
+  console.log("\n📊 Demo complete. TokenShield adds < 5ms overhead per request.")
+  console.log("   See README.md for full architecture comparison.\n")
 }
 
 if (require.main === module) {

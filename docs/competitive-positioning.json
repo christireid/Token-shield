@@ -59,7 +59,7 @@
     },
     {
       "dimension": "Semantic Caching",
-      "tokenshield_value": "Neuro-Elastic (Client-side)",
+      "tokenshield_value": "Trigram Similarity (Client-side)",
       "edgee_value": "Server-side Compression",
       "winner": "Tie",
       "reasoning": "Different approaches to similar outcomes."
