@@ -1,12 +1,12 @@
-# TokenShield Quickstart
+# Token Shield Quickstart
 
 ## Installation
 
 > **Not yet published to npm.** Clone and build from source:
 
 ```bash
-git clone https://github.com/tokenshield/ai-sdk.git
-cd ai-sdk && npm install && npm run build
+git clone https://github.com/christireid/Token-shield.git
+cd Token-shield && npm install && npm run build
 ```
 
 ## 1. Add Middleware (Vercel AI SDK)
@@ -14,11 +14,11 @@ cd ai-sdk && npm install && npm run build
 ```typescript
 import { wrapLanguageModel, streamText } from "ai"
 import { openai } from "@ai-sdk/openai"
-import { tokenShieldMiddleware } from "@tokenshield/ai-sdk"
+import { shield } from "@tokenshield/ai-sdk"
 
 const model = wrapLanguageModel({
   model: openai("gpt-4o"),
-  middleware: tokenShieldMiddleware(),
+  middleware: shield(),
 })
 
 const result = await streamText({
@@ -27,112 +27,106 @@ const result = await streamText({
 })
 ```
 
-Repeated prompts hit the cache, long conversations get trimmed, and spending is tracked automatically.
+Caching, compression, and cost tracking are on by default. Repeated prompts hit the cache, long conversations get trimmed, and spending is tracked automatically.
 
-## 2. Configuration Reference
+## 2. Configuration
 
 ```typescript
-tokenShieldMiddleware({
-  // Enable/disable modules (all true by default except router)
-  modules: {
-    guard: true, // Debounce, dedup, rate limit
-    cache: true, // Response caching (exact + fuzzy)
-    context: true, // Conversation trimming
-    router: false, // Model routing (opt-in)
-    prefix: true, // Provider cache optimization
-    ledger: true, // Cost tracking
-  },
+import { shield } from "@tokenshield/ai-sdk"
 
-  guard: {
-    debounceMs: 300,
-    maxRequestsPerMinute: 60,
-    maxCostPerHour: 10,
-  },
+// Zero-config (recommended)
+const middleware = shield()
 
-  cache: {
-    maxEntries: 500,
-    ttlMs: 3_600_000, // 1 hour
-    similarityThreshold: 0.85,
-  },
-
-  context: {
-    maxInputTokens: 8000,
-    reserveForOutput: 1000,
-  },
-
-  router: {
-    tiers: [
-      { modelId: "gpt-4.1-nano", maxComplexity: 20 },
-      { modelId: "gpt-4.1-mini", maxComplexity: 50 },
-      { modelId: "gpt-4o", maxComplexity: 100 },
-    ],
-  },
-
-  breaker: {
-    limits: { perHour: 2, perDay: 20, perMonth: 200 },
-    action: "stop", // 'warn' | 'throttle' | 'stop'
-  },
-
-  // Dry-run: log what would happen without modifying behavior
-  dryRun: false,
-  onDryRun: (action) => console.log(`[dry-run] ${action.module}: ${action.description}`),
-
+// With budget enforcement
+const middleware = shield({
+  cache: true, // Semantic response caching (default: true)
+  compression: true, // Prompt compression (default: true)
+  trackCosts: true, // Cost ledger (default: true)
+  guard: true, // Rate limiting, dedup (default: true)
+  monthlyBudget: 500, // Circuit breaker: $500/month
+  dailyBudget: 25, // Circuit breaker: $25/day
+  similarityThreshold: 0.85, // Cache match threshold (default: 0.85)
   onUsage: (entry) => {
     console.log(`$${entry.cost.toFixed(4)} spent, $${entry.saved.toFixed(4)} saved`)
   },
 })
 ```
 
-## 3. React Hooks
+For full module-level control, use `tokenShieldMiddleware()`:
+
+```typescript
+import { tokenShieldMiddleware } from "@tokenshield/ai-sdk"
+
+const middleware = tokenShieldMiddleware({
+  modules: {
+    guard: true,
+    cache: true,
+    context: true,
+    router: false, // Opt-in: complexity-based model routing
+    prefix: true,
+    ledger: true,
+  },
+  cache: { maxEntries: 500, ttlMs: 3_600_000, similarityThreshold: 0.85 },
+  breaker: { limits: { perDay: 20, perMonth: 200 }, action: "stop" },
+  dryRun: false,
+  onDryRun: (action) => console.log(`[dry-run] ${action.module}: ${action.description}`),
+})
+```
+
+## 3. Stats
+
+```typescript
+import { shield, getStats } from "@tokenshield/ai-sdk"
+
+const middleware = shield()
+// ... after some requests ...
+const stats = getStats(middleware)
+// { totalSaved: 0.43, totalSpent: 1.82, savingsRate: 0.19, cacheHitRate: 0.34 }
+```
+
+## 4. React Hooks
 
 ```tsx
-import { TokenShieldProvider, useSavings, useBudgetAlert, useTokenCount } from "@tokenshield/ai-sdk"
+import { TokenShieldProvider, useSavings, useBudgetAlert } from "@tokenshield/ai-sdk/react"
 
 function App() {
   return (
     <TokenShieldProvider defaultModelId="gpt-4o">
-      <ChatApp />
+      <Dashboard />
     </TokenShieldProvider>
   )
 }
 
-function SavingsBanner() {
-  const { totalDollarsSaved, totalTokensSaved, totalCacheHits } = useSavings()
-  return (
-    <p>
-      Saved ${totalDollarsSaved.toFixed(2)} ({totalCacheHits} cache hits)
-    </p>
-  )
-}
-
-function PromptInput() {
-  const [text, setText] = useState("")
-  const { tokens, cost } = useTokenCount(text)
+function Dashboard() {
+  const { totalDollarsSaved, totalCacheHits } = useSavings()
+  const { isOverBudget } = useBudgetAlert(10) // $10 alert
   return (
     <div>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} />
-      <span>
-        {tokens} tokens (${cost.toFixed(4)})
-      </span>
+      <p>
+        Saved ${totalDollarsSaved.toFixed(2)} ({totalCacheHits} cache hits)
+      </p>
+      {isOverBudget && <p>Budget exceeded!</p>}
     </div>
   )
 }
 ```
 
-## 4. Error Handling
+Primary hooks: `useSavings`, `useBudgetAlert`, `useShieldedCall`. All 15 hooks are available from `@tokenshield/ai-sdk/react`.
+
+## 5. Error Handling
 
 ```typescript
 import {
   TokenShieldBlockedError,
   TokenShieldBudgetError,
   TokenShieldError,
-} from "@tokenshield/ai-sdk"
+} from "@tokenshield/ai-sdk/advanced"
 
 try {
   const result = await streamText({ model, messages })
 } catch (err) {
   if (err instanceof TokenShieldBudgetError) {
-    console.error(`User ${err.userId} hit ${err.limitType} limit`)
+    console.error(`Budget limit hit: ${err.limitType}`)
   } else if (err instanceof TokenShieldBlockedError) {
     console.warn("Request blocked:", err.message)
   } else if (err instanceof TokenShieldError) {
@@ -141,9 +135,9 @@ try {
 }
 ```
 
-## 5. Standalone Module Usage
+## 6. Standalone Modules
 
-Every module can be used independently without the middleware:
+Every module can be used independently via the `/advanced` subpath:
 
 ```typescript
 import {
@@ -151,21 +145,13 @@ import {
   estimateCost,
   analyzeComplexity,
   ResponseCache,
-} from "@tokenshield/ai-sdk"
+} from "@tokenshield/ai-sdk/advanced"
 
-// Token counting
 const { tokens } = countExactTokens("Hello, world!")
-
-// Cost estimation
 const cost = estimateCost("gpt-4o", 1000, 500)
-
-// Complexity analysis
 const { score, tier } = analyzeComplexity("What is 2+2?")
 
-// Direct cache usage
 const cache = new ResponseCache({ maxEntries: 500, similarityThreshold: 0.85 })
 await cache.store("What is React?", "React is...", "gpt-4o", 10, 50)
 const result = await cache.lookup("what is react", "gpt-4o") // fuzzy match
 ```
-
-See the TypeScript types for full API documentation — all exports are fully typed.

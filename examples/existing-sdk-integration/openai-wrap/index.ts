@@ -66,7 +66,7 @@ async function main() {
 
     console.log(`   Response: "${result2.choices[0].message.content?.substring(0, 30)}..."`)
     console.log(`   Time: ${Date.now() - start2}ms`)
-    console.log("   💰 Cost: $0.00 (Served from Neuro-Elastic Cache)")
+    console.log("   💰 Cost: $0.00 (Served from cache)")
     console.log("   ⚡ Latency Savings: >95%\n")
   } catch (e) {
     if ((e as Error).message.includes("401")) {
