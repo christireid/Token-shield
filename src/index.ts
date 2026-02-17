@@ -22,5 +22,16 @@ export { costTracker, estimateCost } from "./cost/tracker"
 // Middleware
 export { withShield } from "./middleware/vercel"
 
-// Types
+// Types (primary)
 export type { ShieldOptions, ShieldStats } from "./types"
+
+// Types (return types — useful for explicit type annotations)
+export type {
+  Message,
+  ProcessResult,
+  CostEstimate,
+  CompressionResult,
+  CostTrackerStats,
+  CacheOptions,
+  CompressionOptions,
+} from "./types"

@@ -99,6 +99,14 @@ const unknown = estimateCost("my-model", 1000, 500);
 
 Creates Vercel AI SDK-compatible middleware.
 
+Available from both import paths:
+```ts
+import { withShield } from "token-shield";
+// or
+import { withShield } from "token-shield/vercel";
+```
+
+Usage with `wrapLanguageModel`:
 ```ts
 import { withShield } from "token-shield";
 import { wrapLanguageModel } from "ai";
@@ -113,6 +121,18 @@ const model = wrapLanguageModel({
 ---
 
 ### Types
+
+All types are importable via `import type { ... } from "token-shield"`:
+
+- `ShieldOptions` — Configuration for `createShield` / `withShield`
+- `ShieldStats` — Cumulative statistics
+- `Message` — Chat message (`{ role, content }`)
+- `ProcessResult` — Return type of `shield.process()`
+- `CostEstimate` — Return type of `estimateCost()`
+- `CompressionResult` — Return type of `promptCompression()`
+- `CostTrackerStats` — Return type of `costTracker().stats`
+- `CacheOptions` — Cache configuration
+- `CompressionOptions` — Compression configuration
 
 #### `ShieldOptions`
 

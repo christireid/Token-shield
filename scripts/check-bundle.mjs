@@ -3,15 +3,12 @@
  * Run with: node scripts/check-bundle.mjs
  */
 
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
 import { gzipSync } from "node:zlib"
-import { globSync } from "node:fs"
 
 const MAX_GZIP_KB = 25
 
 async function main() {
-  const { readdirSync, statSync } = await import("node:fs")
-
   // Find all JS files in dist/
   const distFiles = readdirSync("dist").filter((f) => f.endsWith(".js") || f.endsWith(".cjs"))
 

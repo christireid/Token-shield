@@ -5,6 +5,33 @@
 import { describe, it, expect } from "vitest"
 import * as tokenShield from "../index"
 
+// Compile-time check: these type imports must resolve.
+// If any are missing, TypeScript will fail to compile this test.
+import type {
+  ShieldOptions,
+  ShieldStats,
+  Message,
+  ProcessResult,
+  CostEstimate,
+  CompressionResult,
+  CostTrackerStats,
+  CacheOptions,
+  CompressionOptions,
+} from "../index"
+
+// Prevent unused variable warnings
+const _typeCheck: {
+  opts?: ShieldOptions
+  stats?: ShieldStats
+  msg?: Message
+  result?: ProcessResult
+  cost?: CostEstimate
+  compression?: CompressionResult
+  trackerStats?: CostTrackerStats
+  cacheOpts?: CacheOptions
+  compOpts?: CompressionOptions
+} = {}
+
 const ALLOWED_EXPORTS = [
   "shield",
   "createShield",
