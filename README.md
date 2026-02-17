@@ -83,18 +83,18 @@ const middleware = shield()
 ### OpenAI SDK
 
 ```typescript
-import { tokenShieldMiddleware, createOpenAIAdapter } from "@tokenshield/ai-sdk"
+import { shield, createOpenAIAdapter } from "@tokenshield/ai-sdk"
 
-const mw = tokenShieldMiddleware()
+const mw = shield()
 const chat = createOpenAIAdapter(mw, (p) => openai.chat.completions.create(p))
 ```
 
 ### Anthropic SDK
 
 ```typescript
-import { tokenShieldMiddleware, createAnthropicAdapter } from "@tokenshield/ai-sdk"
+import { shield, createAnthropicAdapter } from "@tokenshield/ai-sdk"
 
-const mw = tokenShieldMiddleware()
+const mw = shield()
 const chat = createAnthropicAdapter(mw, (p) => anthropic.messages.create(p))
 ```
 

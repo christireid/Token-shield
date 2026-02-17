@@ -151,6 +151,7 @@ export {
   countToolTokens,
   countImageTokens,
   predictOutputTokens,
+  optimizeToolDefinitions,
   type ToolDefinition,
   type ToolTokenResult,
 } from "./tool-token-counter"

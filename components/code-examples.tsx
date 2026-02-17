@@ -8,16 +8,14 @@ const EXAMPLES = [
     label: "AI SDK Middleware",
     description: "Drop-in middleware for Vercel AI SDK. Every optimization runs automatically.",
     code: `import { wrapLanguageModel, streamText } from 'ai'
-import { tokenShieldMiddleware } from 'tokenshield'
+import { shield } from '@tokenshield/ai-sdk'
 
 const shielded = wrapLanguageModel({
   model: openai('gpt-4o'),
-  middleware: tokenShieldMiddleware({
-    context:  { maxInputTokens: 4000 },
-    cache:    { enabled: true, similarityThreshold: 0.85 },
-    guard:    { debounceMs: 300, maxCostPerHour: 5.0 },
-    prefix:   { provider: 'auto' },
-    ledger:   { persist: true },
+  middleware: shield({
+    cache: true,
+    compression: true,
+    monthlyBudget: 500,
   }),
 })
 
@@ -28,7 +26,7 @@ const result = await streamText({ model: shielded, messages })`,
     id: "counter",
     label: "Token Counter",
     description: "Exact BPE token counts matching OpenAI's tiktoken. Works in the browser.",
-    code: `import { countExactTokens, countChatTokens, fitsInBudget } from 'tokenshield'
+    code: `import { countExactTokens, countChatTokens, fitsInBudget } from '@tokenshield/ai-sdk/advanced'
 
 // Count content tokens
 const { tokens, characters, ratio } = countExactTokens(userInput)
@@ -49,7 +47,7 @@ const { fits } = fitsInBudget(longDocument, 2000)`,
     label: "Context Manager",
     description:
       "Trim conversation history to fit a token budget. System messages always preserved.",
-    code: `import { fitToBudget, smartFit } from 'tokenshield'
+    code: `import { fitToBudget, smartFit } from '@tokenshield/ai-sdk/advanced'
 
 // Basic: keep newest messages within budget
 const result = fitToBudget(messages, {
@@ -70,7 +68,7 @@ sendToAPI(smart.messages)`,
     id: "cache",
     label: "Response Cache",
     description: "Exact + fuzzy matching. Rephrased prompts hit cache. Zero API calls.",
-    code: `import { ResponseCache, textSimilarity } from 'tokenshield'
+    code: `import { ResponseCache, textSimilarity } from '@tokenshield/ai-sdk/advanced'
 
 const cache = new ResponseCache({
   maxEntries: 500,
@@ -96,7 +94,7 @@ textSimilarity("What is a closure?", "what is a closure in js?") // 0.89`,
     id: "router",
     label: "Model Router",
     description: "Route simple queries to cheap models. Send complex ones to flagship.",
-    code: `import { analyzeComplexity, routeToModel } from 'tokenshield'
+    code: `import { analyzeComplexity, routeToModel } from '@tokenshield/ai-sdk/advanced'
 
 // Analyze prompt complexity (deterministic, no AI needed)
 const score = analyzeComplexity("What is the capital of France?")
@@ -116,7 +114,7 @@ console.log(\`Use \${routing.selectedModel.name}, save $\${routing.savingsVsDefa
     label: "Tool Token Counter",
     description:
       "Measure the hidden tokens that tool/function definitions inject into every request.",
-    code: `import { countToolTokens, optimizeToolDefinitions } from 'tokenshield'
+    code: `import { countToolTokens, optimizeToolDefinitions } from '@tokenshield/ai-sdk/advanced'
 
 const tools = [
   { type: 'function', function: { name: 'search_web', description: '...', parameters: { ... } } },
@@ -137,7 +135,7 @@ console.log(\`Saved \${optimized.savedTokens} tokens per request\`)`,
     id: "vision",
     label: "Image Token Counter",
     description: "Calculate exact vision model token costs. Recommend optimal resize dimensions.",
-    code: `import { countImageTokens } from 'tokenshield'
+    code: `import { countImageTokens } from '@tokenshield/ai-sdk/advanced'
 
 // OpenAI's tile formula: 85 base + 170 per 512x512 tile
 const photo = countImageTokens(4000, 3000, 'high')
@@ -158,7 +156,7 @@ const screen = countImageTokens(1920, 1080, 'high')
     id: "stream",
     label: "Stream Tracker",
     description: "Count output tokens in real-time. Even on abort, usage data is never lost.",
-    code: `import { StreamTokenTracker } from 'tokenshield'
+    code: `import { StreamTokenTracker } from '@tokenshield/ai-sdk/advanced'
 
 const tracker = new StreamTokenTracker({
   modelId: 'gpt-4o-mini',
@@ -185,7 +183,7 @@ console.log(\`\${usage.outputTokens} tokens, $\${usage.estimatedCost}\`)`,
     id: "breaker",
     label: "Circuit Breaker",
     description: "Hard spending limits. Prevent the $847 to $34,127 runaway cost scenario.",
-    code: `import { CostCircuitBreaker } from 'tokenshield'
+    code: `import { CostCircuitBreaker } from '@tokenshield/ai-sdk/advanced'
 
 const breaker = new CostCircuitBreaker({
   limits: {
@@ -215,7 +213,7 @@ breaker.recordSpend(0.015, 'gpt-4o')`,
     label: "Output Predictor",
     description:
       "Predict output length by task type. Set smart max_tokens instead of blanket 4096.",
-    code: `import { predictOutputTokens } from 'tokenshield'
+    code: `import { predictOutputTokens } from '@tokenshield/ai-sdk/advanced'
 
 // Detects task type and predicts output length
 const qa = predictOutputTokens("What is the capital of France?")
@@ -242,7 +240,7 @@ const result = await openai.chat.completions.create({
   useResponseCache,
   useRequestGuard,
   useModelRouter
-} from 'tokenshield/react'
+} from '@tokenshield/ai-sdk/react'
 
 // Wrap your app
 <TokenShieldProvider defaultModelId="gpt-4o-mini">

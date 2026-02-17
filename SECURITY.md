@@ -93,19 +93,19 @@ The correct architecture places TokenShield on the client as an optimization and
 ```typescript
 // --- Client (React component using TokenShield) ---
 
-import { useTokenShield, useUserBudget } from "@tokenshield/react"
+import { useSavings, useBudgetAlert } from "@tokenshield/ai-sdk/react"
+import { estimateCost } from "@tokenshield/ai-sdk"
 
 function ChatInput({ userId }: { userId: string }) {
-  const shield = useTokenShield()
-  const budget = useUserBudget(userId)
+  const savings = useSavings()
+  const budget = useBudgetAlert({ warningThreshold: 0.8 })
 
   async function handleSend(prompt: string) {
     // 1. Client-side estimation and budget check (UX layer)
-    const estimate = shield.estimateCost(prompt, "gpt-4o")
+    const estimate = estimateCost(prompt, "gpt-4o")
 
-    if (budget.remaining !== null && estimate.totalCost > budget.remaining) {
-      showWarning("This request may exceed your remaining budget.")
-      return // Block on the client as a courtesy
+    if (budget.isWarning) {
+      showWarning("You are approaching your spending limit.")
     }
 
     // 2. Send to YOUR backend — never directly to the LLM provider
@@ -124,13 +124,7 @@ function ChatInput({ userId }: { userId: string }) {
     const data = await response.json()
 
     // 4. Record actual usage for dashboard/reporting
-    shield.recordUsage({
-      userId,
-      model: data.model,
-      inputTokens: data.usage.prompt_tokens,
-      outputTokens: data.usage.completion_tokens,
-      cost: data.usage.total_cost,
-    })
+    savings.totalSaved // Access current savings from the hook
   }
 }
 ```

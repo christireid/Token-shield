@@ -12,7 +12,7 @@
  * - Module attribution (which module saved how much and how)
  *
  * Free tier: session-only (Map in memory). Resets on page refresh.
- * Pro tier: persists to IndexedDB via idb-keyval, export to JSON.
+ * Team tier: persists to IndexedDB via idb-keyval, export to JSON.
  *
  * Concurrency Safety:
  * - Uses BroadcastChannel to sync ledger entries across multiple tabs/windows.

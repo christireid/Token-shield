@@ -44,7 +44,7 @@ npx vitest
 npx vitest run --coverage
 ```
 
-All 822 tests must pass before submitting a PR.
+All tests must pass before submitting a PR.
 
 ### Code Style
 
@@ -58,7 +58,7 @@ All 822 tests must pass before submitting a PR.
 
 1. Create `lib/tokenshield/your-module.ts` with the implementation
 2. Create `lib/tokenshield/your-module.test.ts` with tests
-3. Export from `lib/tokenshield/index.ts`
+3. Export from `lib/tokenshield/advanced.ts` (only add to `index.ts` if it's a primary API function — the main barrel is intentionally minimal)
 4. Add to the integration test's expected exports list in `integration.test.ts`
 5. Update `CHANGELOG.md`
 
@@ -101,7 +101,7 @@ Open an issue with:
 
 ## Architecture Overview
 
-TokenShield is a 13-module middleware pipeline:
+TokenShield is a multi-module middleware pipeline:
 
 ```
 Request → Guard → Cache → Context → Router → Prefix → [API Call] → Ledger
