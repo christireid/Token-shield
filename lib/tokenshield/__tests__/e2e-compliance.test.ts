@@ -130,14 +130,14 @@ describe("E2E License + Audit Compliance", () => {
     mw.dispose()
   })
 
-  it("license downgrade restricts module access", async () => {
-    // Activate pro license
-    const key = generateTestKeySync("pro", "Pro User")
+  it("license restricts module access by tier", async () => {
+    // Activate team license
+    const key = generateTestKeySync("team", "Team User")
     await activateLicense(key)
 
     expect(isModulePermitted("response-cache")).toBe(true) // community
     expect(isModulePermitted("circuit-breaker")).toBe(true) // community
-    expect(isModulePermitted("user-budget-manager")).toBe(false) // team
+    expect(isModulePermitted("user-budget-manager")).toBe(true) // team
     expect(isModulePermitted("audit-log")).toBe(false) // enterprise
   })
 
@@ -153,9 +153,9 @@ describe("E2E License + Audit Compliance", () => {
     setLicenseSecret(SECRET)
 
     // First activate a valid key to exit dev mode
-    const validKey = await generateTestKey("pro", "Legit User", 365, SECRET)
+    const validKey = await generateTestKey("team", "Legit User", 365, SECRET)
     await activateLicense(validKey)
-    expect(getLicenseInfo().tier).toBe("pro")
+    expect(getLicenseInfo().tier).toBe("team")
 
     // Now an attacker creates a key signed with a different secret
     const forgedKey = generateTestKeySync("enterprise", "Attacker", 365, "hacker-secret")

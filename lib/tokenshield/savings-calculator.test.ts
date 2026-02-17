@@ -125,9 +125,9 @@ describe("estimateSavings", () => {
     expect(result.savingsPercent).toBeCloseTo(expectedPercent, 0)
   })
 
-  it("recommends pro tier for spend under $5000", () => {
+  it("recommends starter tier for spend under $5000", () => {
     const result = estimateSavings({ monthlySpend: 1000 })
-    expect(result.recommendedTier).toBe("pro")
+    expect(result.recommendedTier).toBe("starter")
     expect(result.tokenShieldCost).toBe(29)
   })
 

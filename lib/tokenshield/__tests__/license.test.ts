@@ -67,17 +67,7 @@ describe("license", () => {
       expect(mods).not.toContain("audit-log")
     })
 
-    it("pro tier includes community + pro modules", () => {
-      const mods = getModulesForTier("pro")
-      expect(mods).toContain("token-counter")
-      expect(mods).toContain("response-cache")
-      expect(mods).toContain("model-router")
-      expect(mods).toContain("circuit-breaker")
-      expect(mods).not.toContain("user-budget-manager")
-      expect(mods).not.toContain("audit-log")
-    })
-
-    it("team tier includes community + pro + team modules", () => {
+    it("team tier includes community + team modules", () => {
       const mods = getModulesForTier("team")
       expect(mods).toContain("token-counter")
       expect(mods).toContain("response-cache")
@@ -127,17 +117,17 @@ describe("license", () => {
 
   describe("generateTestKeySync", () => {
     it("generates a valid base64 key", () => {
-      const key = generateTestKeySync("pro", "test-user")
+      const key = generateTestKeySync("team", "test-user")
       expect(() => atob(key)).not.toThrow()
       const decoded = JSON.parse(atob(key))
-      expect(decoded.tier || decoded.payload?.tier).toBe("pro")
+      expect(decoded.tier || decoded.payload?.tier).toBe("team")
     })
 
     it("generates unsigned key when no secret is set", () => {
-      const key = generateTestKeySync("pro", "test-user")
+      const key = generateTestKeySync("team", "test-user")
       const decoded = JSON.parse(atob(key))
       // Without a secret, it generates legacy unsigned format
-      expect(decoded.tier).toBe("pro")
+      expect(decoded.tier).toBe("team")
       expect(decoded.holder).toBe("test-user")
       expect(decoded.expiresAt).toBeGreaterThan(Date.now())
     })
@@ -156,7 +146,7 @@ describe("license", () => {
     })
 
     it("async keygen signature has algorithm prefix", async () => {
-      const key = await generateTestKey("pro", "holder", 365, "secret")
+      const key = await generateTestKey("team", "holder", 365, "secret")
       const decoded = JSON.parse(atob(key))
       // Should have either sha256: or djb2: prefix
       expect(decoded.signature).toMatch(/^(sha256:|djb2:)/)
@@ -164,14 +154,14 @@ describe("license", () => {
 
     it("uses module-level secret when set", () => {
       setLicenseSecret("module-secret")
-      const key = generateTestKeySync("pro", "holder")
+      const key = generateTestKeySync("team", "holder")
       const decoded = JSON.parse(atob(key))
       expect(decoded.payload).toBeDefined()
       expect(decoded.signature).toBeDefined()
     })
 
     it("respects expiresInDays parameter", () => {
-      const key = generateTestKeySync("pro", "test", 30)
+      const key = generateTestKeySync("team", "test", 30)
       const decoded = JSON.parse(atob(key))
       const expiresAt = decoded.expiresAt ?? decoded.payload?.expiresAt
       const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000
@@ -189,11 +179,11 @@ describe("license", () => {
     })
 
     it("generates signed key when secret is provided", async () => {
-      const key = await generateTestKey("pro", "holder", 365, "async-secret")
+      const key = await generateTestKey("team", "holder", 365, "async-secret")
       const decoded = JSON.parse(atob(key))
       expect(decoded.payload).toBeDefined()
       expect(decoded.signature).toBeDefined()
-      expect(decoded.payload.tier).toBe("pro")
+      expect(decoded.payload.tier).toBe("team")
     })
 
     it("generates unsigned key without secret", async () => {
@@ -205,9 +195,9 @@ describe("license", () => {
 
   describe("activateLicense", () => {
     it("activates a valid unsigned key", async () => {
-      const key = generateTestKeySync("pro", "test-holder")
+      const key = generateTestKeySync("team", "test-holder")
       const info = await activateLicense(key)
-      expect(info.tier).toBe("pro")
+      expect(info.tier).toBe("team")
       expect(info.holder).toBe("test-holder")
       expect(info.valid).toBe(true)
     })
@@ -228,7 +218,7 @@ describe("license", () => {
     })
 
     it("rejects expired keys", async () => {
-      const key = generateTestKeySync("pro", "test", -1) // expired yesterday
+      const key = generateTestKeySync("team", "test", -1) // expired yesterday
       const info = await activateLicense(key)
       expect(info.valid).toBe(false)
       expect(info.tier).toBe("community")
@@ -251,28 +241,24 @@ describe("license", () => {
 
       it("accepts correctly signed key (async keygen)", async () => {
         setLicenseSecret(SECRET)
-        // Use async generateTestKey to match the async HMAC in activateLicense
-        const key = await generateTestKey("pro", "signed-holder", 365, SECRET)
+        const key = await generateTestKey("team", "signed-holder", 365, SECRET)
         const info = await activateLicense(key)
-        expect(info.tier).toBe("pro")
+        expect(info.tier).toBe("team")
         expect(info.valid).toBe(true)
         expect(info.holder).toBe("signed-holder")
       })
 
       it("accepts sync-generated key with secret (cross-algorithm compat)", async () => {
-        // generateTestKeySync uses djb2, activateLicense detects the "djb2:" prefix
-        // and verifies using the same algorithm — ensuring cross-env compatibility.
         setLicenseSecret(SECRET)
-        const key = generateTestKeySync("pro", "signed-holder", 365, SECRET)
+        const key = generateTestKeySync("team", "signed-holder", 365, SECRET)
         const info = await activateLicense(key)
-        expect(info.tier).toBe("pro")
+        expect(info.tier).toBe("team")
         expect(info.valid).toBe(true)
         expect(info.holder).toBe("signed-holder")
       })
 
       it("rejects unsigned key when secret is configured", async () => {
         setLicenseSecret(SECRET)
-        // Generate unsigned key (no secret param)
         resetLicense()
         const unsignedKey = btoa(
           JSON.stringify({
@@ -281,7 +267,7 @@ describe("license", () => {
             holder: "attacker",
           }),
         )
-        setLicenseSecret(SECRET) // Re-set secret after reset
+        setLicenseSecret(SECRET)
         const info = await activateLicense(unsignedKey)
         expect(info.valid).toBe(false)
         expect(info.tier).toBe("community")
@@ -289,7 +275,6 @@ describe("license", () => {
 
       it("rejects key signed with wrong secret", async () => {
         setLicenseSecret(SECRET)
-        // Generate with different secret
         const key = generateTestKeySync("enterprise", "forger", 365, "wrong-secret")
         const info = await activateLicense(key)
         expect(info.valid).toBe(false)
@@ -300,7 +285,6 @@ describe("license", () => {
         setLicenseSecret(SECRET)
         const key = generateTestKeySync("community", "legit", 365, SECRET)
         const decoded = JSON.parse(atob(key))
-        // Tamper: change tier from community to enterprise
         decoded.payload.tier = "enterprise"
         const tampered = btoa(JSON.stringify(decoded))
         const info = await activateLicense(tampered)
@@ -310,11 +294,11 @@ describe("license", () => {
     })
 
     it("disables dev mode after activation", async () => {
-      const key = generateTestKeySync("pro", "holder")
+      const key = generateTestKeySync("team", "holder")
       await activateLicense(key)
-      // After activation, isModulePermitted should check tier
-      expect(isModulePermitted("response-cache")).toBe(true) // community module, pro tier = OK
-      expect(isModulePermitted("user-budget-manager")).toBe(false) // team module, pro tier = blocked
+      expect(isModulePermitted("response-cache")).toBe(true) // community module
+      expect(isModulePermitted("user-budget-manager")).toBe(true) // team module, team tier = OK
+      expect(isModulePermitted("audit-log")).toBe(false) // enterprise module, team tier = blocked
     })
   })
 
@@ -329,9 +313,9 @@ describe("license", () => {
     })
 
     it("re-enables dev mode", async () => {
-      const key = generateTestKeySync("pro", "holder")
+      const key = generateTestKeySync("team", "holder")
       await activateLicense(key)
-      expect(isModulePermitted("audit-log")).toBe(false) // pro can't use enterprise
+      expect(isModulePermitted("audit-log")).toBe(false) // team can't use enterprise
       resetLicense()
       expect(isModulePermitted("audit-log")).toBe(true) // dev mode: all unlocked
     })
@@ -339,10 +323,9 @@ describe("license", () => {
     it("clears signing secret", async () => {
       setLicenseSecret("my-secret")
       resetLicense()
-      // After reset, unsigned keys should work again (no secret = no verification)
-      const key = generateTestKeySync("pro")
+      const key = generateTestKeySync("team")
       const info = await activateLicense(key)
-      expect(info.tier).toBe("pro")
+      expect(info.tier).toBe("team")
       expect(info.valid).toBe(true)
     })
   })
@@ -350,10 +333,9 @@ describe("license", () => {
   describe("setLicenseSecret", () => {
     it("enables signature verification", async () => {
       setLicenseSecret("secret-123")
-      // Unsigned key should be rejected
       const unsignedKey = btoa(
         JSON.stringify({
-          tier: "pro",
+          tier: "team",
           expiresAt: Date.now() + 86400000,
           holder: "test",
         }),
@@ -364,19 +346,10 @@ describe("license", () => {
   })
 
   describe("tier-based permission enforcement", () => {
-    it("pro license allows pro modules but not team/enterprise", async () => {
-      const key = generateTestKeySync("pro", "holder")
-      await activateLicense(key)
-      expect(isModulePermitted("token-counter")).toBe(true) // community
-      expect(isModulePermitted("response-cache")).toBe(true) // community
-      expect(isModulePermitted("circuit-breaker")).toBe(true) // community
-      expect(isModulePermitted("user-budget-manager")).toBe(false) // team
-      expect(isModulePermitted("audit-log")).toBe(false) // enterprise
-    })
-
     it("team license allows team modules but not enterprise", async () => {
       const key = generateTestKeySync("team", "holder")
       await activateLicense(key)
+      expect(isModulePermitted("token-counter")).toBe(true) // community
       expect(isModulePermitted("response-cache")).toBe(true) // community
       expect(isModulePermitted("circuit-breaker")).toBe(true) // community
       expect(isModulePermitted("user-budget-manager")).toBe(true) // team
@@ -395,28 +368,23 @@ describe("license", () => {
     it("community license allows all core optimization modules", async () => {
       const key = generateTestKeySync("community", "holder")
       await activateLicense(key)
-      expect(isModulePermitted("token-counter")).toBe(true) // community
-      expect(isModulePermitted("response-cache")).toBe(true) // community
-      expect(isModulePermitted("circuit-breaker")).toBe(true) // community
+      expect(isModulePermitted("token-counter")).toBe(true)
+      expect(isModulePermitted("response-cache")).toBe(true)
+      expect(isModulePermitted("circuit-breaker")).toBe(true)
       expect(isModulePermitted("user-budget-manager")).toBe(false) // team
       expect(isModulePermitted("audit-log")).toBe(false) // enterprise
     })
 
     it("invalid license falls back to community with invalid flag", async () => {
-      // A garbage key triggers the catch block, which sets valid=false but
-      // doesn't disable dev mode (devMode remains true from reset).
-      // To test non-dev-mode behavior with invalid license, first activate
-      // a valid key (which sets devMode=false), then activate garbage.
-      const validKey = generateTestKeySync("pro", "holder")
-      await activateLicense(validKey) // devMode = false now
+      const validKey = generateTestKeySync("team", "holder")
+      await activateLicense(validKey)
       await activateLicense("garbage-key")
       const info = getLicenseInfo()
       expect(info.valid).toBe(false)
       expect(info.tier).toBe("community")
-      // With devMode=false and valid=false, only community modules allowed
-      expect(isModulePermitted("token-counter")).toBe(true) // community
-      expect(isModulePermitted("response-cache")).toBe(true) // community
-      expect(isModulePermitted("user-budget-manager")).toBe(false) // team
+      expect(isModulePermitted("token-counter")).toBe(true)
+      expect(isModulePermitted("response-cache")).toBe(true)
+      expect(isModulePermitted("user-budget-manager")).toBe(false)
     })
   })
 
@@ -445,15 +413,12 @@ describe("license", () => {
     })
 
     it("rejects ECDSA key signed with different private key", async () => {
-      // Generate two key pairs
       const pair1 = await generateLicenseKeyPair()
       const pair2 = await generateLicenseKeyPair()
 
-      // Sign with pair1's private key
       await setLicensePrivateKey(pair1.privateKey)
       const key = await generateTestKey("enterprise", "Forger", 365)
 
-      // Verify with pair2's public key — should fail
       resetLicense()
       await setLicensePublicKey(pair2.publicKey)
       const info = await activateLicense(key)
@@ -467,13 +432,12 @@ describe("license", () => {
       await setLicensePublicKey(pair.publicKey)
       setLicenseSecret("hmac-secret")
 
-      const key = await generateTestKey("pro", "Priority Test", 365)
+      const key = await generateTestKey("team", "Priority Test", 365)
       const decoded = JSON.parse(atob(key))
-      // ECDSA should be preferred for signing
       expect(decoded.signature).toMatch(/^ecdsa:/)
 
       const info = await activateLicense(key)
-      expect(info.tier).toBe("pro")
+      expect(info.tier).toBe("team")
       expect(info.valid).toBe(true)
     })
 
@@ -484,7 +448,6 @@ describe("license", () => {
 
       const key = await generateTestKey("enterprise", "holder", 365)
       const decoded = JSON.parse(atob(key))
-      // Corrupt the signature by flipping characters
       decoded.signature = decoded.signature.slice(0, -4) + "XXXX"
       const corrupted = btoa(JSON.stringify(decoded))
 
@@ -518,13 +481,10 @@ describe("license", () => {
       const pair = await generateLicenseKeyPair()
       await configureLicenseKeys({ publicKey: pair.publicKey })
 
-      // Without private key, generateTestKey falls back to HMAC/unsigned
-      // but setLicensePublicKey is set for verification
       const unsigned = btoa(
-        JSON.stringify({ tier: "pro", expiresAt: Date.now() + 86400000, holder: "test" }),
+        JSON.stringify({ tier: "team", expiresAt: Date.now() + 86400000, holder: "test" }),
       )
       const info = await activateLicense(unsigned)
-      // Should fail because public key is set but key has no signature
       expect(info.valid).toBe(false)
     })
   })
@@ -532,7 +492,7 @@ describe("license", () => {
   describe("generateTestKey signing option", () => {
     it("explicit ecdsa signing throws without private key", async () => {
       await expect(
-        generateTestKey("pro", "test", 365, undefined, { signing: "ecdsa" }),
+        generateTestKey("team", "test", 365, undefined, { signing: "ecdsa" }),
       ).rejects.toThrow("ECDSA signing requested")
     })
 
@@ -541,7 +501,7 @@ describe("license", () => {
       await setLicensePrivateKey(pair.privateKey)
       setLicenseSecret("hmac-test")
 
-      const key = await generateTestKey("pro", "test", 365, undefined, { signing: "hmac" })
+      const key = await generateTestKey("team", "test", 365, undefined, { signing: "hmac" })
       const decoded = JSON.parse(atob(key))
       expect(decoded.signature).toMatch(/^sha256:/)
     })

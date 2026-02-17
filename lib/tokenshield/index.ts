@@ -1,25 +1,42 @@
 /**
  * TokenShield SDK
  *
- * Client-side TypeScript middleware for reducing LLM API costs.
- * Provides caching, model routing, budget enforcement, and cost tracking
- * as drop-in middleware for Vercel AI SDK, OpenAI, and Anthropic.
+ * Drop-in middleware that reduces AI API costs without changing your prompts.
+ * Works with Vercel AI SDK, OpenAI, and Anthropic.
  *
- * Core Modules:
- *  1. token-counter      - Exact BPE token counting
- *  2. cost-estimator     - Real pricing from OpenAI, Anthropic, Google
- *  3. context-manager    - Token-budget-aware conversation trimming
- *  4. response-cache     - Client-side exact + fuzzy response caching
- *  5. model-router       - Complexity-based routing to cheapest capable model
- *  6. request-guard      - Debounce, dedup, rate limit, cost gate
- *  7. prefix-optimizer   - Message ordering for provider prompt cache hits
- *  8. cost-ledger        - Real usage tracking with per-module attribution
- *  9. circuit-breaker    - Spending limits with hard-stop protection
- * 10. stream-tracker     - Real-time output token counting during streaming
+ * @example Quick start (zero-config)
+ * ```ts
+ * import { wrapLanguageModel } from "ai"
+ * import { shield } from "@tokenshield/ai-sdk"
+ *
+ * const model = wrapLanguageModel({
+ *   model: openai("gpt-4o"),
+ *   middleware: shield(),
+ * })
+ * ```
+ *
+ * @example With budget enforcement
+ * ```ts
+ * const middleware = shield({
+ *   cache: true,
+ *   compression: true,
+ *   monthlyBudget: 500,
+ *   onUsage: (e) => console.log(`$${e.cost.toFixed(4)} spent`),
+ * })
+ * ```
+ *
+ * For advanced/standalone module usage, import from "@tokenshield/ai-sdk/advanced".
+ * For React hooks, import from "@tokenshield/ai-sdk/react".
  */
 
 // -------------------------------------------------------
-// Primary API — the middleware entry point
+// Primary API — the recommended entry point
+// -------------------------------------------------------
+
+export { shield, getStats, type ShieldConfig, type ShieldStats } from "./shield"
+
+// -------------------------------------------------------
+// Full-control API — for users who need explicit configuration
 // -------------------------------------------------------
 
 export {
@@ -29,218 +46,16 @@ export {
   type TokenShieldMiddlewareConfig,
 } from "./middleware"
 
-export { createTokenShield } from "./create-token-shield"
+export { createTokenShield, type CreateTokenShieldOptions } from "./create-token-shield"
 
 // -------------------------------------------------------
-// Core Modules
+// Framework Adapters — for non-Vercel AI SDK usage
 // -------------------------------------------------------
 
-// Token Counter
-export {
-  countExactTokens,
-  countChatTokens,
-  countFast,
-  fitsInBudget,
-  countModelTokens,
-  type ChatMessage,
-  type TokenCount,
-  type ChatTokenCount,
-} from "./token-counter"
-
-// Cost Estimator
-export {
-  estimateCost,
-  compareCosts,
-  calculateSavings,
-  cheapestModelForBudget,
-  MODEL_PRICING,
-  type ModelPricing,
-  type CostEstimate,
-  type KnownModelId,
-} from "./cost-estimator"
-
-// Context Manager
-export {
-  fitToBudget,
-  slidingWindow,
-  priorityFit,
-  smartFit,
-  type Message,
-  type ContextBudget,
-  type ContextResult,
-} from "./context-manager"
-
-// Response Cache
-export {
-  ResponseCache,
-  normalizeText,
-  textSimilarity,
-  classifyContentType,
-  type ContentType,
-  type CacheEntry,
-  type CacheConfig,
-} from "./response-cache"
-
-// Model Router
-export {
-  analyzeComplexity,
-  routeToModel,
-  type ComplexityScore,
-  type RoutingDecision,
-} from "./model-router"
-
-// Request Guard
-export { RequestGuard, type GuardConfig, type GuardResult } from "./request-guard"
-
-// Prefix Optimizer
-export {
-  optimizePrefix,
-  detectProvider,
-  type PrefixOptimizerConfig,
-  type OptimizedResult,
-  type Provider,
-} from "./prefix-optimizer"
-
-// Cost Ledger
-export { CostLedger, type LedgerEntry, type LedgerSummary, type ModuleSavings } from "./cost-ledger"
-
-// Circuit Breaker
-export {
-  CostCircuitBreaker,
-  type BreakerLimits,
-  type BreakerConfig,
-  type BreakerStatus,
-} from "./circuit-breaker"
-
-// Stream Tracker
-export { StreamTokenTracker, type StreamUsage } from "./stream-tracker"
-
-// User Budget Manager
-export {
-  UserBudgetManager,
-  type UserBudgetConfig,
-  type UserBudgetLimits,
-  type UserBudgetStatus,
-} from "./user-budget-manager"
+export { createOpenAIAdapter, createAnthropicAdapter } from "./adapters"
 
 // -------------------------------------------------------
-// Framework Adapters
+// Cost Utility
 // -------------------------------------------------------
 
-export {
-  createGenericAdapter,
-  createOpenAIAdapter,
-  createAnthropicAdapter,
-  createStreamAdapter,
-} from "./adapters"
-
-// -------------------------------------------------------
-// React Integration
-// -------------------------------------------------------
-
-export {
-  TokenShieldProvider,
-  useSavings,
-  useTokenCount,
-  useBudgetAlert,
-  useTokenEstimate,
-  useComplexityAnalysis,
-  useContextManager,
-  useResponseCache,
-  useRequestGuard,
-  useModelRouter,
-  useCostLedger,
-  useFeatureCost,
-  useUserBudget,
-  useEventLog,
-  useSessionSavings,
-  useShieldedCall,
-  type TokenShieldProviderProps,
-} from "./react"
-
-// Dashboard Component
-export { TokenShieldDashboard, type TokenShieldDashboardProps } from "./dashboard"
-
-// -------------------------------------------------------
-// Error Handling
-// -------------------------------------------------------
-
-export {
-  TokenShieldError,
-  TokenShieldBlockedError,
-  TokenShieldConfigError,
-  TokenShieldBudgetError,
-  ERROR_CODES,
-  type ErrorCode,
-} from "./errors"
-
-// -------------------------------------------------------
-// Configuration & Events
-// -------------------------------------------------------
-
-export { validateConfig, TokenShieldConfigSchema } from "./config-schemas"
-
-export {
-  shieldEvents,
-  subscribeToEvent,
-  subscribeToAnyEvent,
-  type EventBus,
-  type TokenShieldEvents,
-} from "./event-bus"
-
-// Storage
-export { isPersistent } from "./storage-adapter"
-
-// -------------------------------------------------------
-// License (Open-Core)
-// -------------------------------------------------------
-
-export {
-  activateLicense,
-  getLicenseInfo,
-  isModulePermitted,
-  getModuleTier,
-  resetLicense,
-  type LicenseTier,
-  type LicenseInfo,
-} from "./license"
-
-// -------------------------------------------------------
-// Advanced (re-exported for power users, not primary API)
-// -------------------------------------------------------
-
-// Fuzzy Similarity Engine (Trigram-based matching)
-export {
-  FuzzySimilarityEngine,
-  createFuzzySimilarityEngine,
-  type FuzzySimilarityConfig,
-  type FindResult,
-} from "./fuzzy-similarity"
-
-// Semantic MinHash Cache Index
-export {
-  SemanticMinHashIndex,
-  type MinHashConfig,
-  type MinHashLookupResult,
-} from "./semantic-minhash"
-
-// Prompt Compressor
-export { compressPrompt, compressMessages, type CompressionResult } from "./prompt-compressor"
-
-// Conversation Delta Encoder
-export { encodeDelta, analyzeRedundancy, type DeltaResult } from "./conversation-delta-encoder"
-
-// Anomaly Detector
-export { AnomalyDetector, type AnomalyConfig, type AnomalyEvent } from "./anomaly-detector"
-
-// Tool Token Counter
-export {
-  countToolTokens,
-  countImageTokens,
-  predictOutputTokens,
-  type ToolDefinition,
-  type ToolTokenResult,
-} from "./tool-token-counter"
-
-// Audit Logging (Enterprise)
-export { AuditLog, type AuditEntry, type AuditLogConfig } from "./audit-log"
+export { estimateCost, type CostEstimate } from "./cost-estimator"

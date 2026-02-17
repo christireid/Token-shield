@@ -51,14 +51,12 @@ export interface LicenseActivationProps {
 
 const TIER_LABELS: Record<LicenseTier, string> = {
   community: "Community (Free)",
-  pro: "Pro",
   team: "Team",
   enterprise: "Enterprise",
 }
 
 const TIER_COLORS: Record<LicenseTier, string> = {
   community: "#6b7280",
-  pro: "#3b82f6",
   team: "#8b5cf6",
   enterprise: "#f59e0b",
 }
@@ -99,9 +97,10 @@ export function LicenseActivation({
         setStatus("success")
         onActivated?.(info)
       } else {
-        const msg = info.expiresAt && Date.now() > info.expiresAt
-          ? "License key has expired."
-          : "Invalid license key. Please check your key and try again."
+        const msg =
+          info.expiresAt && Date.now() > info.expiresAt
+            ? "License key has expired."
+            : "Invalid license key. Please check your key and try again."
         setStatus("error")
         setErrorMsg(msg)
         onError?.(msg)
@@ -129,9 +128,7 @@ export function LicenseActivation({
         ...style,
       }}
     >
-      <h3 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 700 }}>
-        License Activation
-      </h3>
+      <h3 style={{ margin: "0 0 16px", fontSize: 16, fontWeight: 700 }}>License Activation</h3>
 
       {/* Current status */}
       <div
@@ -242,7 +239,15 @@ export function LicenseActivation({
 
       {/* Unlocked modules */}
       <div style={{ marginTop: 4 }}>
-        <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+        <div
+          style={{
+            fontSize: 11,
+            color: "#6b7280",
+            marginBottom: 6,
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+          }}
+        >
           Unlocked Modules ({currentModules.length})
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>

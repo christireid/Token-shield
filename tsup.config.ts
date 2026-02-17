@@ -3,6 +3,7 @@ import { defineConfig } from "tsup"
 export default defineConfig({
   entry: {
     index: "lib/tokenshield/index.ts",
+    advanced: "lib/tokenshield/advanced.ts",
     react: "lib/tokenshield/react.tsx",
     license: "lib/tokenshield/license.ts",
     "audit-log": "lib/tokenshield/audit-log.ts",

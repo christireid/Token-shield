@@ -738,119 +738,89 @@ describe("Event bus + Logger + Provider Adapter integration", () => {
 // ====================================================================
 
 describe("All index.ts exports are importable", () => {
-  it("every named export from index.ts is defined", async () => {
+  it("main barrel exports the minimal primary API", async () => {
     const idx = await import("./index")
 
-    // Core modules
-    const coreExports = [
-      // Token Counter
-      "countExactTokens",
-      "countChatTokens",
-      "countFast",
-      "fitsInBudget",
-      "countModelTokens",
-      // Cost Estimator
-      "estimateCost",
-      "compareCosts",
-      "calculateSavings",
-      "cheapestModelForBudget",
-      "MODEL_PRICING",
-      // Context Manager
-      "fitToBudget",
-      "slidingWindow",
-      "priorityFit",
-      "smartFit",
-      // Response Cache
-      "ResponseCache",
-      "normalizeText",
-      "textSimilarity",
-      "classifyContentType",
-      // Model Router
-      "analyzeComplexity",
-      "routeToModel",
-      // Request Guard
-      "RequestGuard",
-      // Prefix Optimizer
-      "optimizePrefix",
-      "detectProvider",
-      // Cost Ledger
-      "CostLedger",
-      // Stream Tracker
-      "StreamTokenTracker",
-      // Circuit Breaker
-      "CostCircuitBreaker",
-      // User Budget Manager
-      "UserBudgetManager",
-      // Anomaly Detector
-      "AnomalyDetector",
-      // Middleware
+    // The main barrel is intentionally minimal (~10 value exports)
+    const expectedExports = [
+      // Primary API
+      "shield",
+      "getStats",
+      // Full-control API
       "tokenShieldMiddleware",
       "getLedger",
       "createTokenShield",
-      // React (exported but may be undefined in non-React env)
-      "TokenShieldProvider",
-      "useSavings",
-      "useTokenCount",
-      "useBudgetAlert",
-      "useTokenEstimate",
-      "useComplexityAnalysis",
-      "useContextManager",
-      "useResponseCache",
-      "useRequestGuard",
-      "useModelRouter",
-      "useCostLedger",
-      "useFeatureCost",
-      "useUserBudget",
-      "useEventLog",
-      "useSessionSavings",
-      "useShieldedCall",
-      // Dashboard
-      "TokenShieldDashboard",
-      // Event Bus
-      "shieldEvents",
-      "subscribeToEvent",
-      "subscribeToAnyEvent",
-      // Errors
-      "TokenShieldError",
-      "TokenShieldBlockedError",
-      "TokenShieldConfigError",
-      "TokenShieldBudgetError",
-      "ERROR_CODES",
-      // Config
-      "validateConfig",
-      "TokenShieldConfigSchema",
       // Framework Adapters
-      "createGenericAdapter",
       "createOpenAIAdapter",
       "createAnthropicAdapter",
+      // Cost utility
+      "estimateCost",
+    ]
+
+    const indexModule = idx as Record<string, unknown>
+    const missing: string[] = []
+    for (const name of expectedExports) {
+      if (indexModule[name] === undefined) {
+        missing.push(name)
+      }
+    }
+
+    expect(missing).toEqual([])
+  })
+
+  it("advanced subpath exports all power-user modules", async () => {
+    const adv = await import("./advanced")
+
+    const expectedAdvancedExports = [
+      // Core modules
+      "countExactTokens",
+      "countChatTokens",
+      "estimateCost",
+      "ResponseCache",
+      "analyzeComplexity",
+      "RequestGuard",
+      "optimizePrefix",
+      "CostLedger",
+      "CostCircuitBreaker",
+      "StreamTokenTracker",
+      "UserBudgetManager",
+      "AnomalyDetector",
+      // Adapters
+      "createGenericAdapter",
       "createStreamAdapter",
       // Advanced
       "FuzzySimilarityEngine",
-      "createFuzzySimilarityEngine",
       "SemanticMinHashIndex",
       "compressPrompt",
-      "compressMessages",
       "encodeDelta",
-      "analyzeRedundancy",
       "countToolTokens",
-      "countImageTokens",
-      "predictOutputTokens",
+      // Events
+      "shieldEvents",
+      "subscribeToEvent",
+      // Errors
+      "TokenShieldError",
+      "TokenShieldBlockedError",
+      "ERROR_CODES",
+      // Config
+      "validateConfig",
       // Storage
       "isPersistent",
       // License
       "activateLicense",
       "getLicenseInfo",
-      "isModulePermitted",
-      "getModuleTier",
       "resetLicense",
-      // Audit Logging
+      // Audit
       "AuditLog",
+      // React
+      "TokenShieldProvider",
+      "useSavings",
+      "TokenShieldDashboard",
     ]
 
-    const indexModule = idx as Record<string, unknown>
+    const advModule = adv as Record<string, unknown>
     const missing: string[] = []
-    for (const name of coreExports) {
-      if (indexModule[name] === undefined) {
+    for (const name of expectedAdvancedExports) {
+      if (advModule[name] === undefined) {
         missing.push(name)
       }
     }

@@ -4,6 +4,42 @@ All notable changes to Token Shield will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-02-17
+
+### BREAKING CHANGES
+
+- **API surface collapsed**: Main barrel (`@tokenshield/ai-sdk`) now exports ~10 items instead of 130+. All standalone modules, React hooks, events, errors, and config have moved to `@tokenshield/ai-sdk/advanced`.
+- **New primary API**: `shield()` replaces `tokenShieldMiddleware()` as the recommended entry point. `tokenShieldMiddleware()` is still available for explicit configuration.
+- **`NeuroElasticEngine` renamed to `FuzzySimilarityEngine`**: Class, config, and all references renamed.
+- **`"holographic"` encoding renamed to `"trigram"`**: The `encodingStrategy` option value changed.
+- **`"pro"` license tier removed**: The license system now has 3 tiers: `community`, `team`, `enterprise`. The `LicenseTier` type no longer includes `"pro"`.
+- **Core modules moved to community tier**: Response Cache, Model Router, Prefix Optimizer, Context Manager, Circuit Breaker, and Stream Tracker are now free (community tier). Previously some required paid tiers.
+
+### Added
+
+- **`shield()` function**: Zero-config entry point with sensible defaults. Enables caching, compression, and cost tracking out of the box.
+- **`getStats()` function**: Returns a snapshot of savings, spend, and cache hit rate from a shield instance.
+- **`@tokenshield/ai-sdk/advanced` subpath**: New barrel export for all power-user modules, standalone utilities, React hooks, events, and config schemas.
+- **GitHub issue templates**: Bug report and feature request templates.
+- **GitHub PR template**: Standardized pull request template.
+- **Serverless cache warnings**: README now explicitly documents that in-memory caching resets on every cold start in serverless environments.
+
+### Changed
+
+- **README rewritten**: Launch-ready structure with one-sentence value prop, 5-line quick start, honest limitations, and serverless caveats.
+- **QUICKSTART.md trimmed**: From 547 lines to 172 lines.
+- **Dependencies cleaned**: Removed unused `openai` dependency (300KB). Cleaned 46 demo app devDependencies down to 20 SDK-essential packages.
+- **tsconfig.json scoped**: Now only includes SDK code (`lib/tokenshield/`), excluding demo app components.
+- **Pricing tiers renamed**: Internal savings calculator uses `starter`/`team`/`enterprise` instead of `pro`/`team`/`enterprise`.
+
+### Removed
+
+- 8 excess documentation files: SPEC.md, INDEX.md, COMMERCIAL-READINESS-REVIEW.md, LAUNCH_ANNOUNCEMENT.md, COMPLETION_REPORT.md, CLEANUP_SUMMARY.md, docs/tokenshield-vs-edgee.md, docs/add-to-existing-sdk.md
+- marketing/edgee-alternative.html
+- .claude/commercial-readiness-state.json
+- ROI projection table from README
+- Demo app scripts from package.json (`next dev`, `next start`)
+
 ## [0.4.1] - 2026-02-15
 
 ### Added

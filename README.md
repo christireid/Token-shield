@@ -1,214 +1,202 @@
-# TokenShield AI SDK
+# Token Shield
 
-Client-side TypeScript middleware that reduces LLM API costs through caching, model routing, and budget enforcement. Works with Vercel AI SDK, OpenAI, and Anthropic.
+Drop-in middleware that reduces AI API costs without changing your prompts.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+Works with Vercel AI SDK, OpenAI, and Anthropic. TypeScript-first.
 
-> **Status: v0.5.0 (pre-release)** — API may change before v1.0. Not yet published to npm.
+> **v0.5.0 (pre-release)** — Not yet published to npm. API may change before v1.0.
+
+---
+
+## Install
+
+```bash
+git clone https://github.com/christireid/Token-shield.git
+cd Token-shield
+npm install && npm run build
+```
+
+---
+
+## Quick Start
+
+```typescript
+import { wrapLanguageModel } from "ai"
+import { openai } from "@ai-sdk/openai"
+import { shield } from "@tokenshield/ai-sdk"
+
+const model = wrapLanguageModel({
+  model: openai("gpt-4o"),
+  middleware: shield(),
+})
+```
+
+That's it. Caching, compression, and cost tracking are on by default.
 
 ---
 
 ## What It Does
 
-TokenShield runs **inside your application** as middleware — not as a proxy or gateway. It intercepts LLM calls and applies cost optimizations before they reach the provider.
+Token Shield reduces costs using three safe techniques:
 
-| Module               | What It Does                                                                                      | Typical Impact                                                  |
-| :------------------- | :------------------------------------------------------------------------------------------------ | :-------------------------------------------------------------- |
-| **Response Cache**   | Caches responses by prompt similarity. Identical or near-identical prompts skip the API entirely. | High for repetitive workloads, near-zero for unique prompts     |
-| **Model Router**     | Routes simple prompts to cheaper models based on complexity scoring.                              | Depends on prompt mix — helps most when many prompts are simple |
-| **Prefix Optimizer** | Reorders messages to maximize provider-side prompt cache hits (OpenAI, Anthropic).                | Varies by provider and conversation structure                   |
-| **Context Manager**  | Trims conversation history to fit token budgets.                                                  | Prevents over-budget calls on long conversations                |
-| **Request Guard**    | Debounces, deduplicates, and rate-limits requests.                                                | Prevents accidental duplicate API calls                         |
-| **Cost Ledger**      | Tracks every dollar spent vs. saved with per-module attribution.                                  | Visibility (no direct savings)                                  |
-| **Circuit Breaker**  | Hard spending limits (per-hour, per-day, per-month).                                              | Bill shock prevention                                           |
+- **Semantic caching** — near-identical prompts return cached responses
+- **Prompt compression** — removes redundancy from conversations
+- **Cost tracking** — real-time spend and savings attribution
 
-**Honest expectations:** Actual savings depend entirely on your workload. Cache-heavy applications (customer support, FAQ bots) may see 20-40% savings. Applications with mostly unique prompts (creative writing, code generation) will see minimal cache benefit. Model routing helps only if a significant portion of your prompts are simple enough for cheaper models.
-
-We don't publish ROI projections because they're impossible to predict without knowing your specific usage patterns. Install it, enable the cost ledger, and measure your own savings.
-
----
-
-## 3-Line Integration
-
-### With Vercel AI SDK
-
-```typescript
-import { openai } from "@ai-sdk/openai"
-import { wrapLanguageModel } from "ai"
-import { tokenShieldMiddleware } from "@tokenshield/ai-sdk"
-
-const model = wrapLanguageModel({
-  model: openai("gpt-4o"),
-  middleware: tokenShieldMiddleware(),
-})
-```
-
-### With OpenAI SDK
-
-```typescript
-import OpenAI from "openai"
-import { tokenShieldMiddleware, createOpenAIAdapter } from "@tokenshield/ai-sdk"
-
-const shield = tokenShieldMiddleware()
-const client = createOpenAIAdapter(shield, (p) => new OpenAI().chat.completions.create(p as any))
-```
-
-### With Anthropic SDK
-
-```typescript
-import Anthropic from "@anthropic-ai/sdk"
-import { tokenShieldMiddleware, createAnthropicAdapter } from "@tokenshield/ai-sdk"
-
-const shield = tokenShieldMiddleware()
-const client = createAnthropicAdapter(shield, (p) => new Anthropic().messages.create(p as any))
-```
-
----
-
-## Why Middleware Instead of a Gateway?
-
-Most LLM cost tools (Helicone, Portkey) are API gateways — you route traffic through their servers.
-
-|                  | TokenShield              | Gateway (Helicone, etc.)     |
-| :--------------- | :----------------------- | :--------------------------- |
-| **Architecture** | In-process middleware    | Network proxy                |
-| **Latency**      | < 5ms overhead           | 50-200ms per request         |
-| **Lock-In**      | Delete 3 lines to remove | Redeploy infrastructure      |
-| **Data Privacy** | Data stays in your infra | Data flows through 3rd party |
-
-**What gateways do better:** Server-side observability, team dashboards, managed infrastructure. TokenShield is client-side only — it can't provide centralized logging or dashboards across a team without additional infrastructure.
+No prompt rewrites. No lock-in. Delete 3 lines to remove.
 
 ---
 
 ## Configuration
 
 ```typescript
-tokenShieldMiddleware({
-  modules: {
-    guard: true, // Rate limiting, dedup, cost gate
-    cache: true, // Semantic response caching
-    context: true, // Conversation trimming
-    router: true, // Complexity-based model routing
-    prefix: true, // Provider cache optimization
-    ledger: true, // Cost tracking
-  },
-  guard: {
-    debounceMs: 300,
-    maxRequestsPerMinute: 60,
-    maxCostPerHour: 10,
-  },
-  cache: {
-    maxEntries: 500,
-    ttlMs: 3_600_000,
-    similarityThreshold: 0.85,
-  },
-  router: {
-    tiers: [
-      { modelId: "gpt-4.1-nano", maxComplexity: 20 },
-      { modelId: "gpt-4.1-mini", maxComplexity: 50 },
-      { modelId: "gpt-4o", maxComplexity: 100 },
-    ],
-  },
-  breaker: {
-    limits: { perHour: 5, perDay: 50, perMonth: 500 },
-    action: "stop",
-  },
-  // Dry-run mode: see what TokenShield would do without affecting behavior
-  dryRun: false,
-  onDryRun: (action) => console.log(`[dry-run] ${action.module}: ${action.description}`),
-  onUsage: (entry) =>
-    console.log(`$${entry.cost.toFixed(4)} spent, $${entry.saved.toFixed(4)} saved`),
+import { shield } from "@tokenshield/ai-sdk"
+
+// Zero-config (recommended)
+const middleware = shield()
+
+// With budget enforcement
+const middleware = shield({
+  cache: true,
+  compression: true,
+  monthlyBudget: 500,
+  dailyBudget: 25,
+  onUsage: (e) => console.log(`$${e.cost.toFixed(4)} spent`),
 })
 ```
 
-See [QUICKSTART.md](QUICKSTART.md) for the full configuration reference.
+For full control, use `tokenShieldMiddleware()` with explicit module configuration.
+See [QUICKSTART.md](QUICKSTART.md) for the complete reference.
+
+---
+
+## Framework Adapters
+
+### Vercel AI SDK (primary)
+
+```typescript
+import { shield } from "@tokenshield/ai-sdk"
+const middleware = shield()
+// Use with wrapLanguageModel()
+```
+
+### OpenAI SDK
+
+```typescript
+import { tokenShieldMiddleware, createOpenAIAdapter } from "@tokenshield/ai-sdk"
+
+const mw = tokenShieldMiddleware()
+const chat = createOpenAIAdapter(mw, (p) => openai.chat.completions.create(p))
+```
+
+### Anthropic SDK
+
+```typescript
+import { tokenShieldMiddleware, createAnthropicAdapter } from "@tokenshield/ai-sdk"
+
+const mw = tokenShieldMiddleware()
+const chat = createAnthropicAdapter(mw, (p) => anthropic.messages.create(p))
+```
+
+---
+
+## Stats
+
+```typescript
+import { shield, getStats } from "@tokenshield/ai-sdk"
+
+const middleware = shield()
+// ... after some requests ...
+const stats = getStats(middleware)
+console.log(stats)
+// { totalSaved: 0.43, totalSpent: 1.82, savingsRate: 0.19, cacheHitRate: 0.34 }
+```
 
 ---
 
 ## React Integration
 
 ```typescript
-import { TokenShieldProvider, useSavings, useBudgetAlert } from "@tokenshield/ai-sdk";
+import { TokenShieldProvider, useSavings, useBudgetAlert } from "@tokenshield/ai-sdk/react"
 
 function App() {
   return (
     <TokenShieldProvider defaultModelId="gpt-4o">
-      <Dashboard />
+      <CostDisplay />
     </TokenShieldProvider>
-  );
+  )
 }
 
-function Dashboard() {
-  const { totalSaved, savingsRate } = useSavings();
-  const { isOverBudget } = useBudgetAlert(10); // $10 alert
-
-  return (
-    <div>
-      <p>Saved: ${totalSaved.toFixed(2)} ({(savingsRate * 100).toFixed(0)}%)</p>
-      {isOverBudget && <p>Budget exceeded!</p>}
-    </div>
-  );
+function CostDisplay() {
+  const { totalSaved, savingsRate } = useSavings()
+  return <p>Saved ${totalSaved.toFixed(2)} ({(savingsRate * 100).toFixed(0)}%)</p>
 }
 ```
+
+Primary hooks: `useSavings`, `useBudgetAlert`, `useShieldedCall`.
+See [QUICKSTART.md](QUICKSTART.md) for the full hook reference.
+
+---
+
+## Advanced Usage
+
+For direct access to individual modules (cache, router, guard, etc.):
+
+```typescript
+import { ResponseCache, CostLedger, RequestGuard } from "@tokenshield/ai-sdk/advanced"
+```
+
+The main `@tokenshield/ai-sdk` barrel exports ~10 things. Everything else lives in `/advanced`.
 
 ---
 
 ## Runtime Compatibility
 
-| Environment            | Caching                    | All Features                 |
-| :--------------------- | :------------------------- | :--------------------------- |
-| **Browser**            | IndexedDB (persistent)     | Full support                 |
-| **Node.js**            | In-memory (per-process)    | Full support                 |
-| **Vercel Edge**        | In-memory (per-invocation) | Full support, no persistence |
-| **Cloudflare Workers** | In-memory (per-invocation) | Full support, no persistence |
+| Environment            | Caching                    | Notes                                       |
+| :--------------------- | :------------------------- | :------------------------------------------ |
+| **Browser**            | IndexedDB (persistent)     | Full support                                |
+| **Node.js**            | In-memory (per-process)    | Cache resets on restart                     |
+| **Vercel Edge**        | In-memory (per-invocation) | Cache only helps within a single invocation |
+| **Cloudflare Workers** | In-memory (per-invocation) | Same as Edge                                |
 
-TokenShield automatically falls back to in-memory storage when IndexedDB is unavailable. No configuration needed.
+**Serverless caveat:** In serverless/edge environments, every cold start is a cache miss. Caching is most effective in long-running processes (Node.js servers, browsers) where prompts repeat across requests. For serverless, the guard, compression, and cost tracking modules still provide value.
 
 ---
 
-## Known Limitations
+## Architecture: Middleware vs. Gateway
 
-- **Not yet on npm** — install from source or git until published
-- **Client-side only** — no centralized team dashboards or cross-instance cache sharing
-- **Model routing quality is unvalidated** — complexity scoring uses heuristics, not ML. Use the `dryRun` mode or `abTestHoldback` option to compare routed vs. unrouted quality before relying on it
-- **Cache only helps with repetitive prompts** — unique prompts get no cache benefit
+|                  | Token Shield             | Gateway (Helicone, etc.)     |
+| :--------------- | :----------------------- | :--------------------------- |
+| **Architecture** | In-process middleware    | Network proxy                |
+| **Latency**      | < 5ms overhead           | 50-200ms per request         |
+| **Lock-in**      | Delete 3 lines to remove | Redeploy infrastructure      |
+| **Data privacy** | Data stays in your infra | Data flows through 3rd party |
+
+**What gateways do better:** Team-wide dashboards, centralized logging, managed infrastructure, cross-service cache sharing. Token Shield is client-side — it can't replace server-side observability.
+
+---
+
+## Limitations
+
+- **Not yet on npm** — install from source until published
+- **Client-side only** — no centralized team dashboards or shared caching
+- **In-memory cache in serverless** — cache resets on every cold start
+- **Model routing quality is unvalidated** — use `dryRun` mode to compare before relying on it
 - **Single maintainer** — bus factor of 1
-
----
-
-## Security
-
-TokenShield is a client-side SDK. Your API keys and data never leave your infrastructure. No telemetry, no phone-home, no third-party data sharing.
-
-See [SECURITY.md](SECURITY.md) for the full trust model.
-
----
-
-## Installation
-
-> **Note:** Not yet published to npm. Clone the repo and build from source.
-
-```bash
-git clone https://github.com/tokenshield/ai-sdk.git
-cd ai-sdk
-npm install && npm run build
-```
-
-**Peer dependencies** (optional):
-
-- `ai >= 3.0.0` — For Vercel AI SDK middleware
-- `react >= 18.0.0` — For React hooks and dashboard
-
----
-
-## Documentation
-
-- [Quick Start Guide](QUICKSTART.md) — Full configuration reference
-- [Security & Trust Model](SECURITY.md) — How data flows
-- [Changelog](CHANGELOG.md) — Version history
 
 ---
 
 ## License
 
-MIT &copy; 2026 Code&Clarity. See [LICENSE](LICENSE) for details.
+MIT. Core optimization modules are free forever.
+
+Team features (user budgets, anomaly detection) and enterprise features (audit logging, custom routing) require a license key. All features are unlocked in development mode.
+
+---
+
+## Links
+
+- [Quick Start & Config Reference](QUICKSTART.md)
+- [Security & Trust Model](SECURITY.md)
+- [Changelog](CHANGELOG.md)
+- [Contributing](CONTRIBUTING.md)

@@ -52,7 +52,7 @@ const GUARD_DUPLICATE_RATE = 0.03
 const PRICING_TIERS = {
   enterprise: { minSpend: 50_000, cost: 499 },
   team: { minSpend: 5_000, cost: 99 },
-  pro: { minSpend: 0, cost: 29 },
+  starter: { minSpend: 0, cost: 29 },
 } as const
 
 // -------------------------------------------------------
@@ -94,7 +94,7 @@ export interface SavingsEstimate {
   /** Return on investment (net savings / Token Shield cost) */
   roi: number
   /** Recommended pricing tier */
-  recommendedTier: "pro" | "team" | "enterprise"
+  recommendedTier: "starter" | "team" | "enterprise"
 }
 
 /**
@@ -156,7 +156,7 @@ export function estimateSavings(input: SavingsEstimateInput): SavingsEstimate {
   const savingsPercent = monthlySpend > 0 ? (totalSavings / monthlySpend) * 100 : 0
 
   // Recommended tier and cost
-  let recommendedTier: "pro" | "team" | "enterprise"
+  let recommendedTier: "starter" | "team" | "enterprise"
   let tokenShieldCost: number
   if (monthlySpend >= PRICING_TIERS.enterprise.minSpend) {
     recommendedTier = "enterprise"
@@ -165,8 +165,8 @@ export function estimateSavings(input: SavingsEstimateInput): SavingsEstimate {
     recommendedTier = "team"
     tokenShieldCost = PRICING_TIERS.team.cost
   } else {
-    recommendedTier = "pro"
-    tokenShieldCost = PRICING_TIERS.pro.cost
+    recommendedTier = "starter"
+    tokenShieldCost = PRICING_TIERS.starter.cost
   }
 
   const netSavings = totalSavings - tokenShieldCost

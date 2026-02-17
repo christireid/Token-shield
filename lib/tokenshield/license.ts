@@ -23,7 +23,7 @@
  * with a console warning.
  */
 
-export type LicenseTier = "community" | "pro" | "team" | "enterprise"
+export type LicenseTier = "community" | "team" | "enterprise"
 
 export interface LicenseInfo {
   tier: LicenseTier
@@ -62,9 +62,8 @@ const MODULE_TIERS: Record<string, LicenseTier> = {
 
 const TIER_RANK: Record<LicenseTier, number> = {
   community: 0,
-  pro: 1,
-  team: 2,
-  enterprise: 3,
+  team: 1,
+  enterprise: 2,
 }
 
 let _currentLicense: LicenseInfo = {
