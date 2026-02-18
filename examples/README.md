@@ -4,9 +4,7 @@
 
 We have a live interactive demo that simulates TokenShield's behavior (Cache, Cost Tracking) in a Next.js environment.
 
-**[Launch in StackBlitz](https://stackblitz.com/github/tokenshield/ai-sdk/tree/main/examples/interactive-demo)**
-
-_(Note: Since this is a private repo/sandbox, you can verify the code in `examples/interactive-demo`)_
+You can run the demo locally (see below) or browse the code in `examples/interactive-demo`.
 
 ## 📦 How to Run Locally
 
@@ -37,8 +35,6 @@ _(Note: Since this is a private repo/sandbox, you can verify the code in `exampl
 2. **Real-time Ledger:** Watch your savings grow as the semantic cache kicks in.
 3. **Latency Comparison:** See the difference between <5ms middleware and 450ms API calls.
 
-## 🛠️ StackBlitz Configuration
+## StackBlitz
 
-This project is configured for StackBlitz. If you fork this repository, you can open it directly in the browser environment.
-
-Configuration is in `.stackblitzrc` (in root).
+A `.stackblitzrc` is included in `examples/interactive-demo` for browser-based development.

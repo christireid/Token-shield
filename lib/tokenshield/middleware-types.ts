@@ -98,6 +98,8 @@ export interface TokenShieldMiddlewareConfig {
     encodingStrategy?: "bigram" | "trigram"
     /** Semantic seeds for trigram encoding (maps domain terms to seed indices) */
     semanticSeeds?: Record<string, number>
+    /** Custom storage backend for cache persistence (e.g., localStorage, AsyncStorage) */
+    backend?: import("./storage-adapter").StorageBackend
     /**
      * Called when IndexedDB operations fail (e.g., quota exceeded, IDB disabled).
      * If not provided, storage errors are emitted as `storage:error` events on the event bus.

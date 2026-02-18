@@ -194,7 +194,7 @@ We have not yet validated these estimates against production deployments. Run `g
 
 - **Not yet on npm** — install from source until published
 - **Client-side only** — no centralized team dashboards or shared caching
-- **In-memory cache by default** — use the `storage` option with Redis/KV for persistence across serverless invocations
+- **In-memory cache by default** — use the `storage` option with a custom `StorageBackend` (e.g., `localStorage`, React Native `AsyncStorage`) for persistence
 - **Model routing quality is unvalidated** — use `dryRun` mode to compare before relying on it
 - **Single maintainer** — bus factor of 1
 

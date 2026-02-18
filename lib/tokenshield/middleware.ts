@@ -139,6 +139,7 @@ export function tokenShieldMiddleware(
         similarityThreshold: config.cache?.similarityThreshold ?? 0.85,
         encodingStrategy: config.cache?.encodingStrategy,
         semanticSeeds: config.cache?.semanticSeeds,
+        backend: config.cache?.backend,
         onStorageError: config.cache?.onStorageError ?? defaultOnStorageError("cache", "idb"),
       })
     : null

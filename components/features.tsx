@@ -167,7 +167,8 @@ export function Features() {
         <p className="mt-2 text-sm text-muted-foreground sm:text-base">
           Each module works standalone or through the unified{" "}
           <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">shield()</code>{" "}
-          middleware.
+          middleware. Savings percentages are per-hit maximums — actual savings depend on your
+          traffic patterns.
         </p>
 
         <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

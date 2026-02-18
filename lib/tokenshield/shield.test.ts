@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest"
 import { shield, getStats } from "./shield"
 import { textSimilarity } from "./response-cache"
+import type { StorageBackend } from "./storage-adapter"
 
 describe("shield", () => {
   describe("zero-config", () => {
@@ -219,6 +220,81 @@ describe("getStats", () => {
     const mw = shield({ monthlyBudget: 1000 })
     const stats = getStats(mw)
     expect(stats.breakerTripped).toBe(false)
+  })
+})
+
+describe("StorageBackend", () => {
+  function createMockBackend(): StorageBackend & { data: Map<string, unknown> } {
+    const data = new Map<string, unknown>()
+    return {
+      data,
+      get: vi.fn(async (key: string) => data.get(key)),
+      set: vi.fn(async (key: string, value: unknown) => {
+        data.set(key, value)
+      }),
+      del: vi.fn(async (key: string) => {
+        data.delete(key)
+      }),
+      clear: vi.fn(async () => {
+        data.clear()
+      }),
+    }
+  }
+
+  it("accepts a custom storage backend via shield()", () => {
+    const backend = createMockBackend()
+    const mw = shield({ storage: backend })
+    expect(mw.cache).not.toBeNull()
+  })
+
+  it("custom backend is used for cache store and lookup", async () => {
+    const backend = createMockBackend()
+    const mw = shield({ storage: backend, guard: false })
+
+    const doGenerate = vi.fn().mockResolvedValue({
+      text: "TypeScript is a typed superset of JavaScript.",
+      usage: { promptTokens: 20, completionTokens: 15 },
+      finishReason: "stop",
+    })
+
+    const params = {
+      modelId: "gpt-4o",
+      prompt: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text" as const,
+              text: "What is TypeScript? Please give me a thorough and detailed explanation.",
+            },
+          ],
+        },
+      ],
+    }
+
+    // First call — should store to backend
+    const t1 = await mw.transformParams({ params })
+    await mw.wrapGenerate({ doGenerate, params: t1 })
+
+    // Wait for async cache store
+    await new Promise((r) => setTimeout(r, 100))
+
+    // Backend should have received set calls
+    expect(backend.set).toHaveBeenCalled()
+    expect(backend.data.size).toBeGreaterThan(0)
+
+    // Second call — should read from backend (cache hit)
+    const t2 = await mw.transformParams({ params })
+    const result2 = await mw.wrapGenerate({ doGenerate, params: t2 })
+
+    expect(doGenerate).toHaveBeenCalledTimes(1) // NOT called again
+    expect(result2.text).toBe("TypeScript is a typed superset of JavaScript.")
+    expect(backend.get).toHaveBeenCalled()
+  })
+
+  it("storage: undefined uses default in-memory cache", () => {
+    const mw = shield({ storage: undefined })
+    expect(mw.cache).not.toBeNull()
   })
 })
 
