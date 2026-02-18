@@ -5,7 +5,7 @@
  * extractLastUserText() and safeCost()
  */
 
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import {
   extractLastUserText,
   safeCost,
@@ -14,6 +14,7 @@ import {
   FALLBACK_INPUT_PER_MILLION,
   FALLBACK_OUTPUT_PER_MILLION,
 } from "./middleware-types"
+import { shieldEvents } from "./event-bus"
 
 describe("extractLastUserText", () => {
   it("extracts text from the last user message", () => {
@@ -109,6 +110,24 @@ describe("safeCost", () => {
   it("returns 0 for zero tokens", () => {
     const cost = safeCost("gpt-4o-mini", 0, 0)
     expect(cost).toBe(0)
+  })
+
+  it("emits cost:fallback event for unknown models", () => {
+    const handler = vi.fn()
+    shieldEvents.on("cost:fallback", handler)
+    try {
+      // Use a unique model name so the once-per-model guard fires
+      safeCost(`test-fallback-event-${Date.now()}`, 1000, 500)
+      expect(handler).toHaveBeenCalledTimes(1)
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fallbackInputPerMillion: FALLBACK_INPUT_PER_MILLION,
+          fallbackOutputPerMillion: FALLBACK_OUTPUT_PER_MILLION,
+        }),
+      )
+    } finally {
+      shieldEvents.off("cost:fallback", handler)
+    }
   })
 
   it("fallback uses conservative pricing", () => {

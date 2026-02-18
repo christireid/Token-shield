@@ -16,6 +16,12 @@ cd Token-shield
 npm install && npm run build
 ```
 
+**Peer dependencies** — TokenShield wraps the [Vercel AI SDK](https://sdk.vercel.ai/). You'll also need the AI SDK and a provider adapter:
+
+```bash
+npm install ai @ai-sdk/openai    # or @ai-sdk/anthropic, @ai-sdk/google
+```
+
 ---
 
 ## Quick Start

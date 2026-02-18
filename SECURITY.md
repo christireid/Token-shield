@@ -49,9 +49,11 @@ TokenShield stores all persistent data in **IndexedDB** within the user's browse
 | Cached responses    | IndexedDB        | Prompt-response pairs used for cache hits.                       |
 | User budget state   | IndexedDB        | Current spend, limits, and rolling-window metadata.              |
 
+**Same-origin visibility.** IndexedDB is accessible to any JavaScript running in the same origin — including browser extensions with host permissions, injected scripts, and third-party libraries in your bundle. If your application handles sensitive prompts (medical, legal, financial), consider enabling encryption at rest.
+
 **Zero telemetry.** TokenShield does not phone home, collect analytics, or transmit any data to Anthropic, OpenAI, or any third party. There are no tracking pixels, no beacon endpoints, and no opt-out-required telemetry. The SDK is fully offline-capable.
 
-**Optional encryption at rest.** The `EncryptedStore` module provides AES-GCM encryption via the Web Crypto API. When enabled, all IndexedDB entries (cached responses, ledger data, budget state) are encrypted with a key you provide. This protects sensitive prompt/response data if the user's device is compromised or if browser storage is inspected. Note that the encryption key must still be managed securely by your application -- TokenShield does not handle key storage or rotation.
+**Optional encryption at rest.** The `EncryptedStore` module provides AES-GCM encryption via the Web Crypto API. When enabled, all IndexedDB entries (cached responses, ledger data, budget state) are encrypted with a key you provide. This protects sensitive prompt/response data if the user's device is compromised or if browser storage is inspected. Note that the encryption key must still be managed securely by your application — TokenShield does not handle key storage or rotation.
 
 ---
 

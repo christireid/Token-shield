@@ -107,7 +107,20 @@ export class CostLedger {
         this.channel.onmessage = (event) => {
           try {
             if (event.data && event.data.type === "NEW_ENTRY" && event.data.entry) {
-              this.mergeEntry(event.data.entry as LedgerEntry)
+              const e = event.data.entry
+              // Validate the entry has required fields before merging to prevent
+              // corruption from malformed cross-tab messages or browser extensions
+              if (
+                typeof e.id === "string" &&
+                typeof e.timestamp === "number" &&
+                typeof e.model === "string" &&
+                typeof e.inputTokens === "number" &&
+                typeof e.outputTokens === "number" &&
+                typeof e.actualCost === "number" &&
+                typeof e.totalSaved === "number"
+              ) {
+                this.mergeEntry(e as LedgerEntry)
+              }
             }
           } catch {
             // Malformed cross-tab message — ignore to avoid crashing the handler
@@ -438,10 +451,8 @@ export class CostLedger {
       ]
         .map((v) => {
           const s = String(v)
-          if (s.includes(",") || s.includes('"') || s.includes("\n")) {
-            return `"${s.replace(/"/g, '""')}"`
-          }
-          return s
+          // Always quote all fields for robust CSV parsing
+          return `"${s.replace(/"/g, '""')}"`
         })
         .join(","),
     )

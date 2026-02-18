@@ -419,7 +419,9 @@ export function isModulePermitted(moduleName: string): boolean {
   if (_devMode) {
     if (!_warningShown && requiredTier !== "community") {
       _warningShown = true
-      if (typeof console !== "undefined") {
+      // Only warn in development — suppress in production to avoid leaking tier info
+      const isDev = typeof process !== "undefined" && process.env?.NODE_ENV !== "production"
+      if (isDev && typeof console !== "undefined") {
         // eslint-disable-next-line no-console
         console.warn(
           `[TokenShield] Using ${requiredTier}-tier features without a license key. ` +

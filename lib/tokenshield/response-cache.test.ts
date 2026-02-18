@@ -302,4 +302,64 @@ describe("response-cache", () => {
       expect(typeof result.hit).toBe("boolean")
     })
   })
+
+  describe("cache stress", () => {
+    it("evicts LRU entries under rapid sequential writes without corruption", async () => {
+      // Use exact matching (threshold=1) so fuzzy doesn't match across evicted entries
+      const cache = new ResponseCache({
+        maxEntries: 50,
+        ttlMs: 60_000,
+        similarityThreshold: 1,
+      })
+
+      // Rapidly add 200 entries (4x capacity) with distinct prompts
+      for (let i = 0; i < 200; i++) {
+        await cache.store(
+          `unique-stress-test-${i}-alpha-bravo-charlie`,
+          `Response ${i}`,
+          "gpt-4o",
+          10 + i,
+          20 + i,
+        )
+      }
+
+      // Cache should have evicted oldest entries, keeping at most maxEntries
+      const cacheStats = cache.stats()
+      expect(cacheStats.entries).toBeLessThanOrEqual(50)
+      expect(cacheStats.entries).toBeGreaterThan(0)
+
+      // Most recent entry should still be findable (exact match)
+      const recent = await cache.lookup("unique-stress-test-199-alpha-bravo-charlie", "gpt-4o")
+      expect(recent.hit).toBe(true)
+
+      // Oldest entry should have been evicted (exact match only)
+      const oldest = await cache.lookup("unique-stress-test-0-alpha-bravo-charlie", "gpt-4o")
+      expect(oldest.hit).toBe(false)
+    })
+
+    it("handles concurrent store and lookup without errors", async () => {
+      const cache = new ResponseCache({
+        maxEntries: 100,
+        ttlMs: 60_000,
+        similarityThreshold: 0.85,
+      })
+
+      // Pre-populate
+      await cache.store("Base question about TypeScript", "TypeScript answer", "gpt-4o", 10, 20)
+
+      // Concurrent operations
+      const ops = Array.from({ length: 20 }, (_, i) =>
+        Promise.all([
+          cache.store(`Concurrent prompt ${i}`, `Response ${i}`, "gpt-4o", 10, 20),
+          cache.lookup("Base question about TypeScript", "gpt-4o"),
+        ]),
+      )
+
+      // All operations should complete without throwing
+      const results = await Promise.all(ops)
+      for (const [, lookup] of results) {
+        expect(typeof lookup.hit).toBe("boolean")
+      }
+    })
+  })
 })
