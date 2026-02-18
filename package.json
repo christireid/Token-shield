@@ -1,6 +1,6 @@
 {
   "name": "@tokenshield/ai-sdk",
-  "version": "1.0.0",
+  "version": "0.1.0-beta.1",
   "description": "Drop-in middleware that reduces AI API costs through caching, compression, and budget enforcement. Works with Vercel AI SDK, OpenAI, and Anthropic.",
   "type": "module",
   "main": "./dist/index.cjs",

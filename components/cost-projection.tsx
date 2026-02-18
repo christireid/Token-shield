@@ -32,9 +32,17 @@ const TIERS = [
   },
 ]
 
+const ESTIMATE_MODES = [
+  { label: "Conservative", duplicateRate: 0.1, simpleRate: 0.15, prefixDiscount: 0.5 },
+  { label: "Typical", duplicateRate: 0.2, simpleRate: 0.25, prefixDiscount: 0.7 },
+  { label: "High-cache", duplicateRate: 0.35, simpleRate: 0.3, prefixDiscount: 0.9 },
+] as const
+
 export function CostProjection() {
   const [tierIdx, setTierIdx] = useState(1)
+  const [modeIdx, setModeIdx] = useState(0)
   const tier = TIERS[tierIdx]
+  const mode = ESTIMATE_MODES[modeIdx]
 
   const projection = useMemo(() => {
     const inputCost = (tier.avgInput / 1_000_000) * tier.inputPrice
@@ -42,21 +50,33 @@ export function CostProjection() {
     const costPerRequest = inputCost + outputCost
     const monthlyCost = costPerRequest * tier.requests
 
-    // Conservative estimate: 60% savings across all modules
-    const savedPercent = 0.6
-    const monthlySaved = monthlyCost * savedPercent
-    const monthlyWithShield = monthlyCost - monthlySaved
-    const yearlySaved = monthlySaved * 12
+    // Module-by-module estimate with stated assumptions
+    const cacheSavings = monthlyCost * mode.duplicateRate // % of requests are near-duplicates
+    const routerSavings = monthlyCost * mode.simpleRate * 0.6 // simple queries routed to cheap models
+    const prefixSavings = monthlyCost * 0.4 * mode.prefixDiscount * 0.8 * 0.5 // stable prefix * discount * hit rate * input share
+    const guardSavings = monthlyCost * 0.03 // duplicate/spam request prevention
+
+    const monthlySaved = cacheSavings + routerSavings + prefixSavings + guardSavings
+    const savedPercent = Math.min(monthlySaved / monthlyCost, 0.7) // cap at 70%
+    const actualSaved = monthlyCost * savedPercent
+    const monthlyWithShield = monthlyCost - actualSaved
+    const yearlySaved = actualSaved * 12
 
     return {
       costPerRequest,
       monthlyCost,
-      monthlySaved,
+      monthlySaved: actualSaved,
       monthlyWithShield,
       yearlySaved,
       savedPercent,
+      breakdown: {
+        cache: cacheSavings,
+        router: routerSavings,
+        prefix: prefixSavings,
+        guard: guardSavings,
+      },
     }
-  }, [tier])
+  }, [tier, mode])
 
   return (
     <section className="bg-gradient-to-b from-background via-card/20 to-background">
@@ -65,11 +85,37 @@ export function CostProjection() {
           Your projected savings
         </h2>
         <p className="mt-2 text-sm text-muted-foreground sm:text-base">
-          Based on real pricing data and conservative 60% optimization across modules.
+          Estimates based on real model pricing. Actual savings depend on your workload — duplicate
+          rate, query complexity, and conversation length all affect results.
         </p>
 
+        {/* Estimate mode selector */}
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <span className="text-xs text-muted-foreground">Estimate:</span>
+          <div className="inline-flex rounded-lg border border-border/50 bg-secondary/30 p-0.5">
+            {ESTIMATE_MODES.map((m, i) => (
+              <button
+                key={m.label}
+                type="button"
+                onClick={() => setModeIdx(i)}
+                className={`rounded-md px-3 py-1 text-xs font-medium transition-all ${
+                  modeIdx === i
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <span className="text-[10px] text-muted-foreground/60">
+            {(mode.duplicateRate * 100).toFixed(0)}% cache-eligible,{" "}
+            {(mode.simpleRate * 100).toFixed(0)}% simple queries
+          </span>
+        </div>
+
         {/* Tier selector — segmented control */}
-        <div className="mt-6 inline-flex rounded-xl border border-border/50 bg-secondary/30 p-1">
+        <div className="mt-4 inline-flex rounded-xl border border-border/50 bg-secondary/30 p-1">
           {TIERS.map((t, i) => (
             <button
               key={t.label}

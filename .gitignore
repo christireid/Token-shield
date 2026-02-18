@@ -31,3 +31,6 @@ instrumentation-client.ts
 
 # Coverage
 coverage/
+
+# Generated artifacts
+benchmark-results.txt

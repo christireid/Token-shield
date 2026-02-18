@@ -53,9 +53,9 @@ export function Hero() {
 
         {/* Headline */}
         <h1 className="mt-6 text-balance text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-5xl sm:leading-tight">
-          Cut your LLM costs by{" "}
+          Stop overpaying for{" "}
           <span className="inline bg-gradient-to-r from-primary to-[hsl(190,70%,50%)] bg-clip-text text-transparent">
-            60-80%
+            every LLM call
           </span>
           .
           <br />
@@ -117,7 +117,7 @@ export function Hero() {
           {[
             { value: "3", label: "Lines to add", gradient: true },
             { value: "0", label: "Config required", gradient: false },
-            { value: "60%", label: "Avg cost reduction", gradient: false },
+            { value: "<5ms", label: "Middleware overhead", gradient: false },
             { value: "3", label: "SDKs supported", gradient: false },
           ].map((stat) => (
             <div

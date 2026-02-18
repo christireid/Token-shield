@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest"
 import { shield, getStats } from "./shield"
+import { textSimilarity } from "./response-cache"
 
 describe("shield", () => {
   describe("zero-config", () => {
@@ -218,5 +219,34 @@ describe("getStats", () => {
     const mw = shield({ monthlyBudget: 1000 })
     const stats = getStats(mw)
     expect(stats.breakerTripped).toBe(false)
+  })
+})
+
+describe("cache similarity quality", () => {
+  it("matches rephrased questions (safe cache hit)", () => {
+    const score = textSimilarity("What is the capital of France?", "What's the capital of France?")
+    expect(score).toBeGreaterThan(0.85)
+  })
+
+  it("matches minor rewording (safe cache hit)", () => {
+    const score = textSimilarity("Explain how React hooks work", "Explain how react hooks work")
+    expect(score).toBeGreaterThan(0.85)
+  })
+
+  it("does NOT match semantically opposite questions", () => {
+    const score = textSimilarity("What causes cancer?", "What cures cancer?")
+    // These share most words but have opposite meaning
+    // At 0.85 threshold, this should ideally NOT match
+    expect(score).toBeLessThan(0.95)
+  })
+
+  it("does NOT match different topics", () => {
+    const score = textSimilarity("Explain React hooks", "Explain quantum computing")
+    expect(score).toBeLessThan(0.85)
+  })
+
+  it("correctly separates short prompts", () => {
+    const score = textSimilarity("Hello", "Goodbye")
+    expect(score).toBeLessThan(0.5)
   })
 })

@@ -48,15 +48,7 @@ export {
 } from "./context-manager"
 
 // Response Cache
-export {
-  ResponseCache,
-  normalizeText,
-  textSimilarity,
-  classifyContentType,
-  type ContentType,
-  type CacheEntry,
-  type CacheConfig,
-} from "./response-cache"
+export { ResponseCache, textSimilarity, type CacheEntry, type CacheConfig } from "./response-cache"
 
 // Model Router
 export {
@@ -175,10 +167,10 @@ export {
   type TokenShieldEvents,
 } from "./event-bus"
 
-export { validateConfig, TokenShieldConfigSchema } from "./config-schemas"
+// Config validation (internal — use shield() or tokenShieldMiddleware() for validated config)
 
 // Storage
-export { isPersistent } from "./storage-adapter"
+export { isPersistent, type StorageBackend } from "./storage-adapter"
 
 // -------------------------------------------------------
 // Error Types

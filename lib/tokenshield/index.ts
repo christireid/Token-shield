@@ -59,3 +59,9 @@ export { createOpenAIAdapter, createAnthropicAdapter } from "./adapters"
 // -------------------------------------------------------
 
 export { estimateCost, type CostEstimate } from "./cost-estimator"
+
+// -------------------------------------------------------
+// Storage — for custom cache persistence
+// -------------------------------------------------------
+
+export { type StorageBackend } from "./storage-adapter"

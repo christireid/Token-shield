@@ -1,7 +1,10 @@
 "use client"
 
-import React, { useState } from "react"
-import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts"
+import React, { useState, useRef, useCallback } from "react"
+import { ResponseCache, textSimilarity } from "@tokenshield/ai-sdk/advanced"
+
+const SIMULATED_API_COST = 0.01
+const SIMULATED_API_LATENCY_MS = 450
 
 export default function TokenShieldDemo() {
   const [logs, setLogs] = useState<string[]>([])
@@ -9,28 +12,51 @@ export default function TokenShieldDemo() {
   const [saved, setSaved] = useState(0)
   const [input, setInput] = useState("What is the capital of France?")
   const [loading, setLoading] = useState(false)
+  const cacheRef = useRef(new ResponseCache({ maxEntries: 100, similarityThreshold: 0.85 }))
+
+  const addLog = useCallback((msg: string) => {
+    setLogs((prev) => [msg, ...prev].slice(0, 15))
+  }, [])
 
   const simulateRequest = async () => {
     setLoading(true)
-    addLog(`> Requesting: "${input}"`)
+    const prompt = input.trim()
+    addLog(`> "${prompt}"`)
 
-    // Simulate network delay and TokenShield processing
-    setTimeout(() => {
-      const isCached = Math.random() > 0.5
+    const cache = cacheRef.current
+    const start = performance.now()
+    const result = await cache.lookup(prompt, "gpt-4o-mini")
 
-      if (isCached) {
-        addLog(`✅ CACHE HIT! Served in 2ms. Cost: $0.00`)
-        setSaved((s) => s + 0.01)
-      } else {
-        addLog(`📡 API CALL. Served in 450ms. Cost: $0.01`)
-        setCost((c) => c + 0.01)
-      }
-      setLoading(false)
-    }, 600)
+    if (result.hit) {
+      const elapsed = (performance.now() - start).toFixed(1)
+      addLog(
+        `  CACHE HIT (${result.matchType}, similarity: ${result.similarity.toFixed(2)}) in ${elapsed}ms. Cost: $0.00`,
+      )
+      setSaved((s) => s + SIMULATED_API_COST)
+    } else {
+      // Simulate API latency, then store in cache
+      await new Promise((r) => setTimeout(r, SIMULATED_API_LATENCY_MS))
+      const simulatedResponse = `[Simulated response for: "${prompt}"]`
+      await cache.store(prompt, simulatedResponse, "gpt-4o-mini", 50, 30)
+      const elapsed = (performance.now() - start).toFixed(0)
+      addLog(`  API CALL in ${elapsed}ms. Cost: $${SIMULATED_API_COST.toFixed(2)}`)
+      setCost((c) => c + SIMULATED_API_COST)
+    }
+
+    setLoading(false)
   }
 
-  const addLog = (msg: string) => {
-    setLogs((prev) => [msg, ...prev].slice(0, 10))
+  const handleSimilarityCheck = () => {
+    const examples = [
+      ["What is the capital of France?", "What's the capital of France?"],
+      ["Explain React hooks", "Explain quantum computing"],
+      ["How do I sort an array?", "How to sort an array in JavaScript?"],
+    ]
+    for (const [a, b] of examples) {
+      const score = textSimilarity(a, b)
+      addLog(`  "${a}" vs "${b}" = ${score.toFixed(3)}`)
+    }
+    addLog("> Similarity examples (threshold: 0.85):")
   }
 
   return (
@@ -39,34 +65,46 @@ export default function TokenShieldDemo() {
         <header className="text-center">
           <h1 className="text-3xl font-bold text-blue-600">Token Shield Interactive Demo</h1>
           <p className="text-gray-600 mt-2">
-            Simulate real-world LLM traffic and see how <code>shield()</code> reduces costs.
+            Real semantic caching via{" "}
+            <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm">ResponseCache</code>. Try
+            rephrasing a prompt to see fuzzy matching in action.
           </p>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Controls */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <h2 className="text-xl font-semibold mb-4">🔮 Simulator</h2>
+            <h2 className="text-xl font-semibold mb-4">Simulator</h2>
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               className="w-full p-3 border rounded-lg mb-4 h-24"
+              placeholder="Type a prompt..."
             />
-            <button
-              onClick={simulateRequest}
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50"
-            >
-              {loading ? "Processing..." : "Send Request (Simulate)"}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={simulateRequest}
+                disabled={loading}
+                className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50"
+              >
+                {loading ? "Processing..." : "Send Request"}
+              </button>
+              <button
+                onClick={handleSimilarityCheck}
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition"
+                title="Show similarity examples"
+              >
+                Compare
+              </button>
+            </div>
             <p className="text-xs text-gray-500 mt-2 text-center">
-              * In this demo, requests have a 50% chance of hitting the semantic cache.
+              First request caches. Rephrase the same question to see a fuzzy cache hit.
             </p>
           </div>
 
           {/* Stats */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <h2 className="text-xl font-semibold mb-4">💰 Real-Time Savings</h2>
+            <h2 className="text-xl font-semibold mb-4">Real-Time Savings</h2>
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div className="bg-red-50 p-4 rounded-lg">
                 <div className="text-sm text-red-600">Total Cost</div>
@@ -80,7 +118,7 @@ export default function TokenShieldDemo() {
 
             <div className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm h-48 overflow-y-auto">
               {logs.length === 0 ? (
-                <span className="opacity-50">System ready... waiting for requests.</span>
+                <span className="opacity-50">System ready... try sending a request.</span>
               ) : (
                 logs.map((l, i) => (
                   <div key={i} className="mb-1">
@@ -95,19 +133,16 @@ export default function TokenShieldDemo() {
         {/* Feature Highlights */}
         <div className="grid grid-cols-3 gap-4">
           <div className="p-4 bg-white rounded-lg border text-center">
-            <div className="text-2xl mb-2">⚡</div>
             <h3 className="font-bold">Zero Latency</h3>
-            <p className="text-sm text-gray-600">Middleware runs in &lt; 5ms</p>
+            <p className="text-sm text-gray-600">Cache lookup in &lt; 2ms</p>
           </div>
           <div className="p-4 bg-white rounded-lg border text-center">
-            <div className="text-2xl mb-2">🔒</div>
-            <h3 className="font-bold">No Lock-In</h3>
-            <p className="text-sm text-gray-600">Remove anytime via npm</p>
+            <h3 className="font-bold">Fuzzy Matching</h3>
+            <p className="text-sm text-gray-600">Rephrased prompts hit cache</p>
           </div>
           <div className="p-4 bg-white rounded-lg border text-center">
-            <div className="text-2xl mb-2">👤</div>
-            <h3 className="font-bold">User Budgets</h3>
-            <p className="text-sm text-gray-600">Limit spend per-tenant</p>
+            <h3 className="font-bold">Client-Side</h3>
+            <p className="text-sm text-gray-600">No data leaves your browser</p>
           </div>
         </div>
       </div>

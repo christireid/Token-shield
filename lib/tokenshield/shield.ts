@@ -29,6 +29,7 @@
 
 import { tokenShieldMiddleware } from "./middleware"
 import type { TokenShieldMiddleware, TokenShieldMiddlewareConfig } from "./middleware-types"
+import type { StorageBackend } from "./storage-adapter"
 
 /**
  * Simplified shield configuration.
@@ -51,8 +52,20 @@ export interface ShieldConfig {
    *  Must be a positive number. Omit or set to `undefined` for no limit.
    *  Note: `0` is treated as "no limit" (falsy), not "block all requests". */
   dailyBudget?: number
-  /** Cache similarity threshold 0-1 (default: 0.85) */
+  /**
+   * Cache similarity threshold 0-1 (default: 0.85).
+   *
+   * Higher = stricter matching, fewer cache hits.
+   * Lower = more cache hits, risk of serving wrong cached responses.
+   *
+   * Guide: 0.95+ for safety-critical, 0.85 for general use, 0.75 for aggressive caching.
+   * See `CacheConfig.similarityThreshold` in advanced exports for detailed guidance.
+   */
   similarityThreshold?: number
+  /** Custom storage backend for cache persistence.
+   *  By default, uses IndexedDB (browser) or in-memory (Node.js).
+   *  Provide a custom backend for React Native, alternative storage, etc. */
+  storage?: StorageBackend
   /** Called with usage data after each request */
   onUsage?: (entry: {
     model: string
@@ -107,6 +120,7 @@ export function shield(config: ShieldConfig = {}): TokenShieldMiddleware {
     monthlyBudget,
     dailyBudget,
     similarityThreshold = 0.85,
+    storage,
     onUsage,
   } = config
 
@@ -121,7 +135,7 @@ export function shield(config: ShieldConfig = {}): TokenShieldMiddleware {
       compressor: compression,
       delta: compression,
     },
-    ...(cache ? { cache: { similarityThreshold } } : {}),
+    ...(cache ? { cache: { similarityThreshold, ...(storage ? { backend: storage } : {}) } } : {}),
     ...(monthlyBudget || dailyBudget
       ? {
           breaker: {

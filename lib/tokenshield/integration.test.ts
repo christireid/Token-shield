@@ -801,8 +801,6 @@ describe("All index.ts exports are importable", () => {
       "TokenShieldError",
       "TokenShieldBlockedError",
       "ERROR_CODES",
-      // Config
-      "validateConfig",
       // Storage
       "isPersistent",
       // License

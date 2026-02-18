@@ -24,6 +24,7 @@ import type { AuditLog, AuditLogConfig } from "./audit-log"
 import type { CompressorConfig } from "./prompt-compressor"
 import type { DeltaEncoderConfig } from "./conversation-delta-encoder"
 import { estimateCost } from "./cost-estimator"
+import { shieldEvents } from "./event-bus"
 
 // -------------------------------------------------------
 // Constants
@@ -417,6 +418,12 @@ export function extractLastUserText(params: Record<string, unknown>): string {
  * Safe cost estimation helper. Falls back to conservative average pricing
  * for unknown models instead of returning 0, which would silently bypass
  * budget enforcement and produce incorrect savings calculations.
+ *
+ * When an unknown model is encountered for the first time:
+ * 1. Emits a `"cost:fallback"` event on the global event bus (observable via `subscribeToEvent`)
+ * 2. Logs a console.warn (once per model to avoid spam)
+ *
+ * Fallback rates: $0.15/M input, $0.60/M output (conservative mid-range estimate).
  */
 /** Set of models we've already warned about to avoid log spam */
 const warnedFallbackModels = new Set<string>()
@@ -429,6 +436,18 @@ export function safeCost(modelId: string, inputTokens: number, outputTokens: num
     // Warn once per model so operators notice the inaccuracy.
     if (modelId && !warnedFallbackModels.has(modelId)) {
       warnedFallbackModels.add(modelId)
+
+      // Emit observable event so users can programmatically detect this
+      try {
+        shieldEvents.emit("cost:fallback", {
+          modelId,
+          fallbackInputPerMillion: FALLBACK_INPUT_PER_MILLION,
+          fallbackOutputPerMillion: FALLBACK_OUTPUT_PER_MILLION,
+        })
+      } catch {
+        /* non-fatal — event bus may not be initialized */
+      }
+
       // eslint-disable-next-line no-console
       console.warn(
         `[TokenShield] Unknown model "${modelId}" — using fallback pricing ($${FALLBACK_INPUT_PER_MILLION}/M input, $${FALLBACK_OUTPUT_PER_MILLION}/M output). Cost estimates may be inaccurate.`,

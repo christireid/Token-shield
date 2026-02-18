@@ -3,22 +3,24 @@
  *
  * Routes requests to the cheapest model that can handle the task.
  * Uses a deterministic complexity scorer based on measurable text
- * features - no AI needed, no approximation.
+ * features — no AI needed, no approximation.
  *
- * The idea: "What is the capital of France?" doesn't need GPT-5.2.
+ * The idea: "What is the capital of France?" doesn't need GPT-4o.
  * A $0.15/M model handles it identically. But "Analyze this contract
  * for liability risks and compare to Delaware law" does need a
  * more capable model.
  *
- * This scorer is based on real measurable signals, not vibes.
+ * @warning **Heuristic-based** — The complexity scorer uses keyword matching
+ * and surface-level text signals (token count, lexical diversity, code patterns).
+ * It cannot understand meaning, intent, or domain-specific difficulty. A short
+ * prompt can be deceptively hard ("Prove P≠NP"), and a long prompt can be
+ * trivially simple. The router is opt-in (`router: false` by default) and
+ * should be validated with `dryRun` mode on your own traffic before relying
+ * on it in production. Always provide a fallback to the original model.
  */
 
 import { countTokens } from "gpt-tokenizer"
-import {
-  MODEL_PRICING,
-  type ModelPricing,
-  estimateCost,
-} from "./cost-estimator"
+import { MODEL_PRICING, type ModelPricing, estimateCost } from "./cost-estimator"
 import { PRICING_REGISTRY } from "./pricing-registry"
 
 export interface ComplexitySignals {
@@ -112,13 +114,13 @@ const CONSTRAINT_KEYWORDS = new Set([
   "specification",
 ])
 
-const CODE_PATTERNS = /```|{|}|\bfunction\b|\bclass\b|\bimport\b|\bexport\b|\bconst\b|\blet\b|\bvar\b|\breturn\b|=>|\bif\s*\(|\bfor\s*\(/g
+const CODE_PATTERNS =
+  /```|{|}|\bfunction\b|\bclass\b|\bimport\b|\bexport\b|\bconst\b|\blet\b|\bvar\b|\breturn\b|=>|\bif\s*\(|\bfor\s*\(/g
 
 const STRUCTURED_OUTPUT_PATTERNS =
   /\bjson\b|\bxml\b|\byaml\b|\bcsv\b|\bschema\b|\bformat.*?as\b|\boutput.*?format\b|\breturn.*?object\b|\bstructured\b/i
 
-const SUBTASK_PATTERNS =
-  /^\s*[-*\d]+[.)]\s/gm
+const SUBTASK_PATTERNS = /^\s*[-*\d]+[.)]\s/gm
 
 const CONTEXT_PATTERNS =
   /\babove\b|\bprevious\b|\bearlier\b|\bmentioned\b|\brefer.*?to\b|\bgiven\b|\bbased on\b/i
@@ -132,11 +134,18 @@ const complexityCache = new Map<string, ComplexityScore>()
 /**
  * Analyze a prompt and return measurable complexity signals with a composite score.
  *
- * Every signal is computed from the actual text -- no guessing. The composite
+ * Every signal is computed from the actual text — no guessing. The composite
  * score (0-100) is a weighted sum of token count, reasoning keywords, constraint
  * keywords, code signals, lexical diversity, structured output requirements,
  * sub-task count, and context dependency. Results are cached (FIFO, max 100
  * entries) for prompts under 10,000 characters.
+ *
+ * @warning This is a **surface-level heuristic**. It cannot detect semantic
+ * complexity, domain expertise requirements, or adversarial prompts. Short
+ * prompts that require deep reasoning (e.g., math proofs) will score low.
+ * Long prompts that are simple lists will score high. Use `dryRun` mode
+ * to compare router decisions against your expected outcomes before enabling
+ * in production.
  *
  * @param prompt - The user prompt text to analyze
  * @returns A {@link ComplexityScore} with the 0-100 score, tier, individual signals, and recommended model tier
@@ -159,20 +168,12 @@ export function analyzeComplexity(prompt: string): ComplexityScore {
 
   const signals: ComplexitySignals = {
     tokenCount: countTokens(prompt),
-    avgWordLength:
-      wordCount > 0
-        ? words.reduce((sum, w) => sum + w.length, 0) / wordCount
-        : 0,
+    avgWordLength: wordCount > 0 ? words.reduce((sum, w) => sum + w.length, 0) / wordCount : 0,
     sentenceCount: sentences.length,
-    lexicalDiversity:
-      wordCount > 0 ? uniqueWords.size / wordCount : 0,
+    lexicalDiversity: wordCount > 0 ? uniqueWords.size / wordCount : 0,
     codeSignals: (prompt.match(CODE_PATTERNS) || []).length,
-    reasoningKeywords: [...REASONING_KEYWORDS].filter((kw) =>
-      lowerPrompt.includes(kw)
-    ).length,
-    constraintKeywords: [...CONSTRAINT_KEYWORDS].filter((kw) =>
-      lowerPrompt.includes(kw)
-    ).length,
+    reasoningKeywords: [...REASONING_KEYWORDS].filter((kw) => lowerPrompt.includes(kw)).length,
+    constraintKeywords: [...CONSTRAINT_KEYWORDS].filter((kw) => lowerPrompt.includes(kw)).length,
     hasStructuredOutput: STRUCTURED_OUTPUT_PATTERNS.test(prompt),
     subTaskCount: (prompt.match(SUBTASK_PATTERNS) || []).length,
     hasContextDependency: CONTEXT_PATTERNS.test(prompt),
@@ -251,6 +252,13 @@ export function analyzeComplexity(prompt: string): ComplexityScore {
  * filters available models by provider and tier, and selects the cheapest
  * candidate. Also reports how much money is saved compared to the default model.
  *
+ * @warning **Routing quality is unvalidated.** This router uses heuristic-based
+ * complexity scoring (see {@link analyzeComplexity}), not semantic understanding.
+ * It may mis-route prompts that are semantically complex but lexically simple
+ * (or vice versa). Always use `dryRun` mode first to log routing decisions
+ * without actually changing the model. Monitor output quality after enabling.
+ * The router is opt-in (`router: false` by default in `shield()`) for this reason.
+ *
  * @param prompt - The user prompt text to route
  * @param defaultModelId - The model you would normally use (for savings comparison)
  * @param options - Optional routing constraints
@@ -295,7 +303,7 @@ export function routeToModel(
       vision?: boolean
       functions?: boolean
     }
-  } = {}
+  } = {},
 ): RoutingDecision {
   const complexity = analyzeComplexity(prompt)
   const expectedOutput = options.expectedOutputTokens ?? 500
@@ -332,8 +340,14 @@ export function routeToModel(
     // Capability filters — use pricing registry for richer metadata
     if (options.requiredCapabilities) {
       const registryEntry = PRICING_REGISTRY_LOOKUP(m.id)
-      if (options.requiredCapabilities.vision && registryEntry && !registryEntry.supportsVision) return false
-      if (options.requiredCapabilities.functions && registryEntry && !registryEntry.supportsFunctions) return false
+      if (options.requiredCapabilities.vision && registryEntry && !registryEntry.supportsVision)
+        return false
+      if (
+        options.requiredCapabilities.functions &&
+        registryEntry &&
+        !registryEntry.supportsFunctions
+      )
+        return false
     }
     return true
   })
@@ -346,11 +360,7 @@ export function routeToModel(
     }))
     .sort((a, b) => a.cost.totalCost - b.cost.totalCost)
 
-  const defaultCost = estimateCost(
-    defaultModelId,
-    complexity.signals.tokenCount,
-    expectedOutput
-  )
+  const defaultCost = estimateCost(defaultModelId, complexity.signals.tokenCount, expectedOutput)
 
   // If no candidates match the filter, fall back to the default model
   if (sorted.length === 0) {
@@ -383,7 +393,9 @@ export function routeToModel(
 }
 
 /** Look up model capabilities from the pricing registry */
-function PRICING_REGISTRY_LOOKUP(modelId: string): { supportsVision: boolean; supportsFunctions: boolean } | undefined {
+function PRICING_REGISTRY_LOOKUP(
+  modelId: string,
+): { supportsVision: boolean; supportsFunctions: boolean } | undefined {
   const entry = PRICING_REGISTRY[modelId]
   if (!entry) return undefined
   return { supportsVision: entry.supportsVision, supportsFunctions: entry.supportsFunctions }
@@ -408,7 +420,7 @@ function PRICING_REGISTRY_LOOKUP(modelId: string): { supportsVision: boolean; su
  */
 export function rankModels(
   inputTokens: number,
-  outputTokens: number
+  outputTokens: number,
 ): { model: ModelPricing; cost: ReturnType<typeof estimateCost> }[] {
   return Object.values(MODEL_PRICING)
     .map((m) => ({

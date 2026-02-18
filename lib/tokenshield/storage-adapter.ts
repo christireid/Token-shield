@@ -9,6 +9,34 @@
  * directly from "idb-keyval" to guarantee Edge Runtime compatibility.
  */
 
+/**
+ * Pluggable storage backend interface.
+ * Implement this to use a custom client-side storage solution instead of
+ * the default IndexedDB/in-memory fallback.
+ *
+ * Useful for: React Native (AsyncStorage), custom sync-to-server persistence,
+ * or alternative browser storage mechanisms.
+ *
+ * @example localStorage adapter
+ * ```ts
+ * const storage: StorageBackend = {
+ *   get: async (key) => {
+ *     const val = localStorage.getItem(key)
+ *     return val ? JSON.parse(val) : undefined
+ *   },
+ *   set: async (key, val) => localStorage.setItem(key, JSON.stringify(val)),
+ *   del: async (key) => localStorage.removeItem(key),
+ *   clear: async () => localStorage.clear(),
+ * }
+ * ```
+ */
+export interface StorageBackend {
+  get(key: string): Promise<unknown | undefined>
+  set(key: string, value: unknown): Promise<void>
+  del(key: string): Promise<void>
+  clear(): Promise<void>
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type StoreHandle = any
 
@@ -84,6 +112,9 @@ export function createStore(dbName: string, storeName: string): StoreHandle {
 }
 
 export async function get<T>(key: string, store?: StoreHandle): Promise<T | undefined> {
+  if (store && typeof store.getItem === "function") {
+    return store.getItem(key) as Promise<T | undefined>
+  }
   if (store instanceof MemoryStore) {
     return store.get(key) as T | undefined
   }
@@ -97,6 +128,10 @@ export async function get<T>(key: string, store?: StoreHandle): Promise<T | unde
 }
 
 export async function set(key: string, value: unknown, store?: StoreHandle): Promise<void> {
+  if (store && typeof store.setItem === "function") {
+    await store.setItem(key, value)
+    return
+  }
   if (store instanceof MemoryStore) {
     store.set(key, value)
     return
@@ -110,6 +145,10 @@ export async function set(key: string, value: unknown, store?: StoreHandle): Pro
 }
 
 export async function del(key: string, store?: StoreHandle): Promise<void> {
+  if (store && typeof store.delItem === "function") {
+    await store.delItem(key)
+    return
+  }
   if (store instanceof MemoryStore) {
     store.del(key)
     return

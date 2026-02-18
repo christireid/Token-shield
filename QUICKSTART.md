@@ -62,7 +62,7 @@ const middleware = tokenShieldMiddleware({
     guard: true,
     cache: true,
     context: true,
-    router: false, // Opt-in: complexity-based model routing
+    router: false, // Opt-in: heuristic complexity routing (validate with dryRun first)
     prefix: true,
     ledger: true,
   },

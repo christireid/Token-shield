@@ -11,7 +11,7 @@
  * npm dependencies: idb-keyval
  */
 
-import { get, set, del, keys, createStore } from "./storage-adapter"
+import { get, set, del, keys, createStore, type StorageBackend } from "./storage-adapter"
 import { FuzzySimilarityEngine } from "./fuzzy-similarity"
 
 /**
@@ -51,7 +51,21 @@ export interface CacheConfig {
    * - time-sensitive: Current events, prices, weather — default 5 minutes
    */
   ttlByContentType?: Partial<Record<ContentType, number>>
-  /** Similarity threshold for fuzzy matching (0-1). 1 = exact only */
+  /**
+   * Similarity threshold for fuzzy matching (0-1). Higher = stricter matching.
+   *
+   * **Threshold guide by use case:**
+   * - `0.95+` — Safety-critical: legal, medical, financial (minimal false positives)
+   * - `0.85-0.95` — General: support bots, FAQ, content generation (default, good balance)
+   * - `0.75-0.85` — Aggressive: e-commerce, marketing copy (more cache hits, some wrong answers)
+   * - `< 0.75` — Not recommended: high false-positive rate
+   *
+   * **Risk:** A threshold of 0.85 means prompts 15% different may match.
+   * "What causes cancer?" and "What cures cancer?" could return the same cached response.
+   * For safety-critical applications, use 0.95+. Always test on representative traffic.
+   *
+   * Set to `1` for exact matching only (no fuzzy matching).
+   */
   similarityThreshold: number
   /** IndexedDB store name */
   storeName: string
@@ -68,6 +82,11 @@ export interface CacheConfig {
    * @example { cost: 10, price: 10, billing: 10, budget: 10 }
    */
   semanticSeeds?: Record<string, number>
+  /**
+   * Custom storage backend. When provided, replaces the default IndexedDB/in-memory storage.
+   * Useful for React Native (AsyncStorage), custom sync solutions, or alternative browser storage.
+   */
+  backend?: StorageBackend
   /**
    * Called when IndexedDB operations fail (e.g., quota exceeded, IDB disabled).
    * Without this callback, storage errors are silently ignored.
@@ -200,12 +219,31 @@ function hashKey(text: string, model?: string): string {
   return `ts_${(hash >>> 0).toString(36)}`
 }
 
+/** Wraps a StorageBackend into a store handle compatible with get/set/del helpers */
+class BackendStoreAdapter {
+  constructor(private backend: StorageBackend) {}
+
+  async getItem<T>(key: string): Promise<T | undefined> {
+    return (await this.backend.get(key)) as T | undefined
+  }
+
+  async setItem(key: string, value: unknown): Promise<void> {
+    await this.backend.set(key, value)
+  }
+
+  async delItem(key: string): Promise<void> {
+    await this.backend.del(key)
+  }
+}
+
 export class ResponseCache {
   private config: CacheConfig
   /** Per-instance in-memory map for fast lookups without hitting IDB every time */
   private memoryCache = new Map<string, CacheEntry>()
   /** Per-instance IDB store (lazy-initialized on first access) */
   private idbStore: ReturnType<typeof createStore> | null = null
+  /** Custom backend adapter (takes priority over IDB) */
+  private backendAdapter: BackendStoreAdapter | null = null
   /** Optional trigram encoding engine for enhanced fuzzy matching */
   private fuzzyEngine: FuzzySimilarityEngine | null = null
   /** Total lookup() calls (hits + misses) for accurate hit rate calculation */
@@ -215,6 +253,11 @@ export class ResponseCache {
 
   constructor(config: Partial<CacheConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
+
+    // Initialize custom backend adapter if provided
+    if (this.config.backend) {
+      this.backendAdapter = new BackendStoreAdapter(this.config.backend)
+    }
 
     // Initialize fuzzy similarity engine if strategy is set
     if (this.config.encodingStrategy === "trigram") {
@@ -249,7 +292,9 @@ export class ResponseCache {
     return Date.now() - entry.createdAt >= this.getTtl(entry.contentType)
   }
 
-  private getStore(): ReturnType<typeof createStore> | null {
+  private getStore(): BackendStoreAdapter | ReturnType<typeof createStore> | null {
+    // Custom backend takes priority
+    if (this.backendAdapter) return this.backendAdapter
     if (typeof window === "undefined") return null
     if (!this.idbStore) {
       this.idbStore = createStore(this.config.storeName, "responses")

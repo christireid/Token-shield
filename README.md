@@ -4,7 +4,7 @@ Drop-in middleware that reduces AI API costs without changing your prompts.
 
 Works with Vercel AI SDK, OpenAI, and Anthropic. TypeScript-first.
 
-> **v1.0.0** — Not yet published to npm. Install from source.
+> **v0.1.0-beta.1 (pre-release)** — Not yet published to npm. API may change before v1.0.
 
 ---
 
@@ -176,11 +176,25 @@ The main `@tokenshield/ai-sdk` barrel exports ~10 things. Everything else lives 
 
 ---
 
+## How Savings Are Estimated
+
+Savings depend entirely on your workload. Here's what each module can contribute:
+
+| Module               | How it saves                                          | Depends on                                                                            |
+| :------------------- | :---------------------------------------------------- | :------------------------------------------------------------------------------------ |
+| **Response Cache**   | Serves cached responses for duplicate/similar prompts | Duplicate rate in your traffic (0% for unique prompts, 30%+ for FAQ bots)             |
+| **Model Router**     | Routes simple queries to cheaper models               | % of queries that are simple (opt-in, heuristic-based — validate with `dryRun` first) |
+| **Prefix Optimizer** | Triggers provider-side prompt caching                 | System prompt stability, provider discount rates                                      |
+| **Request Guard**    | Blocks duplicate rapid-fire requests                  | User behavior (double-clicks, retries)                                                |
+| **Context Manager**  | Trims conversation history to fit token budgets       | Average conversation length                                                           |
+
+We have not yet validated these estimates against production deployments. Run `getStats()` on your own traffic to measure actual savings.
+
 ## Limitations
 
 - **Not yet on npm** — install from source until published
 - **Client-side only** — no centralized team dashboards or shared caching
-- **In-memory cache in serverless** — cache resets on every cold start
+- **In-memory cache by default** — use the `storage` option with Redis/KV for persistence across serverless invocations
 - **Model routing quality is unvalidated** — use `dryRun` mode to compare before relying on it
 - **Single maintainer** — bus factor of 1
 
