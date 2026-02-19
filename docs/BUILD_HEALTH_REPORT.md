@@ -20,10 +20,11 @@
 | `gpt-tokenizer` | ^3.4.0  | ~180KB | **LOW**    | Core functionality, no alternative |
 | `idb-keyval`    | ^6.2.2  | ~573B  | **LOW**    | Tiny, stable, widely used          |
 | `mitt`          | ^3.0.1  | ~200B  | **LOW**    | Tiny event emitter                 |
-| `ohash`         | ^2.0.11 | ~2KB   | **LOW**    | Object hashing                     |
 | `valibot`       | ^1.2.0  | ~6KB   | **MEDIUM** | Config validation, tree-shakeable  |
 
-**Total runtime deps: 5 (lean)**
+**Total runtime deps: 4 (lean)**
+
+> Note: `ohash` was originally listed as a dependency but was never imported anywhere. It has been removed.
 
 ### Dev Dependencies (16)
 

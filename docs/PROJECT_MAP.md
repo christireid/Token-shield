@@ -114,19 +114,18 @@ shield.ts → middleware.ts → middleware-transform.ts → [response-cache, req
 | `./delta-encoder` | `delta-encoder.ts`     | Standalone delta encoding            |
 | `./middleware`    | `middleware.ts`        | Direct middleware access             |
 
-## Dependencies (5 runtime)
+## Dependencies (4 runtime)
 
 | Package         | Size   | Purpose               |
 | --------------- | ------ | --------------------- |
 | `gpt-tokenizer` | ~180KB | BPE token counting    |
 | `idb-keyval`    | ~573B  | IndexedDB persistence |
 | `mitt`          | ~200B  | Event bus             |
-| `ohash`         | ~2KB   | Object hashing        |
 | `valibot`       | ~6KB   | Config validation     |
 
 ## Test Coverage
 
-- **71 test files, 1382 tests passing**
+- **68 test files, 1338 tests passing**
 - Major test suites: middleware (47), response-cache (25), cost-ledger (18), model-router (20), shield (12), adapters (15), circuit-breaker (14), user-budget (28)
 
 ## Key Metrics
