@@ -456,8 +456,8 @@ export function safeCost(modelId: string, inputTokens: number, outputTokens: num
       )
     }
     return (
-      (inputTokens / 1_000_000) * FALLBACK_INPUT_PER_MILLION +
-      (outputTokens / 1_000_000) * FALLBACK_OUTPUT_PER_MILLION
+      (Math.max(0, inputTokens) / 1_000_000) * FALLBACK_INPUT_PER_MILLION +
+      (Math.max(0, outputTokens) / 1_000_000) * FALLBACK_OUTPUT_PER_MILLION
     )
   }
 }

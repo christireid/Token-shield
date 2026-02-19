@@ -82,6 +82,8 @@ class MemoryStore {
 
 // Singleton fallback stores keyed by "dbName:storeName"
 const memoryStores = new Map<string, MemoryStore>()
+/** Track whether we've already warned about in-memory fallback (once per session) */
+let _memoryFallbackWarned = false
 
 function getMemoryStore(dbName: string, storeName: string): MemoryStore {
   const key = `${dbName}:${storeName}`
@@ -89,6 +91,14 @@ function getMemoryStore(dbName: string, storeName: string): MemoryStore {
   if (!store) {
     store = new MemoryStore()
     memoryStores.set(key, store)
+    // Warn once so operators know data won't survive page reloads
+    if (!_memoryFallbackWarned) {
+      _memoryFallbackWarned = true
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[TokenShield] IndexedDB unavailable — using in-memory storage. Cache, ledger, and budget data will not persist across page reloads. Use the \`storage\` option to provide a custom StorageBackend.`,
+      )
+    }
   }
   return store
 }

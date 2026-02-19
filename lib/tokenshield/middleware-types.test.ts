@@ -130,6 +130,12 @@ describe("safeCost", () => {
     }
   })
 
+  it("clamps negative token counts to zero in fallback path", () => {
+    // Use a unique unknown model to trigger fallback
+    const cost = safeCost(`neg-token-test-${Date.now()}`, -500, -200)
+    expect(cost).toBe(0) // negative tokens should produce 0, not negative cost
+  })
+
   it("fallback uses conservative pricing", () => {
     // Verify fallback rates are reasonable (not absurdly high or low)
     expect(FALLBACK_INPUT_PER_MILLION).toBeGreaterThan(0.01)

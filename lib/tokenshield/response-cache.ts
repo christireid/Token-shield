@@ -409,7 +409,12 @@ export class ResponseCache {
               }
             }
           }
-          await del(key, lookupStore)
+          // Expired or collision — clean up from IDB
+          try {
+            await del(key, lookupStore)
+          } catch (delErr) {
+            this.config.onStorageError?.(delErr)
+          }
         }
       } catch (err) {
         // IDB read failed — fall through to fuzzy match (in-memory)
@@ -577,7 +582,12 @@ export class ResponseCache {
           }
           loaded++
         } else if (entry) {
-          await del(key, store) // clean expired
+          // Expired — clean up from IDB
+          try {
+            await del(key, store)
+          } catch (delErr) {
+            this.config.onStorageError?.(delErr)
+          }
         }
       }
       return loaded

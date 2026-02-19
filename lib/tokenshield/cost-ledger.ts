@@ -108,16 +108,30 @@ export class CostLedger {
           try {
             if (event.data && event.data.type === "NEW_ENTRY" && event.data.entry) {
               const e = event.data.entry
-              // Validate the entry has required fields before merging to prevent
+              // Validate all required fields before merging to prevent
               // corruption from malformed cross-tab messages or browser extensions
               if (
                 typeof e.id === "string" &&
                 typeof e.timestamp === "number" &&
                 typeof e.model === "string" &&
                 typeof e.inputTokens === "number" &&
+                e.inputTokens >= 0 &&
                 typeof e.outputTokens === "number" &&
+                e.outputTokens >= 0 &&
+                typeof e.cachedTokens === "number" &&
+                e.cachedTokens >= 0 &&
                 typeof e.actualCost === "number" &&
-                typeof e.totalSaved === "number"
+                e.actualCost >= 0 &&
+                typeof e.costWithoutShield === "number" &&
+                typeof e.totalSaved === "number" &&
+                typeof e.cacheHit === "boolean" &&
+                typeof e.savings === "object" &&
+                e.savings !== null &&
+                typeof e.savings.guard === "number" &&
+                typeof e.savings.cache === "number" &&
+                typeof e.savings.context === "number" &&
+                typeof e.savings.router === "number" &&
+                typeof e.savings.prefix === "number"
               ) {
                 this.mergeEntry(e as LedgerEntry)
               }
