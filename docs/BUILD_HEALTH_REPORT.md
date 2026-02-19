@@ -6,7 +6,7 @@
 
 | Check               | Status                 | Details                               |
 | ------------------- | ---------------------- | ------------------------------------- |
-| `npm test`          | **PASS**               | 71 test files, 1382 tests, 0 failures |
+| `npm test`          | **PASS**               | 68 test files, 1338 tests, 0 failures |
 | `npm run typecheck` | **PASS**               | tsc --noEmit clean                    |
 | `npm run build`     | **NEEDS VERIFICATION** | tsup build (not run in this audit)    |
 | `npm run lint`      | **NEEDS VERIFICATION** | eslint on lib/tokenshield/            |
@@ -54,18 +54,18 @@ All standard: vitest, typescript, eslint, prettier, tsup, husky, lint-staged, te
 
 ## Exports Map Verification
 
-| Path              | Types                       | ESM                       | CJS                        | File Exists?            |
-| ----------------- | --------------------------- | ------------------------- | -------------------------- | ----------------------- |
-| `.`               | `./dist/index.d.ts`         | `./dist/index.js`         | `./dist/index.cjs`         | Source: ✅              |
-| `./advanced`      | `./dist/advanced.d.ts`      | `./dist/advanced.js`      | `./dist/advanced.cjs`      | Source: ✅              |
-| `./react`         | `./dist/react.d.ts`         | `./dist/react.js`         | `./dist/react.cjs`         | Source: **NEEDS BUILD** |
-| `./license`       | `./dist/license.d.ts`       | `./dist/license.js`       | `./dist/license.cjs`       | Source: ✅              |
-| `./audit-log`     | `./dist/audit-log.d.ts`     | `./dist/audit-log.js`     | `./dist/audit-log.cjs`     | Source: ✅              |
-| `./compressor`    | `./dist/compressor.d.ts`    | `./dist/compressor.js`    | `./dist/compressor.cjs`    | Source: ✅              |
-| `./delta-encoder` | `./dist/delta-encoder.d.ts` | `./dist/delta-encoder.js` | `./dist/delta-encoder.cjs` | Source: ✅              |
-| `./middleware`    | `./dist/middleware.d.ts`    | `./dist/middleware.js`    | `./dist/middleware.cjs`    | Source: ✅              |
+| Path              | Types                       | ESM                       | CJS                        | File Exists?           |
+| ----------------- | --------------------------- | ------------------------- | -------------------------- | ---------------------- |
+| `.`               | `./dist/index.d.ts`         | `./dist/index.js`         | `./dist/index.cjs`         | Source: ✅             |
+| `./advanced`      | `./dist/advanced.d.ts`      | `./dist/advanced.js`      | `./dist/advanced.cjs`      | Source: ✅             |
+| `./react`         | `./dist/react.d.ts`         | `./dist/react.js`         | `./dist/react.cjs`         | Source: ✅ (react.tsx) |
+| `./license`       | `./dist/license.d.ts`       | `./dist/license.js`       | `./dist/license.cjs`       | Source: ✅             |
+| `./audit-log`     | `./dist/audit-log.d.ts`     | `./dist/audit-log.js`     | `./dist/audit-log.cjs`     | Source: ✅             |
+| `./compressor`    | `./dist/compressor.d.ts`    | `./dist/compressor.js`    | `./dist/compressor.cjs`    | Source: ✅             |
+| `./delta-encoder` | `./dist/delta-encoder.d.ts` | `./dist/delta-encoder.js` | `./dist/delta-encoder.cjs` | Source: ✅             |
+| `./middleware`    | `./dist/middleware.d.ts`    | `./dist/middleware.js`    | `./dist/middleware.cjs`    | Source: ✅             |
 
-**Note**: `./react` export path has no corresponding `lib/tokenshield/react.ts` barrel file. It likely needs a tsup entry point configuration.
+All export paths verified. `./react` uses `react.tsx` as its barrel file, configured in `tsup.config.ts`.
 
 ## TypeScript Configuration
 
@@ -95,18 +95,15 @@ Based on import analysis:
 
 **No circular dependencies detected in core pipeline.**
 
-## Files Not Exported or Tested
+## Files Not Exported (but tested internally)
 
-| File                           | Exported? | Tested?                     | Notes                                       |
-| ------------------------------ | --------- | --------------------------- | ------------------------------------------- |
-| `adaptive-output-optimizer.ts` | No        | No                          | Dead code candidate                         |
-| `prompt-template-pool.ts`      | No        | No                          | Dead code candidate                         |
-| `token-optimizer.ts`           | No        | No                          | Dead code candidate                         |
-| `shield-worker.ts`             | No        | Yes (shield-worker.test.ts) | Web Worker wrapper, tested but not exported |
-| `benchmark.ts`                 | No        | Yes                         | Internal utility                            |
-| `benchmark-scenarios.ts`       | No        | Yes                         | Internal utility                            |
+| File                     | Exported? | Tested?                     | Notes                                       |
+| ------------------------ | --------- | --------------------------- | ------------------------------------------- |
+| `shield-worker.ts`       | No        | Yes (shield-worker.test.ts) | Web Worker wrapper, tested but not exported |
+| `benchmark.ts`           | No        | Yes                         | Internal utility                            |
+| `benchmark-scenarios.ts` | No        | Yes                         | Internal utility                            |
 
-**3 files appear to be dead code**: `adaptive-output-optimizer.ts`, `prompt-template-pool.ts`, `token-optimizer.ts` — not exported, not imported by any other module, no tests.
+> Dead code files (`adaptive-output-optimizer.ts`, `prompt-template-pool.ts`, `token-optimizer.ts`) were identified and deleted during the audit remediation.
 
 ## Security Considerations
 
