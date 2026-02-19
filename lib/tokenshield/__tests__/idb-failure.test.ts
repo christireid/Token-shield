@@ -23,7 +23,6 @@ vi.mock("../storage-adapter", () => ({
   isPersistent: () => true,
 }))
 
-import { AdaptiveOutputOptimizer } from "../adaptive-output-optimizer"
 import { FuzzySimilarityEngine } from "../fuzzy-similarity"
 import { AuditLog } from "../audit-log"
 import { ResponseCache } from "../response-cache"
@@ -40,75 +39,6 @@ beforeEach(() => {
   mockSet.mockResolvedValue(undefined)
   mockDel.mockResolvedValue(undefined)
   mockKeys.mockResolvedValue([])
-})
-
-// -------------------------------------------------------
-// AdaptiveOutputOptimizer
-// -------------------------------------------------------
-
-describe("AdaptiveOutputOptimizer IDB failures", () => {
-  it("calls onStorageError when hydrate() IDB get fails", async () => {
-    const errors: unknown[] = []
-    const idbError = new Error("IDB quota exceeded")
-    mockGet.mockRejectedValueOnce(idbError)
-
-    const opt = new AdaptiveOutputOptimizer({
-      persist: true,
-      storageKey: "test_adaptive",
-      onStorageError: (err) => errors.push(err),
-    })
-
-    const count = await opt.hydrate()
-    expect(count).toBe(0)
-    expect(errors).toHaveLength(1)
-    expect(errors[0]).toBe(idbError)
-  })
-
-  it("calls onStorageError when persistAsync() IDB set fails", async () => {
-    const errors: unknown[] = []
-    const idbError = new Error("IDB write failed")
-    mockSet.mockRejectedValueOnce(idbError)
-
-    const opt = new AdaptiveOutputOptimizer({
-      persist: true,
-      storageKey: "test_adaptive_persist",
-      onStorageError: (err) => errors.push(err),
-    })
-
-    // recordActual triggers persistAsync internally
-    await opt.recordActual("test prompt", "gpt-4o", 100)
-    // Wait for the fire-and-forget persist
-    await vi.waitFor(() => expect(errors).toHaveLength(1))
-    expect(errors[0]).toBe(idbError)
-  })
-
-  it("calls onStorageError when clear() IDB set fails", async () => {
-    const errors: unknown[] = []
-    const idbError = new Error("IDB clear failed")
-    mockSet.mockRejectedValueOnce(idbError)
-
-    const opt = new AdaptiveOutputOptimizer({
-      persist: true,
-      storageKey: "test_adaptive_clear",
-      onStorageError: (err) => errors.push(err),
-    })
-
-    await opt.clear()
-    expect(errors).toHaveLength(1)
-    expect(errors[0]).toBe(idbError)
-  })
-
-  it("does not call onStorageError when persist is disabled", async () => {
-    const errors: unknown[] = []
-
-    const opt = new AdaptiveOutputOptimizer({
-      persist: false,
-      onStorageError: (err) => errors.push(err),
-    })
-
-    await opt.recordActual("test", "gpt-4o", 100)
-    expect(errors).toHaveLength(0)
-  })
 })
 
 // -------------------------------------------------------

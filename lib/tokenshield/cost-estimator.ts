@@ -101,8 +101,9 @@ export function estimateCost(
 ): CostEstimate {
   const model = MODEL_PRICING[modelId]
   if (!model) {
+    const modelCount = Object.keys(MODEL_PRICING).length
     throw new TokenShieldConfigError(
-      `Unknown model: ${modelId}. Available: ${Object.keys(MODEL_PRICING).join(", ")}`,
+      `Unknown model: "${modelId}". ${modelCount} models available — use MODEL_PRICING to list them, or use safeCost() for automatic fallback pricing.`,
     )
   }
 

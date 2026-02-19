@@ -134,7 +134,7 @@ const TIME_SENSITIVE_PATTERNS: RegExp[] = [
   /\b(schedule|upcoming|next game|when does)\b/i,
   /\b(election|poll|vote|ballot)\b.*\b(result|count|update)\b/i,
   /\b(status|outage|incident|downtime)\b/i,
-  /\b(20\d{2})\b/i, // Year references often indicate time-sensitivity
+  /\b(202\d|203\d)\b/i, // Recent/future year references indicate time-sensitivity (2020-2039)
 ]
 
 /**
@@ -617,6 +617,41 @@ export class ResponseCache {
       totalLookups: this.totalLookups,
       hitRate: this.totalLookups > 0 ? this.totalHits / this.totalLookups : 0,
     }
+  }
+
+  /**
+   * List all cached entries (read-only snapshots).
+   * Useful for debugging, inspection, and building cache management UIs.
+   * Excludes expired entries.
+   */
+  entries(): CacheEntry[] {
+    const result: CacheEntry[] = []
+    for (const entry of this.memoryCache.values()) {
+      if (!this.isExpired(entry)) {
+        result.push({ ...entry })
+      }
+    }
+    return result.sort((a, b) => b.lastAccessed - a.lastAccessed)
+  }
+
+  /**
+   * Invalidate (remove) a specific cached entry by its exact prompt text and model.
+   * Returns true if an entry was found and removed, false otherwise.
+   */
+  async invalidate(prompt: string, model: string): Promise<boolean> {
+    const key = hashKey(prompt, model)
+    const existed = this.memoryCache.has(key)
+    this.memoryCache.delete(key)
+
+    const store = this.getStore()
+    if (store) {
+      try {
+        await del(key, store)
+      } catch {
+        // IDB not available
+      }
+    }
+    return existed
   }
 
   /**

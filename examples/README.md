@@ -32,7 +32,7 @@ You can run the demo locally (see below) or browse the code in `examples/interac
 ## 🧪 What's Included?
 
 1. **Cost Simulator:** Click to send requests and see "Cache Hits" vs "API Calls".
-2. **Real-time Ledger:** Watch your savings grow as the semantic cache kicks in.
+2. **Real-time Ledger:** Watch your savings grow as the fuzzy cache kicks in.
 3. **Latency Comparison:** See the difference between <5ms middleware and 450ms API calls.
 
 ## StackBlitz

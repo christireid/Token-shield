@@ -8,9 +8,9 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains-mono" })
 
 export const metadata: Metadata = {
-  title: "TokenShield SDK - Save 80% on AI Token Costs",
+  title: "TokenShield SDK - Reduce AI Token Costs",
   description:
-    "A frontend-only TypeScript SDK with 11 modules that reduces LLM API expenses by 60-80%. Token counting, context management, semantic caching, model routing, tool token overhead analysis, vision cost estimation, output prediction, streaming abort tracking, request guards, prefix optimization, and cost circuit breakers.",
+    "A frontend-only TypeScript SDK that reduces LLM API expenses through fuzzy caching, prompt compression, context management, model routing, budget enforcement, and cost tracking. Works with Vercel AI SDK, OpenAI, and Anthropic.",
   manifest: "/manifest.json",
 }
 

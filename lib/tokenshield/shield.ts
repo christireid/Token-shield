@@ -36,7 +36,7 @@ import type { StorageBackend } from "./storage-adapter"
  * Boolean flags enable modules with sensible defaults.
  */
 export interface ShieldConfig {
-  /** Enable semantic response caching (default: true) */
+  /** Enable fuzzy response caching (default: true) */
   cache?: boolean
   /** Enable prompt compression and delta encoding (default: true) */
   compression?: boolean

@@ -104,11 +104,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tokenshield/ai-sdk.git"
+    "url": "https://github.com/christireid/Token-shield.git"
   },
-  "homepage": "https://github.com/tokenshield/ai-sdk#readme",
+  "homepage": "https://github.com/christireid/Token-shield#readme",
   "bugs": {
-    "url": "https://github.com/tokenshield/ai-sdk/issues"
+    "url": "https://github.com/christireid/Token-shield/issues"
   },
   "peerDependencies": {
     "ai": ">=3.0.0",
@@ -123,7 +123,7 @@
       "optional": true
     },
     "ai": {
-      "optional": true
+      "optional": false
     }
   },
   "dependencies": {
@@ -146,6 +146,7 @@
     "husky": "^9.1.7",
     "jsdom": "^28.1.0",
     "lint-staged": "^16.2.7",
+    "llm-info": "^1.0.0",
     "npm-run-all2": "^8.0.4",
     "prettier": "^3.8.1",
     "react": "^19",

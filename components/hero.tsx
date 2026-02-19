@@ -66,7 +66,7 @@ export function Hero() {
 
         {/* Description */}
         <p className="mt-4 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg sm:leading-relaxed">
-          Drop-in middleware that reduces AI API costs through semantic caching, prompt compression,
+          Drop-in middleware that reduces AI API costs through fuzzy caching, prompt compression,
           and budget enforcement. Three lines of code. Works with Vercel AI SDK, OpenAI, and
           Anthropic.
         </p>

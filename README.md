@@ -45,7 +45,7 @@ That's it. Caching, compression, and cost tracking are on by default.
 
 Token Shield reduces costs using three safe techniques:
 
-- **Semantic caching** — near-identical prompts return cached responses
+- **Fuzzy caching** — near-identical prompts return cached responses (lexical similarity, not embeddings)
 - **Prompt compression** — removes redundancy from conversations
 - **Cost tracking** — real-time spend and savings attribution
 
@@ -171,12 +171,12 @@ The main `@tokenshield/ai-sdk` barrel exports ~10 things. Everything else lives 
 
 ## Architecture: Middleware vs. Gateway
 
-|                  | Token Shield             | Gateway (Helicone, etc.)     |
-| :--------------- | :----------------------- | :--------------------------- |
-| **Architecture** | In-process middleware    | Network proxy                |
-| **Latency**      | < 5ms overhead           | 50-200ms per request         |
-| **Lock-in**      | Delete 3 lines to remove | Redeploy infrastructure      |
-| **Data privacy** | Data stays in your infra | Data flows through 3rd party |
+|                  | Token Shield                                                   | Gateway (Helicone, etc.)           |
+| :--------------- | :------------------------------------------------------------- | :--------------------------------- |
+| **Architecture** | In-process middleware                                          | Network proxy                      |
+| **Latency**      | < 5ms overhead (in-memory path, not independently benchmarked) | Additional network hop per request |
+| **Lock-in**      | Delete 3 lines to remove                                       | Redeploy infrastructure            |
+| **Data privacy** | Data stays in your infra                                       | Data flows through 3rd party       |
 
 **What gateways do better:** Team-wide dashboards, centralized logging, managed infrastructure, cross-service cache sharing. Token Shield is client-side — it can't replace server-side observability.
 
@@ -186,13 +186,13 @@ The main `@tokenshield/ai-sdk` barrel exports ~10 things. Everything else lives 
 
 Savings depend entirely on your workload. Here's what each module can contribute:
 
-| Module               | How it saves                                          | Depends on                                                                            |
-| :------------------- | :---------------------------------------------------- | :------------------------------------------------------------------------------------ |
-| **Response Cache**   | Serves cached responses for duplicate/similar prompts | Duplicate rate in your traffic (0% for unique prompts, 30%+ for FAQ bots)             |
-| **Model Router**     | Routes simple queries to cheaper models               | % of queries that are simple (opt-in, heuristic-based — validate with `dryRun` first) |
-| **Prefix Optimizer** | Triggers provider-side prompt caching                 | System prompt stability, provider discount rates                                      |
-| **Request Guard**    | Blocks duplicate rapid-fire requests                  | User behavior (double-clicks, retries)                                                |
-| **Context Manager**  | Trims conversation history to fit token budgets       | Average conversation length                                                           |
+| Module               | How it saves                                                                              | Depends on                                                                            |
+| :------------------- | :---------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------ |
+| **Response Cache**   | Serves cached responses for duplicate/near-duplicate prompts (bigram similarity matching) | Duplicate rate in your traffic (0% for unique prompts, 30%+ for FAQ bots)             |
+| **Model Router**     | Routes simple queries to cheaper models                                                   | % of queries that are simple (opt-in, heuristic-based — validate with `dryRun` first) |
+| **Prefix Optimizer** | Triggers provider-side prompt caching                                                     | System prompt stability, provider discount rates                                      |
+| **Request Guard**    | Blocks duplicate rapid-fire requests                                                      | User behavior (double-clicks, retries)                                                |
+| **Context Manager**  | Trims conversation history to fit token budgets                                           | Average conversation length                                                           |
 
 We have not yet validated these estimates against production deployments. Run `getStats()` on your own traffic to measure actual savings.
 

@@ -470,7 +470,8 @@ export class CostLedger {
         })
         .join(","),
     )
-    return [headers.join(","), ...rows].join("\n")
+    const quotedHeaders = headers.map((h) => `"${h}"`).join(",")
+    return [quotedHeaders, ...rows].join("\n")
   }
 
   /**

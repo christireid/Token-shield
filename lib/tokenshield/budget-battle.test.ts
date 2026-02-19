@@ -704,7 +704,7 @@ describe("CostLedger — Battle Tests", () => {
       const csv = ledger.exportCSV()
       const lines = csv.split("\n")
 
-      expect(lines[0]).toContain("id,timestamp,model,inputTokens")
+      expect(lines[0]).toContain('"id","timestamp","model","inputTokens"')
       expect(lines).toHaveLength(3) // header + 2 rows
     })
 

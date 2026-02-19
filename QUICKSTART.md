@@ -39,7 +39,7 @@ const middleware = shield()
 
 // With budget enforcement
 const middleware = shield({
-  cache: true, // Semantic response caching (default: true)
+  cache: true, // Fuzzy response caching (default: true)
   compression: true, // Prompt compression (default: true)
   trackCosts: true, // Cost ledger (default: true)
   guard: true, // Rate limiting, dedup (default: true)

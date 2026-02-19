@@ -65,7 +65,7 @@ export default function TokenShieldDemo() {
         <header className="text-center">
           <h1 className="text-3xl font-bold text-blue-600">Token Shield Interactive Demo</h1>
           <p className="text-gray-600 mt-2">
-            Real semantic caching via{" "}
+            Real fuzzy caching via{" "}
             <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm">ResponseCache</code>. Try
             rephrasing a prompt to see fuzzy matching in action.
           </p>
