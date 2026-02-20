@@ -11,7 +11,15 @@
  * npm dependencies: idb-keyval
  */
 
-import { get, set, del, keys, createStore, type StorageBackend } from "./storage-adapter"
+import {
+  get,
+  set,
+  del,
+  keys,
+  clear as clearStore,
+  createStore,
+  type StorageBackend,
+} from "./storage-adapter"
 import { FuzzySimilarityEngine } from "./fuzzy-similarity"
 
 /**
@@ -233,6 +241,10 @@ class BackendStoreAdapter {
 
   async delItem(key: string): Promise<void> {
     await this.backend.del(key)
+  }
+
+  async clear(): Promise<void> {
+    await this.backend.clear()
   }
 }
 
@@ -678,10 +690,7 @@ export class ResponseCache {
     try {
       const store = this.getStore()
       if (!store) return
-      const allKeys = (await keys(store)) as string[]
-      for (const key of allKeys) {
-        await del(key, store)
-      }
+      await clearStore(store)
     } catch {
       // IDB not available
     }

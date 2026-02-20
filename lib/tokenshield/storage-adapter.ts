@@ -78,6 +78,10 @@ class MemoryStore {
   keys(): string[] {
     return Array.from(this.data.keys())
   }
+
+  clear(): void {
+    this.data.clear()
+  }
 }
 
 // Singleton fallback stores keyed by "dbName:storeName"
@@ -169,6 +173,24 @@ export async function del(key: string, store?: StoreHandle): Promise<void> {
     return store ? idb.del(key, store) : idb.del(key)
   }
   getMemoryStore("default", "default").del(key)
+}
+
+export async function clear(store?: StoreHandle): Promise<void> {
+  if (store && typeof store.clear === "function" && !(store instanceof MemoryStore)) {
+    // BackendStoreAdapter or idb-keyval store with native clear()
+    await store.clear()
+    return
+  }
+  if (store instanceof MemoryStore) {
+    store.clear()
+    return
+  }
+  if (isIndexedDBAvailable()) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const idb = require("idb-keyval")
+    return store ? idb.clear(store) : idb.clear()
+  }
+  getMemoryStore("default", "default").clear()
 }
 
 export async function keys(store?: StoreHandle): Promise<string[]> {

@@ -70,33 +70,33 @@
 
 ## Phase 2: MASTER PROBLEM INDEX (Prioritized)
 
-### CRITICAL (must fix before any publish)
+### CRITICAL (must fix before any publish) — ALL RESOLVED
 
-| #   | Problem                                     | File                                                                      | Impact                        |
-| --- | ------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------- |
-| C1  | package.json URLs point to wrong repository | package.json                                                              | npm listing will link to 404s |
-| C2  | "Semantic caching" claim is inaccurate      | README.md, QUICKSTART.md                                                  | Misleading marketing          |
-| C3  | 3 dead code files bloat bundle              | adaptive-output-optimizer.ts, prompt-template-pool.ts, token-optimizer.ts | Bundle size, confusion        |
+| #   | Problem                                     | File                                                                      | Impact                        | Status  |
+| --- | ------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------- | ------- |
+| C1  | package.json URLs point to wrong repository | package.json                                                              | npm listing will link to 404s | FIXED   |
+| C2  | "Semantic caching" claim is inaccurate      | README.md, QUICKSTART.md                                                  | Misleading marketing          | FIXED   |
+| C3  | 3 dead code files bloat bundle              | adaptive-output-optimizer.ts, prompt-template-pool.ts, token-optimizer.ts | Bundle size, confusion        | DELETED |
 
-### HIGH (should fix)
+### HIGH (should fix) — ALL RESOLVED
 
-| #   | Problem                                | File              | Impact                                               |
-| --- | -------------------------------------- | ----------------- | ---------------------------------------------------- |
-| H1  | `ai` peer dep marked optional          | package.json      | Confusing DX on install                              |
-| H2  | `llm-info` not in devDependencies      | package.json      | validate-pricing script fails on clean install       |
-| H3  | No react barrel file                   | Missing react.ts  | ./react export may not build                         |
-| H4  | CSV header row not quoted              | cost-ledger.ts    | Inconsistent with data rows                          |
-| H5  | estimateCost error dumps all model IDs | cost-estimator.ts | Noisy error for users with custom models             |
-| H6  | Year regex too broad                   | response-cache.ts | "year 2000" incorrectly classified as time-sensitive |
+| #   | Problem                                | File              | Impact                                               | Status                  |
+| --- | -------------------------------------- | ----------------- | ---------------------------------------------------- | ----------------------- |
+| H1  | `ai` peer dep marked optional          | package.json      | Confusing DX on install                              | FIXED                   |
+| H2  | `llm-info` not in devDependencies      | package.json      | validate-pricing script fails on clean install       | FIXED                   |
+| H3  | No react barrel file                   | Missing react.ts  | ./react export may not build                         | N/A (react.tsx existed) |
+| H4  | CSV header row not quoted              | cost-ledger.ts    | Inconsistent with data rows                          | FIXED                   |
+| H5  | estimateCost error dumps all model IDs | cost-estimator.ts | Noisy error for users with custom models             | FIXED                   |
+| H6  | Year regex too broad                   | response-cache.ts | "year 2000" incorrectly classified as time-sensitive | FIXED                   |
 
-### MEDIUM (improve quality)
+### MEDIUM (improve quality) — ALL RESOLVED
 
-| #   | Problem                                                | File              | Impact                          |
-| --- | ------------------------------------------------------ | ----------------- | ------------------------------- |
-| M1  | Module-level complexityCache leaks across tests        | model-router.ts   | Test isolation                  |
-| M2  | ResponseCache clear() deletes keys one by one          | response-cache.ts | Performance on large caches     |
-| M3  | No cache listing/invalidation API                      | response-cache.ts | Power users can't inspect cache |
-| M4  | Architecture comparison lacks source for latency claim | README.md         | Credibility                     |
+| #   | Problem                                                | File              | Impact                          | Status |
+| --- | ------------------------------------------------------ | ----------------- | ------------------------------- | ------ |
+| M1  | Module-level complexityCache leaks across tests        | model-router.ts   | Test isolation                  | FIXED  |
+| M2  | ResponseCache clear() deletes keys one by one          | response-cache.ts | Performance on large caches     | FIXED  |
+| M3  | No cache listing/invalidation API                      | response-cache.ts | Power users can't inspect cache | FIXED  |
+| M4  | Architecture comparison lacks source for latency claim | README.md         | Credibility                     | FIXED  |
 
 ---
 

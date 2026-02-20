@@ -54,6 +54,14 @@
 4. `docs/MASTER_AUDIT.md` — 9-perspective critique + remediation plan
 5. `docs/BEFORE_AFTER_DIFF.md` — This file
 
+## Changes Summary (continued)
+
+| Area                             | Before                                          | After                                                                   |
+| -------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------- |
+| `complexityCache` test isolation | Module-level Map leaks state across test suites | `resetComplexityCache()` exported for test teardown                     |
+| `ResponseCache.clear()` IDB perf | Fetches all keys then deletes one by one        | Uses bulk `clear()` via storage adapter                                 |
+| `storage-adapter.ts` API         | No `clear()` function                           | Added `clear()` for bulk store wipe (MemoryStore, IDB, custom backends) |
+
 ## Test Results
 
 - **Before**: 71 test files, 1382 tests
@@ -61,3 +69,4 @@
 - **Delta**: -3 test files (dead code), -44 tests (dead code tests removed)
 - **All 1338 tests PASS**
 - **Typecheck: CLEAN**
+- **All 13 CRITICAL/HIGH/MEDIUM audit items: RESOLVED**

@@ -132,6 +132,15 @@ const MAX_CACHEABLE_PROMPT_LENGTH = 10_000
 const complexityCache = new Map<string, ComplexityScore>()
 
 /**
+ * Reset the module-level complexity cache.
+ * Call this in test teardown (e.g. `afterEach`) to prevent state leaking
+ * between test suites. Not needed in production code.
+ */
+export function resetComplexityCache(): void {
+  complexityCache.clear()
+}
+
+/**
  * Analyze a prompt and return measurable complexity signals with a composite score.
  *
  * Every signal is computed from the actual text — no guessing. The composite

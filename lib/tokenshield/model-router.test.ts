@@ -1,7 +1,11 @@
-import { describe, it, expect } from "vitest"
-import { analyzeComplexity, routeToModel, rankModels } from "./model-router"
+import { describe, it, expect, afterEach } from "vitest"
+import { analyzeComplexity, routeToModel, rankModels, resetComplexityCache } from "./model-router"
 
 describe("model-router", () => {
+  afterEach(() => {
+    resetComplexityCache()
+  })
+
   describe("analyzeComplexity", () => {
     it("scores a trivial prompt low", () => {
       const result = analyzeComplexity("What is 2+2?")
