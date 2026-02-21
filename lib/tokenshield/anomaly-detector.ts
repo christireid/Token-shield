@@ -47,7 +47,13 @@ export interface AnomalyConfig {
 }
 
 export interface AnomalyEvent {
-  type: "cost_spike" | "token_spike" | "cost_rate_change" | "token_rate_change" | "cost_percentile" | "token_percentile"
+  type:
+    | "cost_spike"
+    | "token_spike"
+    | "cost_rate_change"
+    | "token_rate_change"
+    | "cost_percentile"
+    | "token_percentile"
   value: number
   mean: number
   deviation: number
@@ -85,7 +91,7 @@ export class AnomalyDetector {
     this.windowSize = config.windowSize ?? 20
     this.sensitivity = config.sensitivity ?? 3.0
     this.minCostThreshold = config.minCostThreshold ?? 0.01
-    this.ignoreBelowCost = config.ignoreBelowCost ?? 0.10
+    this.ignoreBelowCost = config.ignoreBelowCost ?? 0.1
     this.ewmaAlpha = config.ewmaAlpha ?? 0.3
     this.rateOfChangeThreshold = config.rateOfChangeThreshold ?? 3.0
     this.percentileThreshold = config.percentileThreshold ?? 95
@@ -107,7 +113,7 @@ export class AnomalyDetector {
         "cost_spike",
         "cost_rate_change",
         "cost_percentile",
-        this.ignoreBelowCost
+        this.ignoreBelowCost,
       )
       if (costAnomaly) anomalies.push(costAnomaly)
 
@@ -117,7 +123,7 @@ export class AnomalyDetector {
         this.costEwma,
         this.costEwmaVar,
         "cost_spike",
-        this.ignoreBelowCost
+        this.ignoreBelowCost,
       )
       if (ewmaCostAnomaly) anomalies.push(ewmaCostAnomaly)
 
@@ -156,7 +162,7 @@ export class AnomalyDetector {
         "token_spike",
         "token_rate_change",
         "token_percentile",
-        0
+        0,
       )
       if (tokenAnomaly) anomalies.push(tokenAnomaly)
 
@@ -166,7 +172,7 @@ export class AnomalyDetector {
         this.tokenEwma,
         this.tokenEwmaVar,
         "token_spike",
-        0
+        0,
       )
       if (ewmaTokenAnomaly) anomalies.push(ewmaTokenAnomaly)
 
@@ -206,7 +212,12 @@ export class AnomalyDetector {
   }
 
   /** Get current EWMA baselines for monitoring dashboards */
-  getBaselines(): { costEwma: number | null; tokenEwma: number | null; costHistory: number; tokenHistory: number } {
+  getBaselines(): {
+    costEwma: number | null
+    tokenEwma: number | null
+    costHistory: number
+    tokenHistory: number
+  } {
     return {
       costEwma: this.costEwma,
       tokenEwma: this.tokenEwma,
@@ -235,7 +246,7 @@ export class AnomalyDetector {
     spikeType: AnomalyEvent["type"],
     _rateType: AnomalyEvent["type"],
     percentileType: AnomalyEvent["type"],
-    minAbsoluteValue: number
+    minAbsoluteValue: number,
   ): AnomalyEvent | null {
     const stats = this.calculateStats(history)
     const minSamples = Math.min(5, this.windowSize)
@@ -288,7 +299,7 @@ export class AnomalyDetector {
     ewma: number | null,
     ewmaVar: number | null,
     spikeType: AnomalyEvent["type"],
-    minAbsoluteValue: number
+    minAbsoluteValue: number,
   ): AnomalyEvent | null {
     if (this.ewmaAlpha <= 0 || ewma === null || ewmaVar === null) return null
 
@@ -314,7 +325,11 @@ export class AnomalyDetector {
     return null
   }
 
-  private updateEwma(value: number, currentEwma: number | null, currentVar: number | null): { ewma: number; ewmaVar: number } {
+  private updateEwma(
+    value: number,
+    currentEwma: number | null,
+    currentVar: number | null,
+  ): { ewma: number; ewmaVar: number } {
     if (!isFinite(value)) return { ewma: currentEwma ?? 0, ewmaVar: currentVar ?? 0 }
 
     if (currentEwma === null || currentVar === null) {

@@ -210,7 +210,10 @@ describe("fetchLatestPricing", () => {
       force: true,
     })
     // Should not have URL validation errors; may have fetch errors
-    const urlErrors = result.errors.filter((e) => e.includes("not in the allowed list") || e.includes("Invalid URL") || e.includes("HTTPS"))
+    const urlErrors = result.errors.filter(
+      (e) =>
+        e.includes("not in the allowed list") || e.includes("Invalid URL") || e.includes("HTTPS"),
+    )
     expect(urlErrors.length).toBe(0)
   })
 
@@ -221,7 +224,10 @@ describe("fetchLatestPricing", () => {
       force: true,
     })
     // Should not have URL validation errors
-    const urlErrors = result.errors.filter((e) => e.includes("not in the allowed list") || e.includes("Invalid URL") || e.includes("HTTPS"))
+    const urlErrors = result.errors.filter(
+      (e) =>
+        e.includes("not in the allowed list") || e.includes("Invalid URL") || e.includes("HTTPS"),
+    )
     expect(urlErrors.length).toBe(0)
   })
 })

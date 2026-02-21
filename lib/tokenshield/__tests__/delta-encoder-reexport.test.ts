@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest"
-import {
-  encodeDelta,
-  analyzeRedundancy,
-  type DeltaEncoderConfig,
-  type DeltaResult,
-} from "../delta-encoder"
+import { encodeDelta, analyzeRedundancy, type DeltaResult } from "../delta-encoder"
 import {
   encodeDelta as originalEncodeDelta,
   analyzeRedundancy as originalAnalyzeRedundancy,

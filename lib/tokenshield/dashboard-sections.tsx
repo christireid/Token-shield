@@ -21,7 +21,7 @@ import {
 import type { CostCircuitBreaker } from "./circuit-breaker"
 import type { UserBudgetManager } from "./user-budget-manager"
 import type { ProviderAdapter } from "./provider-adapter"
-import type { AuditLog, AuditEntry, AuditSeverity, AuditEventType } from "./audit-log"
+import type { AuditLog, AuditSeverity, AuditEventType } from "./audit-log"
 
 // -------------------------------------------------------
 // Utility functions
@@ -638,7 +638,15 @@ export function SavingsAttributionSection({ attribution }: { attribution: Saving
       </h3>
 
       {/* Stacked bar */}
-      <div style={{ display: "flex", height: 12, borderRadius: 6, overflow: "hidden", marginBottom: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          height: 12,
+          borderRadius: 6,
+          overflow: "hidden",
+          marginBottom: 12,
+        }}
+      >
         {entries.map(([module, value]) => (
           <div
             key={module}
@@ -730,7 +738,14 @@ export function AuditLogSection({ auditLog }: { auditLog: AuditLog }) {
 
   return (
     <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 16 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 12,
+        }}
+      >
         <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>
           Audit Log ({auditLog.size} entries)
           {integrity.valid ? (
@@ -745,8 +760,12 @@ export function AuditLogSection({ auditLog }: { auditLog: AuditLog }) {
           <button
             onClick={handleExportJSON}
             style={{
-              padding: "4px 8px", fontSize: 11, border: "1px solid #d1d5db",
-              borderRadius: 4, background: "#fff", cursor: "pointer",
+              padding: "4px 8px",
+              fontSize: 11,
+              border: "1px solid #d1d5db",
+              borderRadius: 4,
+              background: "#fff",
+              cursor: "pointer",
             }}
           >
             JSON
@@ -754,8 +773,12 @@ export function AuditLogSection({ auditLog }: { auditLog: AuditLog }) {
           <button
             onClick={handleExportCSV}
             style={{
-              padding: "4px 8px", fontSize: 11, border: "1px solid #d1d5db",
-              borderRadius: 4, background: "#fff", cursor: "pointer",
+              padding: "4px 8px",
+              fontSize: 11,
+              border: "1px solid #d1d5db",
+              borderRadius: 4,
+              background: "#fff",
+              cursor: "pointer",
             }}
           >
             CSV

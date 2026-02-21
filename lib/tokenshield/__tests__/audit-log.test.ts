@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
-import { AuditLog, type AuditEntry, type AuditLogConfig } from "../audit-log"
+import { AuditLog, type AuditEntry } from "../audit-log"
 
 describe("AuditLog", () => {
   let log: AuditLog
@@ -230,7 +230,11 @@ describe("AuditLog", () => {
     it("logModelRouted records model_routed event", () => {
       const entry = log.logModelRouted("gpt-4o", "gpt-4o-mini", "complexity")
       expect(entry.eventType).toBe("model_routed")
-      expect(entry.data).toEqual({ fromModel: "gpt-4o", toModel: "gpt-4o-mini", reason: "complexity" })
+      expect(entry.data).toEqual({
+        fromModel: "gpt-4o",
+        toModel: "gpt-4o-mini",
+        reason: "complexity",
+      })
     })
 
     it("logConfigChanged records config_changed event", () => {
@@ -351,12 +355,16 @@ describe("AuditLog", () => {
       log.logApiCall("gpt-4o", 1000, 500, 0.01)
       const csv = log.exportCSV()
       const lines = csv.split("\n")
-      expect(lines[0]).toBe("seq,timestamp,eventType,severity,module,userId,model,description,data,hash")
+      expect(lines[0]).toBe(
+        "seq,timestamp,eventType,severity,module,userId,model,description,data,hash",
+      )
       expect(lines).toHaveLength(2) // header + 1 entry
     })
 
     it("handles commas and quotes in data", () => {
-      log.record("api_call", "info", "test", 'Description with "quotes" and, commas', { key: "value" })
+      log.record("api_call", "info", "test", 'Description with "quotes" and, commas', {
+        key: "value",
+      })
       const csv = log.exportCSV()
       // Should have escaped quotes
       expect(csv).toContain('""')

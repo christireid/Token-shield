@@ -59,9 +59,7 @@ describe("conversation-delta-encoder", () => {
     })
 
     it("should not deduplicate short paragraphs", () => {
-      const messages = [
-        { role: "user", content: "Hello there.\n\nHello there." },
-      ]
+      const messages = [{ role: "user", content: "Hello there.\n\nHello there." }]
 
       const result = encodeDelta(messages, { minParagraphLength: 50 })
       // Short paragraphs should not be deduped
@@ -76,9 +74,7 @@ describe("conversation-delta-encoder", () => {
     })
 
     it("should respect minSavingsTokens threshold", () => {
-      const messages = [
-        { role: "user", content: "Hello, how are you?" },
-      ]
+      const messages = [{ role: "user", content: "Hello, how are you?" }]
 
       const result = encodeDelta(messages, { minSavingsTokens: 100 })
       expect(result.applied).toBe(false)
@@ -89,10 +85,15 @@ describe("conversation-delta-encoder", () => {
     it("should not enter quote compaction path when compactQuotes is disabled", () => {
       // Regression: operator precedence bug meant paragraphs starting with '"'
       // would always enter quote compaction regardless of config flag
-      const longQuote = '"The quick brown fox jumps over the lazy dog. This sentence is used for testing purposes and contains enough text to qualify for dedup analysis."'
+      const longQuote =
+        '"The quick brown fox jumps over the lazy dog. This sentence is used for testing purposes and contains enough text to qualify for dedup analysis."'
 
       const messages = [
-        { role: "assistant", content: "The quick brown fox jumps over the lazy dog. This sentence is used for testing purposes and contains enough text to qualify for dedup analysis." },
+        {
+          role: "assistant",
+          content:
+            "The quick brown fox jumps over the lazy dog. This sentence is used for testing purposes and contains enough text to qualify for dedup analysis.",
+        },
         { role: "user", content: `${longQuote}\n\nWhat do you think about this?` },
       ]
 

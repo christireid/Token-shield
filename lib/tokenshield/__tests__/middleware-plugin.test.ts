@@ -76,12 +76,16 @@ describe("middleware-plugin", () => {
       registerPlugin({
         name: "p1",
         version: "1.0.0",
-        init: () => { calls.push("p1") },
+        init: () => {
+          calls.push("p1")
+        },
       })
       registerPlugin({
         name: "p2",
         version: "1.0.0",
-        init: () => { calls.push("p2") },
+        init: () => {
+          calls.push("p2")
+        },
       })
 
       const ctx: PluginContext = {
@@ -99,7 +103,9 @@ describe("middleware-plugin", () => {
       registerPlugin({
         name: "with-cleanup",
         version: "1.0.0",
-        init: () => () => { cleanupCalled.push("cleaned") },
+        init: () => () => {
+          cleanupCalled.push("cleaned")
+        },
       })
 
       const ctx: PluginContext = {
@@ -121,7 +127,9 @@ describe("middleware-plugin", () => {
         version: "1.0.0",
         init: () => {},
         events: {
-          "cache:hit": (data) => { received.push(data) },
+          "cache:hit": (data) => {
+            received.push(data)
+          },
         },
       })
 
@@ -148,7 +156,9 @@ describe("middleware-plugin", () => {
       registerPlugin({
         name: "bad-plugin",
         version: "1.0.0",
-        init: () => { throw new Error("init failed") },
+        init: () => {
+          throw new Error("init failed")
+        },
       })
       registerPlugin({
         name: "good-plugin",

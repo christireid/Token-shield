@@ -12,7 +12,7 @@
  * - Summarization hook: replace old messages with a summary
  */
 
-import { countTokens, encode, decode } from "gpt-tokenizer"
+import { countTokens } from "gpt-tokenizer"
 
 export interface Message {
   role: "system" | "user" | "assistant" | "tool"
@@ -85,19 +85,13 @@ function messageTokens(msg: Message): number {
  * // result.evictedCount — number of messages dropped
  * ```
  */
-export function fitToBudget(
-  messages: Message[],
-  budget: ContextBudget
-): ContextResult {
-  const inputBudget = budget.maxContextTokens - budget.reservedForOutput - (budget.toolTokenOverhead ?? 0)
+export function fitToBudget(messages: Message[], budget: ContextBudget): ContextResult {
+  const inputBudget =
+    budget.maxContextTokens - budget.reservedForOutput - (budget.toolTokenOverhead ?? 0)
 
   // Separate pinned (system) messages from the rest
-  const pinned = messages.filter(
-    (m) => m.pinned || m.role === "system"
-  )
-  const unpinned = messages.filter(
-    (m) => !m.pinned && m.role !== "system"
-  )
+  const pinned = messages.filter((m) => m.pinned || m.role === "system")
+  const unpinned = messages.filter((m) => !m.pinned && m.role !== "system")
 
   // Count pinned tokens first
   let pinnedTokens = 0
@@ -159,10 +153,7 @@ export function fitToBudget(
  * // result.evictedCount — messages dropped from the front
  * ```
  */
-export function slidingWindow(
-  messages: Message[],
-  maxMessages: number
-): ContextResult {
+export function slidingWindow(messages: Message[], maxMessages: number): ContextResult {
   const safeMax = Math.max(0, Math.floor(maxMessages))
   const system = messages.filter((m) => m.role === "system")
   const nonSystem = messages.filter((m) => m.role !== "system")
@@ -210,11 +201,9 @@ export function slidingWindow(
  * // High-priority messages are kept even if older
  * ```
  */
-export function priorityFit(
-  messages: Message[],
-  budget: ContextBudget
-): ContextResult {
-  const inputBudget = budget.maxContextTokens - budget.reservedForOutput - (budget.toolTokenOverhead ?? 0)
+export function priorityFit(messages: Message[], budget: ContextBudget): ContextResult {
+  const inputBudget =
+    budget.maxContextTokens - budget.reservedForOutput - (budget.toolTokenOverhead ?? 0)
   const system = messages.filter((m) => m.role === "system")
   const nonSystem = messages.filter((m) => m.role !== "system")
 
@@ -280,9 +269,7 @@ export function priorityFit(
  * // summary.content starts with "Previous conversation summary:\n"
  * ```
  */
-export function createSummaryMessage(
-  evictedMessages: Message[]
-): Message {
+export function createSummaryMessage(evictedMessages: Message[]): Message {
   if (evictedMessages.length === 0) {
     return {
       role: "system",
@@ -320,7 +307,9 @@ export function createSummaryMessage(
     } else if (msg.role === "tool") {
       // Tool results — note them briefly
       if (currentTurn) {
-        currentTurn.keyPoints.push(`Tool result: ${content.slice(0, 60)}${content.length > 60 ? "..." : ""}`)
+        currentTurn.keyPoints.push(
+          `Tool result: ${content.slice(0, 60)}${content.length > 60 ? "..." : ""}`,
+        )
       }
     }
   }
@@ -424,9 +413,12 @@ function extractKeyPoints(content: string): string[] {
   for (const s of sentences.slice(1)) {
     const lower = s.toLowerCase()
     if (
-      lower.startsWith("in summary") || lower.startsWith("in conclusion") ||
-      lower.startsWith("therefore") || lower.startsWith("the key") ||
-      lower.startsWith("the answer") || lower.startsWith("to summarize") ||
+      lower.startsWith("in summary") ||
+      lower.startsWith("in conclusion") ||
+      lower.startsWith("therefore") ||
+      lower.startsWith("the key") ||
+      lower.startsWith("the answer") ||
+      lower.startsWith("to summarize") ||
       lower.startsWith("overall")
     ) {
       if (s.length <= 150) points.push(s.trim())
@@ -452,7 +444,11 @@ function extractEntities(text: string): string[] {
   const matches = capped.match(capitalizedPattern) ?? []
   for (const m of matches) {
     // Skip common sentence starters
-    if (!["The", "This", "That", "These", "Those", "What", "How", "Why", "When", "Where"].some((w) => m.startsWith(w + " "))) {
+    if (
+      !["The", "This", "That", "These", "Those", "What", "How", "Why", "When", "Where"].some((w) =>
+        m.startsWith(w + " "),
+      )
+    ) {
       entities.add(m)
     }
   }
@@ -518,19 +514,13 @@ function extractDecisions(text: string): string[] {
  * }
  * ```
  */
-export function smartFit(
-  messages: Message[],
-  budget: ContextBudget
-): ContextResult {
+export function smartFit(messages: Message[], budget: ContextBudget): ContextResult {
   const result = fitToBudget(messages, budget)
 
   if (result.evictedCount > 0) {
     // Get the evicted messages
     const evictedMessages = messages.filter(
-      (m) =>
-        m.role !== "system" &&
-        !m.pinned &&
-        !result.messages.includes(m)
+      (m) => m.role !== "system" && !m.pinned && !result.messages.includes(m),
     )
 
     if (evictedMessages.length > 0) {
@@ -540,12 +530,8 @@ export function smartFit(
       // Only add summary if it fits in the remaining budget
       if (summaryTokens <= result.budgetRemaining) {
         // Insert summary after system messages, before conversation
-        const systemMsgs = result.messages.filter(
-          (m) => m.role === "system"
-        )
-        const nonSystemMsgs = result.messages.filter(
-          (m) => m.role !== "system"
-        )
+        const systemMsgs = result.messages.filter((m) => m.role === "system")
+        const nonSystemMsgs = result.messages.filter((m) => m.role !== "system")
         result.messages = [...systemMsgs, summaryMsg, ...nonSystemMsgs]
         result.totalTokens += summaryTokens
         result.budgetUsed += summaryTokens

@@ -23,10 +23,12 @@ describe("semantic-minhash", () => {
 
     it("should find similar prompts via LSH bucketing", () => {
       // Use longer prompts with more shared shingles for reliable LSH detection
-      const base = "Please explain in detail the history and significance of the capital city of France including its founding its cultural impact and its role in modern European politics"
+      const base =
+        "Please explain in detail the history and significance of the capital city of France including its founding its cultural impact and its role in modern European politics"
       index.insert(base, "paris")
       // Nearly identical prompt with minor variation
-      const query = "Please explain in detail the history and significance of the capital city of France including its founding its cultural impact and its importance in modern European politics"
+      const query =
+        "Please explain in detail the history and significance of the capital city of France including its founding its cultural impact and its importance in modern European politics"
       const result = index.find(query, 0.3)
       // LSH is probabilistic — with enough shared content it should usually find a match
       // We test that when found, similarity is reasonable
@@ -38,10 +40,7 @@ describe("semantic-minhash", () => {
 
     it("should return null for dissimilar prompts", () => {
       index.insert("What is the capital of France?", "paris")
-      const result = index.find(
-        "Write a Python function to sort a list of integers",
-        0.8
-      )
+      const result = index.find("Write a Python function to sort a list of integers", 0.8)
       expect(result).toBeNull()
     })
 

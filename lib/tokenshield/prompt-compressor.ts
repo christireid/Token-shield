@@ -79,31 +79,69 @@ const DEFAULT_CONFIG: Required<CompressorConfig> = {
 // -------------------------------------------------------
 
 const PROMPT_STOPWORDS = new Set([
-  "please", "kindly", "just", "simply", "basically",
-  "actually", "really", "very", "quite", "rather",
-  "perhaps", "maybe", "possibly", "certainly", "definitely",
-  "honestly", "frankly", "literally", "essentially", "fundamentally",
-  "obviously", "clearly", "evidently", "apparently", "seemingly",
-  "furthermore", "moreover", "additionally", "also",
-  "however", "nevertheless", "nonetheless", "regardless",
-  "therefore", "thus", "hence", "consequently", "accordingly",
-  "in order to", "for the purpose of", "with the aim of",
-  "it is important to note that", "it should be noted that",
-  "as a matter of fact", "in point of fact",
-  "i would like you to", "i want you to", "i need you to",
-  "could you please", "would you please", "can you please",
-  "make sure to", "be sure to", "ensure that you",
+  "please",
+  "kindly",
+  "just",
+  "simply",
+  "basically",
+  "actually",
+  "really",
+  "very",
+  "quite",
+  "rather",
+  "perhaps",
+  "maybe",
+  "possibly",
+  "certainly",
+  "definitely",
+  "honestly",
+  "frankly",
+  "literally",
+  "essentially",
+  "fundamentally",
+  "obviously",
+  "clearly",
+  "evidently",
+  "apparently",
+  "seemingly",
+  "furthermore",
+  "moreover",
+  "additionally",
+  "also",
+  "however",
+  "nevertheless",
+  "nonetheless",
+  "regardless",
+  "therefore",
+  "thus",
+  "hence",
+  "consequently",
+  "accordingly",
+  "in order to",
+  "for the purpose of",
+  "with the aim of",
+  "it is important to note that",
+  "it should be noted that",
+  "as a matter of fact",
+  "in point of fact",
+  "i would like you to",
+  "i want you to",
+  "i need you to",
+  "could you please",
+  "would you please",
+  "can you please",
+  "make sure to",
+  "be sure to",
+  "ensure that you",
 ])
 
 // Multi-word stopwords sorted by length (longest first) to avoid partial matches
 const MULTI_WORD_STOPS = [...PROMPT_STOPWORDS]
-  .filter(s => s.includes(" "))
+  .filter((s) => s.includes(" "))
   .sort((a, b) => b.length - a.length)
 
 // Single-word stopwords
-const SINGLE_WORD_STOPS = new Set(
-  [...PROMPT_STOPWORDS].filter(s => !s.includes(" "))
-)
+const SINGLE_WORD_STOPS = new Set([...PROMPT_STOPWORDS].filter((s) => !s.includes(" ")))
 
 // -------------------------------------------------------
 // Verbose pattern contractions
@@ -174,7 +212,7 @@ interface PreservedBlock {
  */
 function extractPreserved(
   text: string,
-  extraPatterns: RegExp[]
+  extraPatterns: RegExp[],
 ): { text: string; blocks: PreservedBlock[] } {
   const blocks: PreservedBlock[] = []
   let result = text
@@ -310,7 +348,11 @@ function compressRedundancy(text: string): string {
 
   for (const sentence of sentences) {
     // Normalize for comparison (lowercase, no punctuation, collapsed spaces)
-    const normalized = sentence.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim()
+    const normalized = sentence
+      .toLowerCase()
+      .replace(/[^\w\s]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
 
     if (normalized.length < 5) {
       unique.push(sentence) // keep very short fragments
@@ -362,19 +404,22 @@ function compressReferences(text: string): string {
     // Create abbreviation from initials
     const abbrev = entity
       .split(/\s+/)
-      .map(w => w[0])
+      .map((w) => w[0])
       .join("")
       .toUpperCase()
 
     // Replace all mentions after the first with abbreviation
     let firstFound = false
-    result = result.replace(new RegExp(`\\b${entity.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "g"), (m) => {
-      if (!firstFound) {
-        firstFound = true
-        return `${m} (${abbrev})`
-      }
-      return abbrev
-    })
+    result = result.replace(
+      new RegExp(`\\b${entity.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "g"),
+      (m) => {
+        if (!firstFound) {
+          firstFound = true
+          return `${m} (${abbrev})`
+        }
+        return abbrev
+      },
+    )
   }
 
   return result
@@ -408,10 +453,7 @@ function compressReferences(text: string): string {
  * // result.compressed — shorter version preserving all meaning
  * ```
  */
-export function compressPrompt(
-  prompt: string,
-  config: CompressorConfig = {}
-): CompressionResult {
+export function compressPrompt(prompt: string, config: CompressorConfig = {}): CompressionResult {
   const cfg = { ...DEFAULT_CONFIG, ...config }
   const originalTokens = countTokens(prompt)
   const techniques: CompressionResult["techniques"] = []
@@ -465,7 +507,6 @@ export function compressPrompt(
     if (lastTokens - newTokens > 0) {
       techniques.push({ name: "references", tokensSaved: lastTokens - newTokens })
     }
-    lastTokens = newTokens
   }
 
   // Restore preserved blocks
@@ -482,9 +523,10 @@ export function compressPrompt(
   // more lenient floor (0.3) since removing a handful of filler words can legitimately
   // push the ratio below 0.6 without destroying meaning. When the user explicitly
   // sets a custom maxCompressionRatio, always respect it regardless of prompt length.
-  const effectiveFloor = (originalTokens < 50 && cfg.maxCompressionRatio === DEFAULT_CONFIG.maxCompressionRatio)
-    ? 0.3
-    : cfg.maxCompressionRatio
+  const effectiveFloor =
+    originalTokens < 50 && cfg.maxCompressionRatio === DEFAULT_CONFIG.maxCompressionRatio
+      ? 0.3
+      : cfg.maxCompressionRatio
   if (ratio < effectiveFloor) {
     return {
       compressed: prompt, // return original — too much was removed
@@ -521,7 +563,7 @@ export function compressPrompt(
  */
 export function compressMessages(
   messages: { role: string; content: string }[],
-  config: CompressorConfig = {}
+  config: CompressorConfig = {},
 ): {
   messages: { role: string; content: string }[]
   totalSavedTokens: number

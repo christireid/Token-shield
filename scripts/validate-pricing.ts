@@ -53,9 +53,9 @@ const OUR_ID_TO_LLM_INFO: Record<string, string> = {
   "gpt-5-mini": "gpt-5-mini",
   "gpt-5-nano": "gpt-5-nano",
   "gpt-5.2": "gpt-5.2",
-  "o1": "o1",
+  o1: "o1",
   "o1-mini": "o1-mini",
-  "o3": "o3",
+  o3: "o3",
   "o3-mini": "o3-mini",
   "o4-mini": "o4-mini",
   "gpt-4-turbo": "gpt-4-turbo",
@@ -89,7 +89,7 @@ const ERROR_THRESHOLD = 25
 
 function comparePricing(
   ourModels: Record<string, ModelEntry>,
-  llmInfoModels: ModelInfo[]
+  llmInfoModels: ModelInfo[],
 ): { matched: number; skipped: number; diffs: PricingDiff[] } {
   const llmInfoMap = new Map<string, ModelInfo>()
   for (const m of llmInfoModels) {
@@ -185,7 +185,9 @@ function main(): void {
 
   // 2. Load llm-info models
   const llmInfoModels = getAllModelsWithIds()
-  console.log(`\nvalidate-pricing: Comparing ${ourCount} models against llm-info (${llmInfoModels.length} models)\n`)
+  console.log(
+    `\nvalidate-pricing: Comparing ${ourCount} models against llm-info (${llmInfoModels.length} models)\n`,
+  )
 
   // 3. Compare
   const { matched, skipped, diffs } = comparePricing(data.models, llmInfoModels)
@@ -208,14 +210,14 @@ function main(): void {
     const icon = severity === "ERROR" ? "x" : "!"
     console.log(
       `  [${icon}] ${severity}: ${d.ourId} → ${d.field}: ` +
-      `ours=${d.ours}, llm-info=${d.theirs} (${d.driftPercent.toFixed(1)}% drift)`
+        `ours=${d.ours}, llm-info=${d.theirs} (${d.driftPercent.toFixed(1)}% drift)`,
     )
   }
 
   console.log(`\n  ${diffs.length} discrepanc${diffs.length === 1 ? "y" : "ies"} found.`)
   console.log(
     `  Review https://openai.com/api/pricing, https://anthropic.com/pricing, ` +
-    `https://ai.google.dev/pricing to determine which is correct.\n`
+      `https://ai.google.dev/pricing to determine which is correct.\n`,
   )
 
   if (hasErrors) {

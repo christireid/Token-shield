@@ -76,9 +76,7 @@ const DEFAULT_CONFIG: Required<MinHashConfig> = {
  * Generate deterministic hash function coefficients using a seed-based PRNG.
  * Each hash function is h(x) = (a * x + b) mod p, where p is a large prime.
  */
-function generateHashCoefficients(
-  numHashes: number
-): { a: Uint32Array; b: Uint32Array } {
+function generateHashCoefficients(numHashes: number): { a: Uint32Array; b: Uint32Array } {
   const a = new Uint32Array(numHashes)
   const b = new Uint32Array(numHashes)
 
@@ -128,7 +126,7 @@ export class SemanticMinHashIndex<T = unknown> {
 
     if (this.config.numHashes % this.config.bands !== 0) {
       throw new Error(
-        `numHashes (${this.config.numHashes}) must be divisible by bands (${this.config.bands})`
+        `numHashes (${this.config.numHashes}) must be divisible by bands (${this.config.bands})`,
       )
     }
 
@@ -144,7 +142,11 @@ export class SemanticMinHashIndex<T = unknown> {
    * Generate word-level shingles from normalized text.
    */
   private shingle(text: string): Set<number> {
-    const normalized = text.toLowerCase().replace(/[^\w\s]/g, "").replace(/\s+/g, " ").trim()
+    const normalized = text
+      .toLowerCase()
+      .replace(/[^\w\s]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
     const words = normalized.split(" ")
     const shingles = new Set<number>()
 
@@ -166,7 +168,7 @@ export class SemanticMinHashIndex<T = unknown> {
    * Compute the MinHash signature for a set of shingle hashes.
    */
   private computeSignature(shingles: Set<number>): Uint32Array {
-    const sig = new Uint32Array(this.config.numHashes).fill(0xFFFFFFFF)
+    const sig = new Uint32Array(this.config.numHashes).fill(0xffffffff)
     const { a, b } = this.coefficients
 
     for (const shingle of shingles) {

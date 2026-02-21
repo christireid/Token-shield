@@ -76,8 +76,8 @@ const DEFAULT_CONFIG: Required<DeltaEncoderConfig> = {
 function splitParagraphs(text: string): string[] {
   return text
     .split(/\n{2,}/)
-    .map(p => p.trim())
-    .filter(p => p.length > 0)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
 }
 
 /**
@@ -111,11 +111,7 @@ function wordSetSimilarity(a: string, b: string): number {
 /**
  * Check if a text block is a near-duplicate of any paragraph in a reference set.
  */
-function isDuplicate(
-  paragraph: string,
-  referenceSet: Set<string>,
-  threshold: number
-): boolean {
+function isDuplicate(paragraph: string, referenceSet: Set<string>, threshold: number): boolean {
   const normalized = normalizeForComparison(paragraph)
   if (referenceSet.has(normalized)) return true
 
@@ -156,14 +152,11 @@ function isDuplicate(
  */
 export function encodeDelta(
   messages: { role: string; content: string }[],
-  config: DeltaEncoderConfig = {}
+  config: DeltaEncoderConfig = {},
 ): DeltaResult {
   const cfg = { ...DEFAULT_CONFIG, ...config }
 
-  const originalTokens = messages.reduce(
-    (sum, m) => sum + countTokens(m.content),
-    0
-  )
+  const originalTokens = messages.reduce((sum, m) => sum + countTokens(m.content), 0)
 
   // Build a reference set of all paragraphs seen so far (system + assistant + earlier user)
   const seenParagraphs = new Set<string>()
@@ -235,7 +228,6 @@ export function encodeDelta(
       if (cfg.compactQuotes && (para.startsWith(">") || para.startsWith('"'))) {
         const unquoted = para.replace(/^[>"]\s*/gm, "").trim()
         if (unquoted.length >= cfg.minParagraphLength) {
-          const unquotedNorm = normalizeForComparison(unquoted)
           if (isDuplicate(unquoted, seenParagraphs, cfg.paragraphSimilarity)) {
             quotesCompacted++
             keptParagraphs.push("[Referring to previous response]")
@@ -254,10 +246,7 @@ export function encodeDelta(
     }
   })
 
-  const optimizedTokens = optimized.reduce(
-    (sum, m) => sum + countTokens(m.content),
-    0
-  )
+  const optimizedTokens = optimized.reduce((sum, m) => sum + countTokens(m.content), 0)
 
   const savedTokens = originalTokens - optimizedTokens
   const applied = savedTokens >= cfg.minSavingsTokens
@@ -281,9 +270,7 @@ export function encodeDelta(
  * @param messages - The conversation messages to analyze
  * @returns Analysis of potential savings
  */
-export function analyzeRedundancy(
-  messages: { role: string; content: string }[]
-): {
+export function analyzeRedundancy(messages: { role: string; content: string }[]): {
   totalTokens: number
   redundantTokens: number
   redundancyPercent: number
@@ -291,10 +278,7 @@ export function analyzeRedundancy(
   systemOverlaps: number
 } {
   const result = encodeDelta(messages, { minSavingsTokens: 0 })
-  const totalTokens = messages.reduce(
-    (sum, m) => sum + countTokens(m.content),
-    0
-  )
+  const totalTokens = messages.reduce((sum, m) => sum + countTokens(m.content), 0)
 
   return {
     totalTokens,

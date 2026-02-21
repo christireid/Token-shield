@@ -108,10 +108,7 @@ export function createGenericAdapter<
       doGenerate: async () => {
         // Strip the internal AI-SDK `prompt` field before reconstructing user-facing
         // params. `modelId` is kept since it's part of the generic adapter's TParams.
-        const {
-          prompt: _prompt,
-          ...cleanTransformed
-        } = transformed as Record<string, unknown>
+        const { prompt: _prompt, ...cleanTransformed } = transformed as Record<string, unknown>
         const executionParams = {
           ...params,
           ...cleanTransformed,
@@ -148,7 +145,10 @@ export interface OpenAIAdapterOptions {
 /**
  * Adapter for the OpenAI SDK (`client.chat.completions.create`).
  */
-export function createOpenAIAdapter<TParams extends { messages: AdapterMessage[]; model?: string }, TResult>(
+export function createOpenAIAdapter<
+  TParams extends { messages: AdapterMessage[]; model?: string },
+  TResult,
+>(
   shield: TokenShieldMiddleware,
   createFn: (params: TParams) => Promise<TResult>,
   options?: OpenAIAdapterOptions,
@@ -335,10 +335,7 @@ export function createStreamAdapter<
     const result = await shield.wrapStream({
       doStream: async () => {
         // Strip the internal AI-SDK `prompt` field; keep `modelId` as it's part of TParams
-        const {
-          prompt: _prompt,
-          ...cleanTransformed
-        } = transformed as Record<string, unknown>
+        const { prompt: _prompt, ...cleanTransformed } = transformed as Record<string, unknown>
         const executionParams = {
           ...params,
           ...cleanTransformed,

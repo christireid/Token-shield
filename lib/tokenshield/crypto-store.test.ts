@@ -294,7 +294,7 @@ describe("EncryptedStore", () => {
   it("calls onStorageError when passphrase key derivation fails", async () => {
     const errors: unknown[] = []
     mockSubtle.importKey.mockRejectedValueOnce(new Error("Key derivation failed"))
-    const store = new EncryptedStore({
+    new EncryptedStore({
       dbName: "test-db-derive-err",
       storeName: "test",
       encryption: { mode: "passphrase", passphrase: "test" },

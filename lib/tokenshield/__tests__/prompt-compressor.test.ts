@@ -22,22 +22,21 @@ describe("prompt-compressor", () => {
     })
 
     it("should preserve code blocks verbatim", () => {
-      const prompt = 'Here is some code:\n\n```javascript\nconst x = "please kindly";\nconsole.log(x);\n```\n\nPlease kindly explain it.'
+      const prompt =
+        'Here is some code:\n\n```javascript\nconst x = "please kindly";\nconsole.log(x);\n```\n\nPlease kindly explain it.'
       const result = compressPrompt(prompt)
       expect(result.compressed).toContain('const x = "please kindly"')
       expect(result.compressed).toContain("console.log(x)")
     })
 
     it("should preserve URLs verbatim", () => {
-      const prompt =
-        "Please kindly visit https://example.com/path?q=test and analyze the content."
+      const prompt = "Please kindly visit https://example.com/path?q=test and analyze the content."
       const result = compressPrompt(prompt)
       expect(result.compressed).toContain("https://example.com/path?q=test")
     })
 
     it("should preserve inline code verbatim", () => {
-      const prompt =
-        "Please kindly explain the `forEach` method and how it basically works."
+      const prompt = "Please kindly explain the `forEach` method and how it basically works."
       const result = compressPrompt(prompt)
       expect(result.compressed).toContain("`forEach`")
     })
@@ -69,7 +68,8 @@ describe("prompt-compressor", () => {
     })
 
     it("should collapse structural whitespace", () => {
-      const prompt = "First point about something important.\n\n\n\n\nSecond point about another important thing.\n\n\n\nThird point about yet another topic that is relevant to our discussion.\n\n\n\n\nFourth point about the final considerations."
+      const prompt =
+        "First point about something important.\n\n\n\n\nSecond point about another important thing.\n\n\n\nThird point about yet another topic that is relevant to our discussion.\n\n\n\n\nFourth point about the final considerations."
       const result = compressPrompt(prompt, { minSavingsTokens: 1 })
       if (result.applied) {
         expect(result.compressed).not.toContain("\n\n\n")
@@ -77,14 +77,11 @@ describe("prompt-compressor", () => {
     })
 
     it("should allow disabling individual techniques", () => {
-      const prompt =
-        "Please kindly analyze in order to understand the implications."
+      const prompt = "Please kindly analyze in order to understand the implications."
       const noStopwords = compressPrompt(prompt, { stopwords: false })
       const withStopwords = compressPrompt(prompt, { stopwords: true })
       // With stopwords enabled should save more
-      expect(withStopwords.savedTokens).toBeGreaterThanOrEqual(
-        noStopwords.savedTokens
-      )
+      expect(withStopwords.savedTokens).toBeGreaterThanOrEqual(noStopwords.savedTokens)
     })
 
     it("should return correct ratio", () => {
@@ -94,10 +91,7 @@ describe("prompt-compressor", () => {
       if (result.applied) {
         expect(result.ratio).toBeLessThan(1)
         expect(result.ratio).toBeGreaterThan(0)
-        expect(result.ratio).toBeCloseTo(
-          result.compressedTokens / result.originalTokens,
-          2
-        )
+        expect(result.ratio).toBeCloseTo(result.compressedTokens / result.originalTokens, 2)
       }
     })
 
@@ -124,8 +118,15 @@ describe("prompt-compressor", () => {
   describe("compressMessages", () => {
     it("should only compress user messages", () => {
       const messages = [
-        { role: "system", content: "You are a helpful assistant. Please kindly help with the task at hand." },
-        { role: "user", content: "Please kindly explain what basically happens when you use forEach in order to iterate over arrays. I would like you to ensure that you cover all the important details and it is important to note that the explanation should be very thorough and comprehensive." },
+        {
+          role: "system",
+          content: "You are a helpful assistant. Please kindly help with the task at hand.",
+        },
+        {
+          role: "user",
+          content:
+            "Please kindly explain what basically happens when you use forEach in order to iterate over arrays. I would like you to ensure that you cover all the important details and it is important to note that the explanation should be very thorough and comprehensive.",
+        },
         { role: "assistant", content: "forEach iterates over array elements." },
       ]
       const result = compressMessages(messages, { minSavingsTokens: 1 })

@@ -107,8 +107,7 @@ function isCryptoAvailable(): boolean {
   if (_cryptoAvailable !== null) return _cryptoAvailable
   try {
     _cryptoAvailable =
-      typeof globalThis !== "undefined" &&
-      typeof globalThis.crypto?.subtle?.digest === "function"
+      typeof globalThis !== "undefined" && typeof globalThis.crypto?.subtle?.digest === "function"
   } catch {
     _cryptoAvailable = false
   }
@@ -142,7 +141,7 @@ function djb2Hash(input: string): string {
  * Compute entry hash using best available algorithm.
  * Uses SHA-256 when Web Crypto is available, djb2 otherwise.
  */
-async function computeHash(input: string): Promise<string> {
+async function _computeHash(input: string): Promise<string> {
   if (isCryptoAvailable()) {
     return sha256(input)
   }
@@ -166,7 +165,12 @@ export class AuditLog {
   /** True when entries have been pruned — first entry's prevHash won't match "genesis" */
   private pruned = false
   /** Cached integrity result — invalidated on any mutation */
-  private _integrityCache: { valid: boolean; brokenAt?: number; pruned?: boolean; verifiedFrom?: number } | null = null
+  private _integrityCache: {
+    valid: boolean
+    brokenAt?: number
+    pruned?: boolean
+    verifiedFrom?: number
+  } | null = null
   /** Seq at which the integrity cache was last computed */
   private _integrityCacheSeq = -1
 
@@ -295,11 +299,17 @@ export class AuditLog {
   }
 
   logBreakerTripped(limitType: string, threshold: number, actual: number): AuditEntry {
-    return this.record("breaker_tripped", "critical", "circuit-breaker", `Circuit breaker tripped: ${limitType}`, {
-      limitType,
-      threshold,
-      actual,
-    })
+    return this.record(
+      "breaker_tripped",
+      "critical",
+      "circuit-breaker",
+      `Circuit breaker tripped: ${limitType}`,
+      {
+        limitType,
+        threshold,
+        actual,
+      },
+    )
   }
 
   logAnomalyDetected(metric: string, value: number, zscore: number, model?: string): AuditEntry {
@@ -326,7 +336,11 @@ export class AuditLog {
     )
   }
 
-  logCompressorApplied(savedTokens: number, originalTokens: number, compressedTokens: number): AuditEntry {
+  logCompressorApplied(
+    savedTokens: number,
+    originalTokens: number,
+    compressedTokens: number,
+  ): AuditEntry {
     return this.record(
       "compressor_applied",
       "info",
@@ -366,14 +380,22 @@ export class AuditLog {
   }
 
   logBreakerReset(limitType: string): AuditEntry {
-    return this.record("breaker_reset", "info", "circuit-breaker", `Breaker reset: ${limitType}`, { limitType })
+    return this.record("breaker_reset", "info", "circuit-breaker", `Breaker reset: ${limitType}`, {
+      limitType,
+    })
   }
 
   logLicenseActivated(tier: string, holder: string): AuditEntry {
-    return this.record("license_activated", "info", "license", `License activated: ${tier} tier for ${holder}`, {
-      tier,
-      holder,
-    })
+    return this.record(
+      "license_activated",
+      "info",
+      "license",
+      `License activated: ${tier} tier for ${holder}`,
+      {
+        tier,
+        holder,
+      },
+    )
   }
 
   logExportRequested(format: string, entryCount: number): AuditEntry {
@@ -390,7 +412,12 @@ export class AuditLog {
    * Verify the integrity of the audit chain.
    * Returns true if no entries have been tampered with.
    */
-  verifyIntegrity(): { valid: boolean; brokenAt?: number; pruned?: boolean; verifiedFrom?: number } {
+  verifyIntegrity(): {
+    valid: boolean
+    brokenAt?: number
+    pruned?: boolean
+    verifiedFrom?: number
+  } {
     // Return cached result if the chain hasn't changed since last verification
     if (this._integrityCache && this._integrityCacheSeq === this.seq) {
       return this._integrityCache
@@ -447,7 +474,8 @@ export class AuditLog {
         result = result.filter((e) => SEVERITY_RANK[e.severity] >= SEVERITY_RANK[filters.severity!])
       if (filters.module) result = result.filter((e) => e.module === filters.module)
       if (filters.userId) result = result.filter((e) => e.userId === filters.userId)
-      if (filters.since) result = result.filter((e) => new Date(e.timestamp).getTime() >= filters.since!)
+      if (filters.since)
+        result = result.filter((e) => new Date(e.timestamp).getTime() >= filters.since!)
     }
     return [...result]
   }

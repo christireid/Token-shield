@@ -79,7 +79,8 @@ const TASK_PATTERNS: {
   },
   // Code generation
   {
-    pattern: /\b(write|create|implement|build|code|function|class|component)\b.*\b(code|function|class|program|script|component)\b/i,
+    pattern:
+      /\b(write|create|implement|build|code|function|class|component)\b.*\b(code|function|class|program|script|component)\b/i,
     type: "code-generation",
     avgTokens: 400,
     maxTokens: 1500,
@@ -161,8 +162,8 @@ const MODEL_OUTPUT_MULTIPLIERS: Record<string, number> = {
   "gpt-4.1": 1,
   "gpt-4.1-mini": 0.85,
   "gpt-4.1-nano": 0.75,
-  "o1": 1.4,
-  "o3": 1.3,
+  o1: 1.4,
+  o3: 1.3,
   "o3-pro": 1.5,
   "o4-mini": 1.1,
   "gpt-5": 1.05,
@@ -196,9 +197,15 @@ const LENGTH_MODIFIERS: { pattern: RegExp; multiplier: number }[] = [
   { pattern: /\b(in \d+ words?|under \d+ words?|max \d+ words?)\b/i, multiplier: 0.5 },
   { pattern: /\b(yes or no|true or false|one word)\b/i, multiplier: 0.1 },
   // Verbosity instructions
-  { pattern: /\b(detailed|thorough|comprehensive|in[- ]?depth|extensive|elaborate on)\b/i, multiplier: 1.8 },
+  {
+    pattern: /\b(detailed|thorough|comprehensive|in[- ]?depth|extensive|elaborate on)\b/i,
+    multiplier: 1.8,
+  },
   { pattern: /\b(step[- ]?by[- ]?step|walk me through|explain in detail)\b/i, multiplier: 1.6 },
-  { pattern: /\b(write|draft|compose|create)\b.*\b(essay|article|report|whitepaper|document)\b/i, multiplier: 2.0 },
+  {
+    pattern: /\b(write|draft|compose|create)\b.*\b(essay|article|report|whitepaper|document)\b/i,
+    multiplier: 2.0,
+  },
   // Multi-part output instructions
   { pattern: /\b(with examples?|include examples?|provide examples?)\b/i, multiplier: 1.4 },
   { pattern: /\b(pros and cons|advantages and disadvantages|for and against)\b/i, multiplier: 1.5 },
@@ -215,7 +222,7 @@ export function predictOutputTokens(
     maxMaxTokens?: number
     /** Model ID for model-specific adjustments */
     modelId?: string
-  } = {}
+  } = {},
 ): OutputPrediction {
   const safetyMargin = options.safetyMargin ?? 1.5
   const minMax = options.minMaxTokens ?? 50
@@ -223,9 +230,7 @@ export function predictOutputTokens(
   const inputTokens = countTokens(prompt)
 
   // Model-specific output multiplier
-  const modelMultiplier = options.modelId
-    ? getModelMultiplier(options.modelId)
-    : 1.0
+  const modelMultiplier = options.modelId ? getModelMultiplier(options.modelId) : 1.0
 
   // Try to match against known task patterns
   for (const task of TASK_PATTERNS) {
@@ -241,20 +246,25 @@ export function predictOutputTokens(
       // modifier is clearly a separate instruction. For task-specific patterns
       // (classification, summarization, etc.), the avgTokens already reflects
       // the expected output length for that task type.
-      const lengthModifier = (task.type === "general" || task.type === "analysis" || task.type === "code-generation")
-        ? detectLengthModifier(prompt)
-        : 1.0
+      const lengthModifier =
+        task.type === "general" || task.type === "analysis" || task.type === "code-generation"
+          ? detectLengthModifier(prompt)
+          : 1.0
 
       // Apply multi-signal adjustments
-      predicted = applySignalAdjustments(predicted, inputTokens, modelMultiplier, lengthModifier, task.type)
-
-      const suggested = Math.min(
-        maxMax,
-        Math.max(minMax, Math.round(predicted * safetyMargin))
+      predicted = applySignalAdjustments(
+        predicted,
+        inputTokens,
+        modelMultiplier,
+        lengthModifier,
+        task.type,
       )
 
+      const suggested = Math.min(maxMax, Math.max(minMax, Math.round(predicted * safetyMargin)))
+
       // Boost confidence when length modifier confirms the task pattern
-      const confidence = lengthModifier !== 1.0 && task.confidence === "medium" ? "medium" : task.confidence
+      const confidence =
+        lengthModifier !== 1.0 && task.confidence === "medium" ? "medium" : task.confidence
 
       return {
         predictedTokens: predicted,
@@ -273,12 +283,15 @@ export function predictOutputTokens(
   const lengthModifier = detectLengthModifier(prompt)
 
   // Apply adjustments
-  predicted = applySignalAdjustments(predicted, inputTokens, modelMultiplier, lengthModifier, "general")
-
-  const suggested = Math.min(
-    maxMax,
-    Math.max(minMax, Math.round(predicted * safetyMargin))
+  predicted = applySignalAdjustments(
+    predicted,
+    inputTokens,
+    modelMultiplier,
+    lengthModifier,
+    "general",
   )
+
+  const suggested = Math.min(maxMax, Math.max(minMax, Math.round(predicted * safetyMargin)))
 
   // Boost confidence from low to medium if we have strong length modifier signals
   const confidence = lengthModifier !== 1.0 ? "medium" : "low"
@@ -360,7 +373,7 @@ function applySignalAdjustments(
   _inputTokens: number,
   modelMultiplier: number,
   lengthModifier: number,
-  _taskType: string
+  _taskType: string,
 ): number {
   let adjusted = predicted
 

@@ -410,8 +410,7 @@ export function buildTransformParams(ctx: MiddlewareContext) {
       // -- 2c. DELTA ENCODING --
       if (config.modules?.delta !== false && config.delta !== false) {
         try {
-          const deltaCfg: DeltaEncoderConfig =
-            typeof config.delta === "object" ? config.delta : {}
+          const deltaCfg: DeltaEncoderConfig = typeof config.delta === "object" ? config.delta : {}
           const deltaResult = encodeDelta(
             workingMessages.map((m) => ({ role: m.role, content: m.content })),
             deltaCfg,

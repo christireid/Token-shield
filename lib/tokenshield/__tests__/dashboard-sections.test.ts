@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest"
-import {
-  formatDollars,
-  formatPercent,
-  summarizeEventData,
-} from "../dashboard-sections"
+import { formatDollars, formatPercent, summarizeEventData } from "../dashboard-sections"
 
 describe("dashboard-sections utilities", () => {
   describe("formatDollars", () => {
@@ -49,7 +45,10 @@ describe("dashboard-sections utilities", () => {
     })
 
     it("summarizes request:blocked events", () => {
-      const result = summarizeEventData("request:blocked", { reason: "rate_limit", estimatedCost: 0.02 })
+      const result = summarizeEventData("request:blocked", {
+        reason: "rate_limit",
+        estimatedCost: 0.02,
+      })
       expect(result).toContain("rate_limit")
     })
 
@@ -76,13 +75,19 @@ describe("dashboard-sections utilities", () => {
     })
 
     it("summarizes breaker:tripped events", () => {
-      const result = summarizeEventData("breaker:tripped", { limitType: "hourly", action: "blocked" })
+      const result = summarizeEventData("breaker:tripped", {
+        limitType: "hourly",
+        action: "blocked",
+      })
       expect(result).toContain("hourly")
       expect(result).toContain("blocked")
     })
 
     it("summarizes userBudget:exceeded events", () => {
-      const result = summarizeEventData("userBudget:exceeded", { userId: "user-1", limitType: "daily" })
+      const result = summarizeEventData("userBudget:exceeded", {
+        userId: "user-1",
+        limitType: "daily",
+      })
       expect(result).toContain("user-1")
       expect(result).toContain("daily")
     })

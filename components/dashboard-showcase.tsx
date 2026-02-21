@@ -79,10 +79,7 @@ export function DashboardShowcase() {
               <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                 {item.description}
               </p>
-              <p
-                className="mt-3 text-xs font-medium"
-                style={{ color: item.color }}
-              >
+              <p className="mt-3 text-xs font-medium" style={{ color: item.color }}>
                 {item.stat}
               </p>
             </div>
