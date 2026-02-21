@@ -1,127 +1,85 @@
-# CLAIMS vs REALITY
+# CLAIMS vs REALITY — Forensic Audit (Pass 2)
 
-> Forensic verification of every claim in README.md and QUICKSTART.md against actual code.
+> Updated: 2026-02-21 | Auditor: Multi-perspective strike team
 
-## Verdict Summary
+---
 
-| Claim                                                       | Status              | Evidence                                                                                  |
-| ----------------------------------------------------------- | ------------------- | ----------------------------------------------------------------------------------------- |
-| "Drop-in middleware"                                        | **TRUE**            | shield() returns LanguageModelV3Middleware-compatible object                              |
-| "without changing your prompts"                             | **TRUE**            | transformParams handles all optimization transparently                                    |
-| "Works with Vercel AI SDK, OpenAI, and Anthropic"           | **TRUE**            | adapters.ts has createOpenAIAdapter, createAnthropicAdapter, createGenericAdapter         |
-| "TypeScript-first"                                          | **TRUE**            | Strict TypeScript, full type exports, Valibot validation                                  |
-| "v0.1.0-beta.1 (pre-release)"                               | **TRUE**            | package.json version matches                                                              |
-| "Not yet published to npm"                                  | **TRUE**            | Honest, correct                                                                           |
-| "Caching, compression, and cost tracking are on by default" | **TRUE**            | shield.ts defaults: cache=true, compression=true, trackCosts=true                         |
-| "Semantic caching"                                          | **PARTIALLY TRUE**  | Uses bigram Dice coefficient, not semantic embeddings. "Near-duplicate" is more accurate. |
-| "Prompt compression — removes redundancy"                   | **TRUE**            | prompt-compressor.ts implements 5 techniques                                              |
-| "< 5ms overhead"                                            | **UNVERIFIED**      | No benchmark results in repo. Plausible for in-memory path but IDB reads may exceed this. |
-| "Delete 3 lines to remove"                                  | **TRUE**            | import + wrapLanguageModel + shield() = 3 lines                                           |
-| "Data stays in your infra"                                  | **TRUE**            | SECURITY.md confirms client-side only, zero telemetry                                     |
-| "Model routing"                                             | **TRUE but opt-in** | router: false by default, with appropriate warnings                                       |
-| "15-40% token savings" (compressor)                         | **UNVERIFIED**      | No production benchmarks. Tests show compression works but savings vary wildly by input.  |
-| "MIT. Core optimization modules are free forever."          | **TRUE**            | LICENSE file is MIT. license.ts gates only team/enterprise features.                      |
-| "All features are unlocked in development mode"             | **TRUE**            | license.ts checks NODE_ENV                                                                |
-| repository URL in package.json                              | **WRONG**           | Points to `tokenshield/ai-sdk` but actual repo is `christireid/Token-shield`              |
+## README.md Claims
 
-## Detailed Findings
+| #   | Claim                                               | Verdict        | Evidence                                                                            |
+| --- | --------------------------------------------------- | -------------- | ----------------------------------------------------------------------------------- |
+| 1   | "Drop-in middleware"                                | **TRUE**       | `shield()` returns LanguageModelV3Middleware-compatible object                      |
+| 2   | "without changing your prompts"                     | **TRUE**       | `transformParams` handles optimization transparently                                |
+| 3   | "Works with Vercel AI SDK, OpenAI, and Anthropic"   | **TRUE**       | `adapters.ts` has all three adapter factories                                       |
+| 4   | "TypeScript-first"                                  | **TRUE**       | Strict mode, full type exports, Valibot validation                                  |
+| 5   | "v0.1.0-beta.1 (pre-release)"                       | **TRUE**       | package.json matches                                                                |
+| 6   | "Not yet published to npm"                          | **TRUE**       | Honest disclosure                                                                   |
+| 7   | "Caching, compression, cost tracking on by default" | **TRUE**       | `shield.ts` defaults confirm                                                        |
+| 8   | "Fuzzy caching"                                     | **TRUE**       | Bigram Dice coefficient — correctly described as fuzzy, not semantic                |
+| 9   | "Prompt compression — removes redundancy"           | **TRUE**       | `prompt-compressor.ts` implements 5 techniques                                      |
+| 10  | "< 5ms overhead"                                    | **UNVERIFIED** | No benchmark results in repo. Plausible for in-memory but IDB reads may exceed this |
+| 11  | "Delete 3 lines to remove"                          | **TRUE**       | import + wrapLanguageModel + shield() = 3 lines                                     |
+| 12  | "Data stays in your infra"                          | **TRUE**       | SECURITY.md: client-side only, zero telemetry                                       |
+| 13  | "4 runtime dependencies"                            | **TRUE**       | gpt-tokenizer, idb-keyval, mitt, valibot (verified in package.json)                 |
 
-### 1. README Quick Start Code — VERIFIED WORKING
+## Website (hero.tsx + cost-projection.tsx) Claims
 
-```typescript
-import { wrapLanguageModel } from "ai"
-import { openai } from "@ai-sdk/openai"
-import { shield } from "@tokenshield/ai-sdk"
-const model = wrapLanguageModel({ model: openai("gpt-4o"), middleware: shield() })
-```
+| #   | Claim                                                       | Verdict        | Evidence                                        |
+| --- | ----------------------------------------------------------- | -------------- | ----------------------------------------------- |
+| 14  | "2 deps: gpt-tokenizer + idb-keyval" (hero.tsx:92)          | **FALSE**      | 4 deps. `mitt` and `valibot` are unlisted.      |
+| 15  | "2 dependencies" (cost-projection.tsx:260)                  | **FALSE**      | Same as #14                                     |
+| 16  | GitHub link `href="https://github.com"` (hero.tsx:105)      | **BROKEN**     | Points to github.com homepage, not the repo     |
+| 17  | `npm install @tokenshield/ai-sdk` (hero.tsx:78)             | **MISLEADING** | Package not published to npm. Command will fail |
+| 18  | `npm install @tokenshield/ai-sdk` (cost-projection.tsx:257) | **MISLEADING** | Same as #17                                     |
+| 19  | "3 Lines to add" (hero.tsx:118)                             | **TRUE**       | Matches README code example                     |
+| 20  | "0 Config required" (hero.tsx:119)                          | **TRUE**       | `shield()` works with no arguments              |
+| 21  | "<5ms Middleware overhead" (hero.tsx:121)                   | **UNVERIFIED** | No benchmark data                               |
+| 22  | "3 SDKs supported" (hero.tsx:122)                           | **TRUE**       | Vercel AI SDK + OpenAI + Anthropic adapters     |
 
-- `shield()` → returns TokenShieldMiddleware (middleware.ts:78)
-- Has `transformParams`, `wrapGenerate`, `wrapStream` → compatible with AI SDK
-- Imports are correct if package is installed/linked
+## features.tsx Claims
 
-### 2. Configuration Options — VERIFIED
+| #   | Claim                                         | Verdict              | Evidence                                                     |
+| --- | --------------------------------------------- | -------------------- | ------------------------------------------------------------ |
+| 23  | "Matches usage.prompt_tokens within 2 tokens" | **UNVERIFIED**       | No automated accuracy test against real API                  |
+| 24  | "20+ more models. Updated automatically."     | **MISLEADING**       | 40+ models but update is a manual script, not automatic      |
+| 25  | "Auto-summarizes evicted messages"            | **TRUE**             | `context-manager.ts` has summarization                       |
+| 26  | "Saves 80-95%" Model Router                   | **TRUE (per-query)** | Per-hit max when routing to budget model. Disclaimed on page |
+| 27  | "Saves 100%" Response Cache                   | **TRUE (per-hit)**   | Cache hit avoids API call entirely. Disclaimed on page       |
+| 28  | "solves vercel/ai#7628"                       | **UNVERIFIABLE**     | No link, no evidence this issue exists or was tested         |
+| 29  | "$847-to-$34K runaway scenario"               | **UNVERIFIABLE**     | Specific numbers with no citation                            |
 
-All options in the shield() example exist in ShieldConfig interface:
+## live-demo.tsx Claims
 
-- `cache: boolean` ✅ (default: true)
-- `compression: boolean` ✅ (default: true)
-- `monthlyBudget: number` ✅ (creates BreakerConfig)
-- `dailyBudget: number` ✅ (creates BreakerConfig)
-- `onUsage: callback` ✅ (forwarded to tokenShieldMiddleware)
-- `similarityThreshold: number` ✅ (default: 0.85)
-- `storage: StorageBackend` ✅ (passed to cache.backend)
+| #   | Claim                                                | Verdict        | Evidence                                                      |
+| --- | ---------------------------------------------------- | -------------- | ------------------------------------------------------------- |
+| 30  | "API tests hit OpenAI and return real usage objects" | **MISLEADING** | Requires OPENAI_API_KEY env var. Won't work for most visitors |
 
-### 3. Framework Adapters — VERIFIED
+## SECURITY.md Claims
 
-```typescript
-// OpenAI adapter
-const chat = createOpenAIAdapter(mw, (p) => openai.chat.completions.create(p))
-// Anthropic adapter
-const chat = createAnthropicAdapter(mw, (p) => anthropic.messages.create(p))
-```
+| #   | Claim                                               | Verdict   | Evidence                                                     |
+| --- | --------------------------------------------------- | --------- | ------------------------------------------------------------ |
+| 31  | "Semantic and exact-match caching" (line 24)        | **STALE** | Was renamed to "fuzzy" in previous audit. SECURITY.md missed |
+| 32  | "Zero telemetry"                                    | **TRUE**  | Verified: no network calls, no beacons                       |
+| 33  | "EncryptedStore module provides AES-GCM encryption" | **TRUE**  | `crypto-store.ts` implements it                              |
 
-- Both exist in adapters.ts ✅
-- Both properly run through transformParams → wrapGenerate pipeline ✅
+## Missing from Docs
 
-### 4. getStats() — VERIFIED
+| Feature                               | Status                                      |
+| ------------------------------------- | ------------------------------------------- |
+| `entries()` cache inspection API      | Implemented, not documented                 |
+| `invalidate()` cache removal API      | Implemented, not documented                 |
+| `resetComplexityCache()` test utility | Implemented, not documented (test-only, OK) |
+| Prompt Compressor standalone usage    | In `advanced.ts` exports, minimal docs      |
+| Delta Encoder standalone usage        | In `advanced.ts` exports, minimal docs      |
+| Pipeline builder API                  | Exists but undocumented                     |
+| Web Worker interface                  | `shield-worker.ts` exists, undocumented     |
 
-```typescript
-const stats = getStats(middleware)
-// { totalSaved, totalSpent, savingsRate, cacheHitRate }
-```
+---
 
-- getStats() exists in shield.ts:165 ✅
-- Returns ShieldStats interface with all documented fields ✅
-- `breakerTripped` field also returned (not shown in example but harmless) ✅
+## Summary
 
-### 5. React Integration — NEEDS VERIFICATION
-
-```typescript
-import { TokenShieldProvider, useSavings, useBudgetAlert } from "@tokenshield/ai-sdk/react"
-```
-
-- React hooks exist in react-hooks-core.ts, react-hooks-budget.ts ✅
-- TokenShieldProvider exists ✅
-- `useSavings` returns `{ totalDollarsSaved, totalCacheHits }` — fields match README ✅
-
-### 6. Advanced Imports — VERIFIED
-
-```typescript
-import { ResponseCache, CostLedger, RequestGuard } from "@tokenshield/ai-sdk/advanced"
-```
-
-- All three exported from advanced.ts ✅
-- Standalone usage examples in QUICKSTART.md verified against actual APIs ✅
-
-### 7. Runtime Compatibility Table — ACCURATE WITH CAVEAT
-
-| Environment        | Claimed Behavior         | Reality                                    |
-| ------------------ | ------------------------ | ------------------------------------------ |
-| Browser            | IndexedDB persistent     | ✅ Uses idb-keyval                         |
-| Node.js            | In-memory per-process    | ✅ storage-adapter.ts MemoryStore fallback |
-| Vercel Edge        | In-memory per-invocation | ✅ isIndexedDBAvailable() returns false    |
-| Cloudflare Workers | In-memory per-invocation | ✅ Same mechanism                          |
-
-**Caveat**: README correctly warns about serverless cold starts.
-
-### 8. CLAIMS THAT ARE WRONG OR MISLEADING
-
-1. **package.json `repository.url`**: Points to `https://github.com/tokenshield/ai-sdk.git` — should be `https://github.com/christireid/Token-shield.git`
-
-2. **package.json `homepage`**: Points to `https://github.com/tokenshield/ai-sdk#readme` — wrong repo
-
-3. **package.json `bugs.url`**: Points to `https://github.com/tokenshield/ai-sdk/issues` — wrong repo
-
-4. **"Semantic caching"**: The bigram Dice coefficient is lexical similarity, not semantic. "Near-duplicate caching" or "fuzzy caching" would be more honest. The trigram encoding is closer to semantic but still not embedding-based.
-
-5. **"20-40% token savings" from compressor**: This is plausible for verbose prompts but the range is not validated against real traffic. Should be "up to 40% on verbose prompts" with caveat.
-
-6. **`ai` peer dependency is marked optional**: This is the primary integration target. Making it optional is technically correct (adapters don't need it) but confusing since the primary example requires it.
-
-### 9. DOCUMENTATION GAPS
-
-1. **No API reference docs** — only JSDoc in source files
-2. **No migration guide** — CHANGELOG mentions breaking changes but no migration path
-3. **No real-world benchmark results** — all performance claims are theoretical
-4. **No troubleshooting section** — common issues (IDB quota, CORS, SSR) not documented
-5. **No deployment guide** — serverless caveats mentioned but no specific guides for Vercel/Cloudflare
+- **13 TRUE** claims (honest, verified)
+- **4 FALSE/BROKEN** claims (dependency count, GitHub link)
+- **5 UNVERIFIED** claims (no benchmark data, no external validation)
+- **3 MISLEADING** claims (npm install, "updated automatically", live demo)
+- **1 STALE** claim (SECURITY.md "semantic" reference)

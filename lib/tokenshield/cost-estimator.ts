@@ -14,7 +14,7 @@ import { PRICING_REGISTRY, type ModelPricingEntry } from "./pricing-registry"
 
 export interface ModelPricing {
   id: string
-  provider: "openai" | "anthropic" | "google" | "xai" | "meta"
+  provider: "openai" | "anthropic" | "google"
   name: string
   inputPerMillion: number
   outputPerMillion: number

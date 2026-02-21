@@ -1,19 +1,19 @@
-# BUILD HEALTH REPORT
+# BUILD HEALTH REPORT (Pass 2)
 
-> Forensic build, dependency, and CI health analysis.
+> Updated: 2026-02-21
 
 ## Build Status
 
 | Check               | Status                 | Details                               |
 | ------------------- | ---------------------- | ------------------------------------- |
 | `npm test`          | **PASS**               | 68 test files, 1338 tests, 0 failures |
-| `npm run typecheck` | **PASS**               | tsc --noEmit clean                    |
+| `npm run typecheck` | **PASS**               | tsc --noEmit clean (0 errors)         |
 | `npm run build`     | **NEEDS VERIFICATION** | tsup build (not run in this audit)    |
 | `npm run lint`      | **NEEDS VERIFICATION** | eslint on lib/tokenshield/            |
 
 ## Dependency Health
 
-### Runtime Dependencies (5)
+### Runtime Dependencies (4)
 
 | Package         | Version | Size   | Risk       | Notes                              |
 | --------------- | ------- | ------ | ---------- | ---------------------------------- |
@@ -24,92 +24,79 @@
 
 **Total runtime deps: 4 (lean)**
 
-> Note: `ohash` was originally listed as a dependency but was never imported anywhere. It has been removed.
-
-### Dev Dependencies (16)
-
-All standard: vitest, typescript, eslint, prettier, tsup, husky, lint-staged, testing-library, jsdom, npm-run-all2.
-
-### Missing/Phantom Dependencies
-
-1. **`llm-info`** — Referenced in `scripts/validate-pricing.ts` and CONTRIBUTING.md but NOT in package.json. Scripts that use it will fail on clean install.
-
 ### Peer Dependencies
 
-| Package     | Required | Optional           | Notes                                              |
-| ----------- | -------- | ------------------ | -------------------------------------------------- |
-| `ai`        | >=3.0.0  | **Yes** (optional) | Should NOT be optional — primary use case needs it |
-| `react`     | >=18.0.0 | Yes                | Correct: only needed for hooks                     |
-| `react-dom` | >=18.0.0 | Yes                | Correct: only needed for hooks                     |
+| Package     | Required | Optional | Notes                                |
+| ----------- | -------- | -------- | ------------------------------------ |
+| `ai`        | >=3.0.0  | **No**   | Correctly required (fixed in pass 1) |
+| `react`     | >=18.0.0 | Yes      | Correct: only needed for hooks       |
+| `react-dom` | >=18.0.0 | Yes      | Correct: only needed for hooks       |
 
-**Issue**: `ai` marked as optional peer dep is misleading. The primary API (`shield()` → `wrapLanguageModel()`) requires it. Only adapter-only users can skip it.
+### Resolved Issues
 
-## Package.json Issues
-
-1. **Wrong `repository.url`**: `https://github.com/tokenshield/ai-sdk.git` should be `https://github.com/christireid/Token-shield.git`
-2. **Wrong `homepage`**: Same issue
-3. **Wrong `bugs.url`**: Same issue
-4. **`sideEffects: false`** is correct — no module-level side effects
-5. **`engines.node >= 18.0.0`** is correct — Web Crypto API requires Node 18+
+- `ohash` — was an unused dependency. Removed in pass 1.
+- `llm-info` — was missing from devDependencies. Added in pass 1.
+- `ai` peer dep — was incorrectly optional. Fixed in pass 1.
 
 ## Exports Map Verification
 
-| Path              | Types                       | ESM                       | CJS                        | File Exists?           |
-| ----------------- | --------------------------- | ------------------------- | -------------------------- | ---------------------- |
-| `.`               | `./dist/index.d.ts`         | `./dist/index.js`         | `./dist/index.cjs`         | Source: ✅             |
-| `./advanced`      | `./dist/advanced.d.ts`      | `./dist/advanced.js`      | `./dist/advanced.cjs`      | Source: ✅             |
-| `./react`         | `./dist/react.d.ts`         | `./dist/react.js`         | `./dist/react.cjs`         | Source: ✅ (react.tsx) |
-| `./license`       | `./dist/license.d.ts`       | `./dist/license.js`       | `./dist/license.cjs`       | Source: ✅             |
-| `./audit-log`     | `./dist/audit-log.d.ts`     | `./dist/audit-log.js`     | `./dist/audit-log.cjs`     | Source: ✅             |
-| `./compressor`    | `./dist/compressor.d.ts`    | `./dist/compressor.js`    | `./dist/compressor.cjs`    | Source: ✅             |
-| `./delta-encoder` | `./dist/delta-encoder.d.ts` | `./dist/delta-encoder.js` | `./dist/delta-encoder.cjs` | Source: ✅             |
-| `./middleware`    | `./dist/middleware.d.ts`    | `./dist/middleware.js`    | `./dist/middleware.cjs`    | Source: ✅             |
+| Path              | Source File                     | Verified       |
+| ----------------- | ------------------------------- | -------------- |
+| `.`               | `index.ts`                      | Source: exists |
+| `./advanced`      | `advanced.ts`                   | Source: exists |
+| `./react`         | `react.tsx`                     | Source: exists |
+| `./license`       | `license.ts`                    | Source: exists |
+| `./audit-log`     | `audit-log.ts`                  | Source: exists |
+| `./compressor`    | `prompt-compressor.ts`          | Source: exists |
+| `./delta-encoder` | `conversation-delta-encoder.ts` | Source: exists |
+| `./middleware`    | `middleware.ts`                 | Source: exists |
 
-All export paths verified. `./react` uses `react.tsx` as its barrel file, configured in `tsup.config.ts`.
+All 8 export paths have corresponding source files.
 
-## TypeScript Configuration
+## Code Quality Metrics
 
-- **Strict mode**: Enabled ✅
-- **Target**: ES2022
-- **Include**: `lib/tokenshield/` only (correct scoping)
-- **No `any`**: Enforced by eslint (with pragmatic exceptions)
+| Metric                   | Value                                                        |
+| ------------------------ | ------------------------------------------------------------ |
+| TypeScript strict mode   | Enabled                                                      |
+| `as any` casts           | 2 (event-bus.ts, with eslint-disable)                        |
+| eslint-disable comments  | 15 (all justified)                                           |
+| TODO/FIXME/HACK comments | 0                                                            |
+| Empty catch blocks       | 0 (all have explanatory comments)                            |
+| console.log in source    | 14 (benchmark.ts only — intentional)                         |
+| console.warn in source   | 4 (crypto-store, storage-adapter, license — all error paths) |
+| Skipped tests            | 0                                                            |
+
+## Type System Health
+
+| Issue                                                         | Status                                                        |
+| ------------------------------------------------------------- | ------------------------------------------------------------- |
+| Provider type `"openai" \| "anthropic" \| "google"` alignment | **FIXED** — cost-estimator.ts now matches pricing-registry.ts |
 
 ## CI Configuration
 
 Location: `.github/workflows/ci.yml`
 
-- Runs on push/PR to main
-- Node 18 + Node 20 matrix
+- Node 18 + 20 matrix
 - Steps: install → typecheck → lint → test → coverage → build → bundle size check
-- Coverage thresholds enforced on Node 20 (70% statements/lines, 60% branches/functions)
+- Coverage thresholds: 70% statements/lines, 60% branches/functions
 - Bundle size ceiling: 500KB ESM
 
-## Potential Circular Dependencies
+## Security
 
-Based on import analysis:
+| Check                                       | Status |
+| ------------------------------------------- | ------ |
+| No `eval()` or `new Function()`             | PASS   |
+| No network calls from SDK                   | PASS   |
+| No `innerHTML` or `dangerouslySetInnerHTML` | PASS   |
+| BroadcastChannel validation                 | PASS   |
+| CSV injection protection                    | PASS   |
+| Zero telemetry                              | PASS   |
 
-- `middleware-types.ts` imports from `cost-estimator.ts` and `event-bus.ts`
-- `cost-estimator.ts` imports from `pricing-registry.ts` (one-way, clean)
-- `middleware.ts` imports from `middleware-types.ts`, `middleware-transform.ts`, `middleware-wrap.ts` (tree, no cycles)
-- `cost-ledger.ts` imports from `cost-estimator.ts` and `middleware-types.ts`
+## Remaining Risks
 
-**No circular dependencies detected in core pipeline.**
-
-## Files Not Exported (but tested internally)
-
-| File                     | Exported? | Tested?                     | Notes                                       |
-| ------------------------ | --------- | --------------------------- | ------------------------------------------- |
-| `shield-worker.ts`       | No        | Yes (shield-worker.test.ts) | Web Worker wrapper, tested but not exported |
-| `benchmark.ts`           | No        | Yes                         | Internal utility                            |
-| `benchmark-scenarios.ts` | No        | Yes                         | Internal utility                            |
-
-> Dead code files (`adaptive-output-optimizer.ts`, `prompt-template-pool.ts`, `token-optimizer.ts`) were identified and deleted during the audit remediation.
-
-## Security Considerations
-
-1. **No `eval()` or `new Function()`** anywhere in codebase ✅
-2. **No network calls** from SDK code ✅ (zero telemetry confirmed)
-3. **BroadcastChannel validation** present for cross-tab sync ✅
-4. **CSV injection protection** via always-quoting ✅
-5. **djb2 hash collision** guarded by normalizedKey verification ✅
-6. **IndexedDB same-origin** documented in SECURITY.md ✅
+| Risk                              | Severity | Mitigation                                                                              |
+| --------------------------------- | -------- | --------------------------------------------------------------------------------------- |
+| Not published to npm              | HIGH     | Requires npm account + CI/CD. Out of scope for code audit.                              |
+| `require()` in storage-adapter.ts | LOW      | Works in all current environments. Dynamic import would be cleaner for strict ESM.      |
+| No published benchmarks           | MEDIUM   | benchmark.ts exists as runner. Should publish results before making performance claims. |
+| No real-API integration tests     | MEDIUM   | API proxy routes exist. Need OPENAI_API_KEY for validation.                             |

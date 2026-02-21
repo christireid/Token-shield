@@ -89,7 +89,9 @@ export function Hero() {
               )}
             </button>
           </div>
-          <span className="text-xs text-muted-foreground">2 deps: gpt-tokenizer + idb-keyval</span>
+          <span className="text-xs text-muted-foreground">
+            4 deps: gpt-tokenizer, idb-keyval, mitt, valibot
+          </span>
         </div>
 
         {/* CTA buttons */}
@@ -102,7 +104,7 @@ export function Hero() {
             <ArrowRight className="h-4 w-4" />
           </Link>
           <Link
-            href="https://github.com"
+            href="https://github.com/christireid/Token-shield"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-5 py-2.5 text-sm font-medium text-foreground transition-all hover:border-primary/50 hover:text-primary hover:shadow-[0_0_20px_hsl(152,60%,52%,0.1)]"

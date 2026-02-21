@@ -257,7 +257,7 @@ export function CostProjection() {
               npm install @tokenshield/ai-sdk
             </code>
             <p className="text-xs text-muted-foreground">
-              MIT license. 2 dependencies. Works with Next.js, Vite, and any TypeScript project.
+              MIT license. 4 dependencies. Works with Next.js, Vite, and any TypeScript project.
             </p>
           </div>
         </div>

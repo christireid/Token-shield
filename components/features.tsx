@@ -29,7 +29,7 @@ const MODULES: {
   {
     name: "Cost Estimator",
     description:
-      "Real pricing data for GPT-4o, Claude Sonnet, Gemini 2.5 Pro, and 20+ more models. Updated automatically.",
+      "Real pricing data for GPT-4o, Claude Sonnet, Gemini 2.5 Pro, and 40+ more models. Updated with each release.",
     tag: "Core",
     icon: DollarSign,
   },
@@ -85,14 +85,14 @@ const MODULES: {
   {
     name: "Stream Tracker",
     description:
-      "Counts output tokens in real-time during streaming. Survives abort -- solves vercel/ai#7628.",
+      "Counts output tokens in real-time during streaming. Survives abort for accurate billing.",
     tag: "New",
     icon: Activity,
   },
   {
     name: "Circuit Breaker",
     description:
-      "Hard spending limits per session, hour, day, month. Prevents the $847-to-$34K runaway scenario.",
+      "Hard spending limits per session, hour, day, month. Prevents runaway LLM spending.",
     tag: "New",
     icon: Zap,
   },

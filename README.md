@@ -154,6 +154,23 @@ import { ResponseCache, CostLedger, RequestGuard } from "@tokenshield/ai-sdk/adv
 
 The main `@tokenshield/ai-sdk` barrel exports ~10 things. Everything else lives in `/advanced`.
 
+### Cache Inspection & Invalidation
+
+```typescript
+import { ResponseCache } from "@tokenshield/ai-sdk/advanced"
+
+const cache = new ResponseCache({ maxEntries: 500, persist: true })
+
+// List all non-expired entries (sorted by most recently accessed)
+const entries = cache.entries()
+
+// Invalidate a specific cached prompt+model pair
+const removed = await cache.invalidate("What is the capital of France?", "gpt-4o")
+
+// Clear all cached entries
+await cache.clear()
+```
+
 ---
 
 ## Runtime Compatibility
